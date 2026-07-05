@@ -19,13 +19,9 @@ jobs:
       - name: Check out repo at the tag
         uses: actions/checkout@v4
 
-      - name: Prepare shipping folder
+      - name: Write rsync exclude list
         run: |
-          set -eux
-          # Everything at the repo root IS the app. Assemble a clean "Ahmed
-          # Poly Bags" folder that omits dev-only noise.
-          mkdir -p "build/Ahmed Poly Bags"
-          rsync -a --exclude-from=- ./ "build/Ahmed Poly Bags/" <<'EXCLUDES'
+          cat > .rsync-excludes <<'EOF'
           .git/
           .github/
           .claude/
@@ -59,14 +55,21 @@ jobs:
           update_metrics.py
           keyboard-forms-dropin.md
           Trade-Form-And-Detail-Guide.md
-          EXCLUDES
+          EOF
 
-          # Stamp the version file with the tag so start.bat's Phase 0 knows
-          # what's currently installed.
+      - name: Assemble shipping folder
+        run: |
+          set -eux
+          mkdir -p "build/Ahmed Poly Bags"
+          rsync -a --exclude-from=.rsync-excludes ./ "build/Ahmed Poly Bags/"
+          # Stamp the version file with the tag name so start.bat knows what's installed
           echo "${GITHUB_REF_NAME}" > "build/Ahmed Poly Bags/version.txt"
-          ls -la "build/Ahmed Poly Bags" | head -20
+          echo "--- top of shipping folder ---"
+          ls -la "build/Ahmed Poly Bags" | head -30
+          echo "--- version stamp ---"
+          cat "build/Ahmed Poly Bags/version.txt"
 
-      - name: Create the zip
+      - name: Create zip
         working-directory: build
         run: |
           zip -qr ../Ahmed-Poly-Bags-app.zip "Ahmed Poly Bags"

@@ -1,7 +1,3 @@
-# NOTE: PDF deps (xhtml2pdf 0.2.9, reportlab 4.0.9, Pillow, pyHanko, html5lib)
-# are installed separately by the launcher with --no-deps for xhtml2pdf, because
-# its declared svglib dep transitively requires pycairo, which fails to build on
-# Apple Silicon without Homebrew cairo. See Wealth Tracker.command.
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 sqlmodel==0.0.14

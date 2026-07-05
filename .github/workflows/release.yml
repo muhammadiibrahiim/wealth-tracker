@@ -1,0 +1,81 @@
+name: Build & publish release zip
+
+# Fires whenever a tag matching v* is pushed. That's your only trigger — no
+# other event builds a release, so you can push commits freely without churn.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # needed to create/edit the release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo at the tag
+        uses: actions/checkout@v4
+
+      - name: Prepare shipping folder
+        run: |
+          set -eux
+          # Everything at the repo root IS the app. Assemble a clean "Ahmed
+          # Poly Bags" folder that omits dev-only noise.
+          mkdir -p "build/Ahmed Poly Bags"
+          rsync -a --exclude-from=- ./ "build/Ahmed Poly Bags/" <<'EXCLUDES'
+          .git/
+          .github/
+          .claude/
+          .gitignore
+          .DS_Store
+          venv/
+          .venv/
+          __pycache__/
+          .pytest_cache/
+          backups/
+          promps/
+          accounting/
+          Ibrahim/
+          tests/
+          build/
+          *.db
+          *.sqlite
+          *.sqlite3
+          *.backup-*
+          start.log
+          *.egg-info/
+          *_SUMMARY.md
+          *_IMPLEMENTATION.md
+          METRICS_VERIFICATION_FINAL.txt
+          debug_*.py
+          check_*.py
+          recalc_*.py
+          add_pv_*.py
+          final_verification.py
+          verify_inflows_fix.py
+          update_metrics.py
+          keyboard-forms-dropin.md
+          Trade-Form-And-Detail-Guide.md
+          EXCLUDES
+
+          # Stamp the version file with the tag so start.bat's Phase 0 knows
+          # what's currently installed.
+          echo "${GITHUB_REF_NAME}" > "build/Ahmed Poly Bags/version.txt"
+          ls -la "build/Ahmed Poly Bags" | head -20
+
+      - name: Create the zip
+        working-directory: build
+        run: |
+          zip -qr ../Ahmed-Poly-Bags-app.zip "Ahmed Poly Bags"
+          ls -lh ../Ahmed-Poly-Bags-app.zip
+
+      - name: Attach to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Ahmed-Poly-Bags-app.zip
+          generate_release_notes: true
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}

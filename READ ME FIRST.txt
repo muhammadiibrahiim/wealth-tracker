@@ -1,0 +1,106 @@
+Ahmed Poly Bags — Quick Start (Windows)
+========================================
+
+WHAT'S IN THIS FOLDER
+---------------------
+A self-contained copy of the Ahmed Poly Bags / Trade ERP app:
+- Web UI (sidebar nav, Trade dashboard, Quotations, Trades, Parties,
+  Items, Vouchers, Chart of Accounts, Reports).
+- Full double-entry accounting (Profit/Loss A/C -> Capital A/C).
+- Trade documents (Invoice, Order Confirmation, Delivery Note +
+  Packing Slip, Vendor PO, Payment Receipt) — all on-demand PDFs.
+- Bilty (transport) tracking per partial delivery.
+- A FRESH, EMPTY database — no data from the original install.
+
+
+HOW TO RUN (Windows)
+--------------------
+
+STEP 1 — Install Python (only needed once on this PC)
+   a. Open https://www.python.org/downloads/ in your browser.
+   b. Click the big yellow "Download Python" button.
+   c. Run the installer.
+   d. *** ON THE FIRST SCREEN OF THE INSTALLER ***, tick the
+      checkbox at the bottom that says:
+            [ X ]  Add python.exe to PATH
+      This is the most important step. If you miss it, nothing
+      will work — and you'll have to reinstall.
+   e. Click "Install Now" and wait for it to finish.
+
+STEP 2 — Extract this zip
+   Right-click the zip -> "Extract All..." -> pick a folder you
+   like (Desktop or Documents is fine). Do NOT try to run anything
+   from inside the zip — extract it first.
+
+STEP 3 — Double-click  start.bat
+   - First run: it sets up everything automatically. It will create
+     a "venv" folder next to start.bat and download the packages it
+     needs (takes 1-2 minutes the first time).
+   - Every run after that: starts in a couple of seconds.
+   - The app opens at http://localhost:8003 in your default
+     browser (we open it for you 3 seconds after the server boots).
+
+STEP 4 — To stop the app
+   Click the black "Ahmed Poly Bags" window and press Ctrl+C, or
+   just close the window.
+
+
+IF SOMETHING GOES WRONG
+-----------------------
+start.bat is designed to TELL you what's wrong instead of closing
+silently. If you see:
+
+- "[X] Python is not installed"
+       -> Go back to STEP 1 and tick "Add Python to PATH".
+
+- "[X] Failed to install packages"
+       -> You need an internet connection on first run.
+          Once installed, internet is no longer needed.
+
+- A red traceback ending with "ModuleNotFoundError" or "ImportError"
+       -> Delete the "venv" folder next to start.bat and run
+          start.bat again. It'll reinstall everything cleanly.
+
+- "[Errno 98] Address already in use" or
+  "Only one usage of each socket address ..."
+       -> Another copy of Ahmed Poly Bags is already running on
+          port 8003. Close that window first.
+
+The black window stays open on every error so you can read what
+it says. Take a screenshot and send it back if you're stuck.
+
+
+WHAT'S WHERE
+------------
+- start.bat         <- DOUBLE-CLICK THIS TO LAUNCH
+- requirements.txt  <- Python dependencies (handled by start.bat)
+- main.py           <- FastAPI app entrypoint
+- routes/           <- all the HTTP routes
+- services/         <- business logic (ledger, PDFs, posting)
+- templates/        <- HTML templates
+- static/           <- CSS, JS, fonts
+- models.py         <- database schema
+- wealth_tracker.db <- your data (SQLite database)
+
+
+BACKUP / SHARING DATA
+---------------------
+Everything you enter lives in  wealth_tracker.db . To back up:
+just copy that one file somewhere safe (Google Drive, USB, etc.).
+To restore: put it back. To start fresh: delete it — start.bat
+will create a new empty one on next launch.
+
+
+FIRST-TIME SETUP INSIDE THE APP
+-------------------------------
+The database starts empty. To begin:
+
+1. Trade -> Cash Accounts -> add at least one cash/bank account.
+2. Trade -> Parties -> add vendors (suppliers) and customers.
+   The "City" dropdown picks the shipment destination.
+3. Trade -> Items -> add items you trade (Flyer, Poly Bag) with
+   their spec fields (size, micron, etc.).
+4. Trade -> Chart of A/Cs -> review the seeded account list. Add
+   any extras you need (e.g. Rent, Transport, Bank Charges).
+5. Trade -> Quotations -> "+ New Quotation" to draft a quote.
+6. Accept the quotation -> it becomes a Trade automatically.

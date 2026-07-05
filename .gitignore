@@ -14,10 +14,11 @@ venv/
 env/
 ENV/
 
-# Databases — NEVER commit these (each install has its own real data)
+# Databases — NEVER commit (each install has its own real data)
 *.db
 *.sqlite
 *.sqlite3
+*.backup-*
 
 # Env / secrets
 .env
@@ -28,23 +29,42 @@ ENV/
 .idea/
 .vscode/
 
-# Local build artifacts
+# Build artifacts
 build/
 dist/
 *.egg-info/
 downloads/
 eggs/
 .eggs/
+Ahmed-Poly-Bags-app.zip
 
 # Backups written by start.bat before migrations
 backups/
-*.backup-*
 
-# Legacy standalone project folder in this workspace — not part of Wealth Tracker
+# Legacy standalone project folder — not part of Wealth Tracker
 accounting/
 
-# Prompt-plan scratch files
+# Prompt-plan scratch
 promps/
+
+# Old stale shipping copy — now consolidated at root
+Ibrahim/
+
+# Old debug / one-off scripts kept only in local history
+debug_*.py
+check_*.py
+recalc_*.py
+add_pv_*.py
+final_verification.py
+verify_inflows_fix.py
+update_metrics.py
+*_SUMMARY.md
+*_IMPLEMENTATION.md
+METRICS_VERIFICATION_FINAL.txt
+
+# Dev docs
+keyboard-forms-dropin.md
+Trade-Form-And-Detail-Guide.md
 
 # Scratch / dev logs
 start.log

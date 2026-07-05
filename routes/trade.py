@@ -1551,6 +1551,11 @@ async def reports_index(request: Request):
     return templates.TemplateResponse("trade_reports_index.html", _ctx(request))
 
 
+@router.get("/testing", response_class=HTMLResponse)
+async def testing_page(request: Request):
+    return templates.TemplateResponse("trade_testing.html", _ctx(request))
+
+
 @router.get("/reports/sales", response_class=HTMLResponse)
 async def reports_sales(
     request: Request,

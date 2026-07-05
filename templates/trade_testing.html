@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Testing{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div>
+    <h1 class="page-title">Testing</h1>
+    <p class="page-subtitle">
+      This tab exists only to verify that GitHub Releases auto-update works —
+      if you can see this page on your Ahmed Poly Bags launcher, the
+      end-to-end update pipeline is functional.
+    </p>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6 space-y-3">
+    <div class="text-sm text-gray-500 uppercase tracking-wide">Auto-update pipeline status</div>
+    <div class="text-2xl font-bold text-green-700">✓ Everything wired</div>
+    <ul class="text-sm text-gray-600 list-disc list-inside space-y-1 mt-3">
+      <li>Repo <a href="https://github.com/muhammadiibrahiim/wealth-tracker" class="underline text-orange-700">muhammadiibrahiim/wealth-tracker</a> is public.</li>
+      <li><code>start.bat</code> Phase 0 checks GitHub Releases on every launch.</li>
+      <li><code>start.bat</code> Phase 6 backs up the DB then runs <code>alembic upgrade head</code>.</li>
+      <li>Pushing a <code>v*</code> tag to <code>main</code> auto-builds a release zip via GitHub Actions.</li>
+    </ul>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <div class="text-sm text-gray-500 uppercase tracking-wide">Next step</div>
+    <p class="text-sm text-gray-700 mt-2">
+      Once this tab is confirmed on the cousin's screen, this file can be deleted
+      and replaced with actual features. It served its purpose the moment it
+      appeared without any manual zip re-send.
+    </p>
+  </div>
+</div>
+
+{% endblock %}

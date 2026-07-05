@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Working Capital & Capital Utilization{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Working Capital & Capital Utilization</h1>
+      <p class="page-subtitle">DSO · DPO · Cash Conversion Cycle · ROCE — the broker's health checks.</p>
+    </div>
+    <a href="/trade/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div><label class="field-label">As of</label>
+        <input type="date" name="as_of" value="{{ as_of }}" class="px-3 py-2.5"></div>
+      <button type="submit" class="btn-primary">Generate Report</button>
+      <a href="/trade/reports/working-capital" class="btn-secondary">Reset</a>
+    </form>
+  </div>
+
+  <div>
+    <div class="stat-label mb-3">Working Capital — {{ metrics.period_days }}-day window</div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="stat-card">
+        <div class="stat-label">DSO</div>
+        <div class="stat-value">{% if metrics.dso is none %}<span class="text-gray-400">—</span>{% else %}{{ metrics.dso }}<span class="text-lg text-gray-500 ml-1">d</span>{% endif %}</div>
+        <div class="stat-foot">Days to Collect</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">DPO</div>
+        <div class="stat-value">{% if metrics.dpo is none %}<span class="text-gray-400">—</span>{% else %}{{ metrics.dpo }}<span class="text-lg text-gray-500 ml-1">d</span>{% endif %}</div>
+        <div class="stat-foot">Days to Pay</div>
+      </div>
+      <div class="stat-card" {% if metrics.ccc is not none %}style="border-color: {% if metrics.ccc <= 0 %}#16a34a{% else %}#ea580c{% endif %};"{% endif %}>
+        <div class="stat-label">Cash Conversion Cycle</div>
+        <div class="stat-value" {% if metrics.ccc is not none %}style="color: {% if metrics.ccc <= 0 %}#15803d{% else %}#c2410c{% endif %};"{% endif %}>{% if metrics.ccc is none %}<span class="text-gray-400">—</span>{% else %}{{ metrics.ccc }}<span class="text-lg text-gray-500 ml-1">d</span>{% endif %}</div>
+        <div class="stat-foot">DSO − DPO</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Current Ratio</div>
+        <div class="stat-value">{{ metrics.current_ratio if metrics.current_ratio is not none else '—' }}</div>
+        <div class="stat-foot">(Cash + AR) ÷ AP</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="stat-label mb-3">Capital Utilization</div>
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <table class="min-w-full">
+        <tbody>
+          {% for c in capital.components %}
+          <tr>
+            <td class="text-gray-900">{{ c.label }}</td>
+            <td class="text-right tabular-nums font-medium" style="color: {% if c.amount < 0 %}#c2410c{% else %}#111827{% endif %};">{{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot class="bg-gray-50 border-t-2 border-gray-200">
+          <tr>
+            <td class="text-xs uppercase tracking-widest font-bold text-gray-700">Capital Deployed</td>
+            <td class="text-right tabular-nums font-bold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(capital.capital_deployed) }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="stat-card">
+      <div class="stat-label">Equity Total</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(capital.equity_total) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Trailing 12-mo Net Income</div>
+      <div class="stat-value" style="color: {% if capital.trailing_net_income >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+        <span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(capital.trailing_net_income|abs) }}
+      </div>
+    </div>
+    <div class="stat-card" style="border-color: {% if capital.roce_pct >= 0 %}#16a34a{% else %}#ea580c{% endif %};">
+      <div class="stat-label">Trailing 12-mo ROCE</div>
+      <div class="stat-value" style="color: {% if capital.roce_pct >= 0 %}#15803d{% else %}#c2410c{% endif %};">{{ capital.roce_pct }}%</div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,41 @@
+<!-- Habit checkbox partial - swapped via HTMX toggle -->
+<div class="flex items-center space-x-3 flex-1">
+    <form hx-post="/habits/toggle/{{ item.habit.id if item is defined else habit.id }}"
+          hx-target="#habit-item-{{ item.habit.id if item is defined else habit.id }}"
+          hx-swap="innerHTML">
+        <input type="hidden" name="log_date" value="{{ view_date.isoformat() }}">
+        <button type="submit" class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all
+            {% if (item is defined and item.completed) or (completed is defined and completed) %}
+                border-green-500 bg-green-500 text-white
+            {% else %}
+                border-gray-300 hover:border-gray-400
+            {% endif %}">
+            {% if (item is defined and item.completed) or (completed is defined and completed) %}
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                </svg>
+            {% endif %}
+        </button>
+    </form>
+    <div>
+        <span class="text-sm font-medium {% if (item is defined and item.completed) or (completed is defined and completed) %}text-gray-400 line-through{% else %}text-gray-800{% endif %}">
+            {{ item.habit.name if item is defined else habit.name }}
+        </span>
+        {% set h = item.habit if item is defined else habit %}
+        {% if not h.is_recurring %}
+            <span class="ml-2 px-1.5 py-0.5 text-xs bg-amber-100 text-amber-700 rounded">one-off</span>
+        {% endif %}
+        {% if h.description %}
+            <p class="text-xs text-gray-400 mt-0.5">{{ h.description }}</p>
+        {% endif %}
+    </div>
+</div>
+{% if item is defined and item.habit.is_recurring %}
+<div class="text-xs text-gray-400">
+    {{ item.habit.target_per_week }}x/week
+</div>
+{% elif habit is defined and habit.is_recurring %}
+<div class="text-xs text-gray-400">
+    {{ habit.target_per_week }}x/week
+</div>
+{% endif %}

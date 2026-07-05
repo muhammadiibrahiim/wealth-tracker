@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Trial Balance{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Trial Balance</h1>
+      <p class="page-subtitle">Account balances grouped by class. Debits and credits must equal.</p>
+    </div>
+    <div class="flex gap-2">
+      <a href="/trade/reports" class="btn-secondary">← Reports</a>
+    </div>
+  </div>
+
+  <!-- Filter -->
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div>
+        <label class="field-label">As of</label>
+        <input type="date" name="as_of" value="{{ as_of }}" class="px-3 py-2.5">
+      </div>
+      <button type="submit" class="btn-primary">Generate Report</button>
+      <a href="/trade/reports/trial-balance" class="btn-secondary">Reset</a>
+    </form>
+  </div>
+
+  <!-- Stat strip -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="stat-card">
+      <div class="stat-label">Total Debits</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.total_debit) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Credits</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.total_credit) }}</div>
+    </div>
+    <div class="stat-card" style="border-color: {% if report.is_balanced %}#16a34a{% else %}#ea580c{% endif %};">
+      <div class="stat-label">Difference</div>
+      <div class="stat-value" style="color: {% if report.is_balanced %}#16a34a{% else %}#c2410c{% endif %};">
+        <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.difference) }}
+      </div>
+      <div class="stat-foot">{% if report.is_balanced %}<span class="text-green-700">✓ Balanced</span>{% else %}<span class="text-orange-700">⚠ Out of balance</span>{% endif %}</div>
+    </div>
+  </div>
+
+  <!-- Main table -->
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    {% if report.classes %}
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left" style="width: 100px;">Code</th>
+          <th class="text-left">Account</th>
+          <th class="text-right">Debit</th>
+          <th class="text-right">Credit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in report.classes %}
+        <tr style="background: #fef3e8;">
+          <td class="font-mono text-xs font-bold text-orange-900">{{ g['class'].code }}</td>
+          <td class="font-bold text-orange-900">{{ g['class'].name }}</td>
+          <td class="text-right tabular-nums font-bold text-orange-900">{{ currency }} {{ '{:,.2f}'.format(g.totals.debit) }}</td>
+          <td class="text-right tabular-nums font-bold text-orange-900">{{ currency }} {{ '{:,.2f}'.format(g.totals.credit) }}</td>
+        </tr>
+        {% for r in g.rows %}
+        <tr>
+          <td class="font-mono text-xs text-gray-600 pl-8">{{ r.account.code }}</td>
+          <td class="text-gray-900">{{ r.account.name }}</td>
+          <td class="text-right tabular-nums">{% if r.debit > 0 %}<span class="text-gray-900 font-medium">{{ currency }} {{ '{:,.2f}'.format(r.debit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
+          <td class="text-right tabular-nums">{% if r.credit > 0 %}<span class="text-gray-900 font-medium">{{ currency }} {{ '{:,.2f}'.format(r.credit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+      <tfoot class="bg-gray-50 border-t-2 border-gray-300">
+        <tr>
+          <td colspan="2" class="text-xs uppercase tracking-widest font-bold text-gray-700">Grand Total</td>
+          <td class="text-right tabular-nums font-bold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(report.total_debit) }}</td>
+          <td class="text-right tabular-nums font-bold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(report.total_credit) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+    {% else %}
+    <div class="px-6 py-16 text-center">
+      <p class="text-sm text-gray-500">No journal activity yet. Post a voucher or record a trade.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Closing callout -->
+  <div class="accent-card flex items-center justify-between" style="border-left-color: {% if report.is_balanced %}#16a34a{% else %}#ea580c{% endif %};">
+    <div>
+      <div class="stat-label">Books Status</div>
+      <div class="text-lg font-bold mt-1 {% if report.is_balanced %}text-green-700{% else %}text-orange-700{% endif %}">
+        {% if report.is_balanced %}✓ Trial balance is in balance{% else %}⚠ Trial balance is out by {{ currency }} {{ '{:,.2f}'.format(report.difference|abs) }}{% endif %}
+      </div>
+    </div>
+    <div class="text-right">
+      <div class="text-3xl font-bold tabular-nums text-gray-900">
+        <span class="text-xl text-gray-500 font-semibold mr-1">{{ currency }}</span>{{ '{:,.2f}'.format(report.total_debit) }}
+      </div>
+      <div class="stat-foot">Total Both Sides</div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Cashbook{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Cashbook</h1>
+      <p class="page-subtitle">Every transaction touching a cash or bank account.</p>
+    </div>
+    <a href="/trade/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div><label class="field-label">Cash account</label>
+        <select name="account_id" class="px-3 py-2.5">
+          <option value="">All cash & bank</option>
+          {% for a in cash_accounts %}<option value="{{ a.id }}" {% if account_id == a.id %}selected{% endif %}>{{ a.code }} — {{ a.name }}</option>{% endfor %}
+        </select></div>
+      <div><label class="field-label">From</label>
+        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+      <div><label class="field-label">To</label>
+        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
+      <button type="submit" class="btn-primary">Apply</button>
+    </form>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="stat-label">Opening Balance</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.opening_balance) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total In</div>
+      <div class="stat-value" style="color: #15803d;"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.total_debit) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Out</div>
+      <div class="stat-value" style="color: #b91c1c;"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.total_credit) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Closing Balance</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.closing_balance) }}</div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Date</th>
+          <th class="text-left">Ref</th>
+          <th class="text-left">Particulars</th>
+          <th class="text-left">Account</th>
+          <th class="text-right">In</th>
+          <th class="text-right">Out</th>
+          <th class="text-right">Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background: #fafaf9;">
+          <td colspan="6" class="text-gray-500 text-sm"><em>Opening balance</em></td>
+          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(book.opening_balance) }}</td>
+        </tr>
+        {% for r in book.lines %}
+        <tr>
+          <td class="text-gray-700 whitespace-nowrap">{{ r.date }}</td>
+          <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/vouchers/{{ r.entry_id }}">{{ r.reference }}</a></td>
+          <td class="text-gray-900">{{ r.particulars }}</td>
+          <td class="text-gray-600">{{ r.account_name }}</td>
+          <td class="text-right tabular-nums font-medium" style="color: #15803d;">{% if r.debit > 0 %}{{ currency }} {{ '{:,.2f}'.format(r.debit) }}{% endif %}</td>
+          <td class="text-right tabular-nums font-medium" style="color: #b91c1c;">{% if r.credit > 0 %}{{ currency }} {{ '{:,.2f}'.format(r.credit) }}{% endif %}</td>
+          <td class="text-right tabular-nums font-semibold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(r.balance) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot class="bg-gray-50 border-t-2 border-gray-200">
+        <tr>
+          <td colspan="4" class="text-xs uppercase tracking-widest font-bold text-gray-700">Totals</td>
+          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(book.total_debit) }}</td>
+          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(book.total_credit) }}</td>
+          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(book.closing_balance) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

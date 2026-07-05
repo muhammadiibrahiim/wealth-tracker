@@ -1,0 +1,254 @@
+<div class="modal-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8">
+  <div class="bg-white p-7 w-full max-w-lg mx-4">
+    <div class="flex items-start justify-between mb-5">
+      <div>
+        <h2 class="modal-title">Record Cost</h2>
+        <p class="modal-subtitle">{{ trade.reference }} · Posts <strong>DR Capital A/C</strong> / <strong>CR payee</strong>. Use for bilty, loading, demurrage, broker commission and any other trade-related cost absorbed by capital.</p>
+      </div>
+      <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
+    </div>
+
+    {% if not capital_acct %}
+    <div class="accent-card" style="border-left-color: #cd4239; background: #f7d6d3;">
+      <p class="text-sm" style="color: #722024;">⚠️ Capital A/C not found. Create or rename an account to <strong>Capital A/C</strong> in <a href="/trade/coa" class="underline">Chart of A/Cs</a> first.</p>
+    </div>
+    {% else %}
+    <form hx-post="/trade/trades/{{ trade.id }}/cost" class="space-y-4">
+      <div>
+        <label class="field-label field-label-required">Description (what for)</label>
+        <input name="description" required placeholder="e.g. Bilty Karachi → Lahore" class="w-full">
+      </div>
+
+      <label class="flex items-start gap-2 cursor-pointer p-3 border border-gray-200 rounded" style="background: #fefce8;">
+        <input type="checkbox" name="paid_by_customer" id="paid-by-customer" value="on" class="mt-1">
+        <span class="text-sm">
+          <strong>Customer paid this on our behalf</strong>
+          <span class="block text-xs mt-1" style="color: var(--mute);">
+            Tick if <strong>{{ purchaser.name if purchaser else 'the customer' }}</strong> paid this cost out of pocket. The amount will be deducted from their outstanding on this trade instead of from a cash/bank/vendor account.
+          </span>
+        </span>
+      </label>
+
+      <div id="payee-row">
+        <label class="field-label field-label-required">Payee (who was paid / whose balance to reduce)</label>
+        <div class="payee-search" tabindex="0">
+          <input type="text"
+                 id="payee-search-input"
+                 autocomplete="off"
+                 placeholder="Type to search accounts… (e.g. cash, bilty, ahmed)"
+                 class="w-full">
+          <input type="hidden" name="payee_account_id" id="payee-account-id">
+          <div id="payee-dropdown" class="payee-dropdown" style="display:none"></div>
+          <div id="payee-selected" class="payee-selected" style="display:none">
+            <span class="payee-code"></span>
+            <span class="payee-name"></span>
+            <button type="button" class="payee-clear" title="Change">✕</button>
+          </div>
+        </div>
+        <p class="text-xs mt-1" style="color: var(--mute);">Pick any account — cash, bank, a vendor, or even another capital account. Capital A/C will be debited; this account will be credited.</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="field-label field-label-required">Amount ({{ currency }})</label>
+          <input type="number" step="0.01" min="0.01" name="amount" required class="w-full">
+        </div>
+        <div>
+          <label class="field-label">Date</label>
+          <input type="date" name="cost_date" value="{{ today }}" class="w-full">
+        </div>
+      </div>
+
+      <div class="accent-card" style="border-left-color: #2c84e0; background: #dceaf6;">
+        <p class="text-sm" style="color: #08245f;">
+          <strong>Journal that will post:</strong><br>
+          DR Capital A/C ({{ capital_acct.code }}) — <span id="preview-amount">0.00</span><br>
+          CR <span id="preview-payee">— pick payee —</span> — <span id="preview-amount2">0.00</span>
+        </p>
+      </div>
+
+      {% if purchaser_acct %}
+      <input type="hidden" id="purchaser-acct-id" value="{{ purchaser_acct.id }}">
+      <input type="hidden" id="purchaser-acct-code" value="{{ purchaser_acct.code }}">
+      <input type="hidden" id="purchaser-acct-name" value="{{ purchaser.name }}">
+      {% endif %}
+
+      <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Cancel</button>
+        <button type="submit" class="btn-primary">Post Cost Entry</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+  .payee-search { position: relative; }
+  .payee-dropdown {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
+    background: #fff; border: 1px solid var(--hairline);
+    border-top: none; border-radius: 0 0 6px 6px;
+    max-height: 280px; overflow-y: auto;
+    box-shadow: 0 8px 16px rgba(35,37,29,0.10);
+  }
+  .payee-option {
+    padding: 8px 12px; cursor: pointer; font-size: 14px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--hairline-soft);
+  }
+  .payee-option:last-child { border-bottom: none; }
+  .payee-option:hover, .payee-option.active { background: #fef7e6; }
+  .payee-option .code {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 11px; color: var(--mute); min-width: 50px;
+  }
+  .payee-option .name { color: var(--ink); font-weight: 500; }
+  .payee-empty { padding: 16px; text-align: center; color: var(--mute); font-size: 13px; }
+  .payee-selected {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; background: #f4f5f8;
+    border: 1px solid var(--hairline); border-radius: 6px;
+    margin-top: 6px;
+  }
+  .payee-selected .payee-code {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 11px; color: var(--mute); font-weight: 600;
+  }
+  .payee-selected .payee-name { flex: 1; color: var(--ink); font-weight: 600; font-size: 14px; }
+  .payee-clear { background: transparent; border: none; cursor: pointer; color: var(--mute); padding: 2px 6px; }
+  .payee-clear:hover { color: var(--accent-red); }
+</style>
+
+<script>
+(function () {
+    var ACCOUNTS = [
+        {% for a in accounts %}
+        { id: {{ a.id }}, code: {{ a.code|tojson }}, name: {{ a.name|tojson }} }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    var input = document.getElementById('payee-search-input');
+    var hidden = document.getElementById('payee-account-id');
+    var dropdown = document.getElementById('payee-dropdown');
+    var selected = document.getElementById('payee-selected');
+    var selectedCode = selected.querySelector('.payee-code');
+    var selectedName = selected.querySelector('.payee-name');
+    var previewPayee = document.getElementById('preview-payee');
+    var amountInput = document.querySelector('input[name=amount]');
+    var previewAmt = document.getElementById('preview-amount');
+    var previewAmt2 = document.getElementById('preview-amount2');
+
+    var activeIdx = -1;
+    var visible = [];
+
+    function render(filter) {
+        var q = (filter || '').trim().toLowerCase();
+        visible = ACCOUNTS.filter(function(a) {
+            if (!q) return true;
+            return a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q);
+        }).slice(0, 30);
+
+        if (!visible.length) {
+            dropdown.innerHTML = '<div class="payee-empty">No matching account</div>';
+            dropdown.style.display = 'block';
+            return;
+        }
+        dropdown.innerHTML = visible.map(function(a, i) {
+            return '<div class="payee-option' + (i === activeIdx ? ' active' : '') + '" data-idx="' + i + '">' +
+                   '<span class="code">' + a.code + '</span>' +
+                   '<span class="name">' + a.name + '</span></div>';
+        }).join('');
+        dropdown.style.display = 'block';
+        // Wire clicks
+        dropdown.querySelectorAll('.payee-option').forEach(function(el) {
+            el.addEventListener('mousedown', function(e) {  // mousedown beats blur
+                e.preventDefault();
+                pick(parseInt(el.dataset.idx, 10));
+            });
+        });
+    }
+
+    function pick(idx) {
+        if (idx < 0 || idx >= visible.length) return;
+        var a = visible[idx];
+        hidden.value = a.id;
+        input.style.display = 'none';
+        dropdown.style.display = 'none';
+        selectedCode.textContent = a.code;
+        selectedName.textContent = a.name;
+        selected.style.display = 'flex';
+        previewPayee.textContent = a.name + ' (' + a.code + ')';
+        amountInput.focus();
+    }
+
+    function clearPick() {
+        hidden.value = '';
+        selected.style.display = 'none';
+        input.style.display = 'block';
+        input.value = '';
+        input.focus();
+        previewPayee.textContent = '— pick payee —';
+        render('');
+    }
+
+    input.addEventListener('focus', function() { activeIdx = -1; render(input.value); });
+    input.addEventListener('input', function() { activeIdx = -1; render(input.value); });
+    input.addEventListener('blur', function() {
+        // Delay so option click fires first
+        setTimeout(function() { dropdown.style.display = 'none'; }, 100);
+    });
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIdx = Math.min(activeIdx + 1, visible.length - 1);
+            render(input.value);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIdx = Math.max(activeIdx - 1, 0);
+            render(input.value);
+        } else if (e.key === 'Enter') {
+            if (activeIdx >= 0 && visible[activeIdx]) {
+                e.preventDefault();
+                pick(activeIdx);
+            }
+        } else if (e.key === 'Escape') {
+            dropdown.style.display = 'none';
+        }
+    });
+    selected.querySelector('.payee-clear').addEventListener('click', clearPick);
+
+    // Update preview as user types amount.
+    if (amountInput) {
+        amountInput.addEventListener('input', function() {
+            var v = parseFloat(amountInput.value || 0);
+            var s = '{{ currency }} ' + v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            previewAmt.textContent = s;
+            previewAmt2.textContent = s;
+        });
+    }
+
+    // "Paid by customer" toggle — hide payee picker and lock CR side to purchaser A/R.
+    var paidByCust = document.getElementById('paid-by-customer');
+    var payeeRow = document.getElementById('payee-row');
+    var purchaserId = document.getElementById('purchaser-acct-id');
+    if (paidByCust && payeeRow) {
+        paidByCust.addEventListener('change', function() {
+            if (paidByCust.checked) {
+                payeeRow.style.display = 'none';
+                hidden.removeAttribute('required');
+                hidden.value = '';
+                if (purchaserId) {
+                    var pcode = document.getElementById('purchaser-acct-code').value;
+                    var pname = document.getElementById('purchaser-acct-name').value;
+                    previewPayee.textContent = pname + ' receivable (' + pcode + ')';
+                } else {
+                    previewPayee.textContent = 'Purchaser receivable';
+                }
+            } else {
+                payeeRow.style.display = '';
+                if (!hidden.value) previewPayee.textContent = '— pick payee —';
+            }
+        });
+    }
+})();
+</script>

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Cash Forecast{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Bank Position Forecast</h1>
+      <p class="page-subtitle">Projected cash 30/60/90 days out based on scheduled inflows and outflows.</p>
+    </div>
+    <a href="/trade/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  {% if report.negative_at %}
+  <div class="accent-card" style="border-left-color: #b91c1c;">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">⚠️</span>
+      <div>
+        <div class="stat-label" style="color: #b91c1c;">Cash Warning</div>
+        <div class="text-base font-bold mt-1" style="color: #b91c1c;">Projected to go negative within {{ report.negative_at }} days</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="stat-label">Cash Today</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.cash_today) }}</div>
+    </div>
+    {% for h in [30, 60, 90] %}
+    <div class="stat-card" style="{% if report.projected[h] < 0 %}border-color: #ea580c;{% endif %}">
+      <div class="stat-label">+{{ h }} Days</div>
+      <div class="stat-value" style="{% if report.projected[h] < 0 %}color: #c2410c;{% endif %}">
+        <span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.projected[h]|abs) }}
+      </div>
+      {% if report.projected[h] < 0 %}<div class="stat-foot" style="color: #c2410c;">Deficit</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between" style="background: #fafaf9;">
+        <h2 style="color: #15803d;">Inflows (Customer Receivables)</h2>
+      </div>
+      <table class="min-w-full">
+        <thead>
+          <tr><th class="text-left">Trade</th><th class="text-left">Due Date</th><th class="text-right">Days Out</th><th class="text-right">Amount</th></tr>
+        </thead>
+        <tbody>
+          {% for f in report.inflows %}
+          <tr>
+            <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/trades/{{ f.trade.id }}">{{ f.trade.reference }}</a></td>
+            <td class="text-gray-700 whitespace-nowrap">{{ f.due_date }}</td>
+            <td class="text-right tabular-nums {% if f.days_out < 0 %}font-semibold{% endif %}" style="{% if f.days_out < 0 %}color: #c2410c;{% endif %}">{{ f.days_out }}d</td>
+            <td class="text-right tabular-nums font-medium" style="color: #15803d;">+ {{ currency }} {{ '{:,.0f}'.format(f.amount) }}</td>
+          </tr>
+          {% else %}<tr><td colspan="4" class="px-6 py-10 text-center text-sm text-gray-400">No outstanding receivables.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between" style="background: #fafaf9;">
+        <h2 style="color: #b91c1c;">Outflows (Vendor Payments Due)</h2>
+      </div>
+      <table class="min-w-full">
+        <thead>
+          <tr><th class="text-left">Trade</th><th class="text-left">Due Date</th><th class="text-right">Days Out</th><th class="text-right">Amount</th></tr>
+        </thead>
+        <tbody>
+          {% for o in report.outflows %}
+          <tr>
+            <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/trades/{{ o.trade.id }}">{{ o.trade.reference }}</a></td>
+            <td class="text-gray-700 whitespace-nowrap">{{ o.due_date }}</td>
+            <td class="text-right tabular-nums {% if o.days_out < 0 %}font-semibold{% endif %}" style="{% if o.days_out < 0 %}color: #c2410c;{% endif %}">{{ o.days_out }}d</td>
+            <td class="text-right tabular-nums font-medium" style="color: #b91c1c;">− {{ currency }} {{ '{:,.0f}'.format(o.amount) }}</td>
+          </tr>
+          {% else %}<tr><td colspan="4" class="px-6 py-10 text-center text-sm text-gray-400">No outstanding payables.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

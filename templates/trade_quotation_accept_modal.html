@@ -1,0 +1,148 @@
+{# Modal: confirm/adjust quotation values before converting to a Trade. #}
+<div class="modal-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8">
+  <div class="bg-white p-7 w-full max-w-4xl mx-4">
+    <div class="flex items-start justify-between mb-5">
+      <div>
+        <h2 class="modal-title">Accept Quotation → Create Trade</h2>
+        <p class="modal-subtitle">
+          Confirm or adjust the negotiated qty, unit cost and unit price for each line.
+          The original quotation <strong>{{ quotation.reference }}</strong> stays unchanged as the
+          historic record; the new trade is created with the values you confirm below.
+        </p>
+      </div>
+      <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
+    </div>
+
+    <form hx-post="/trade/quotations/{{ quotation.id }}/accept" class="space-y-5">
+
+      <div class="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-100">
+            <tr class="text-xs uppercase tracking-wide text-gray-600">
+              <th class="text-left px-4 py-2 font-semibold">Item / Specs</th>
+              <th class="text-right px-4 py-2 font-semibold">Final Qty</th>
+              <th class="text-right px-4 py-2 font-semibold">Unit Cost</th>
+              <th class="text-right px-4 py-2 font-semibold">Unit Price</th>
+              <th class="text-right px-4 py-2 font-semibold">Line Sale</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 bg-white">
+            {% for ln in quotation.lines %}
+            <tr>
+              <td class="px-4 py-3 align-top">
+                <div class="font-medium text-gray-900">{{ ln.item_name }}</div>
+                {% if ln.specs %}
+                <div class="text-xs text-gray-500 mt-0.5">
+                  {% for sp in ln.specs %}
+                  {{ sp.label }}: <span class="text-gray-700">{{ sp.value }}</span>{% if not loop.last %} · {% endif %}
+                  {% endfor %}
+                </div>
+                {% endif %}
+                <div class="text-xs text-gray-400 mt-1">
+                  Quoted: {{ '{:,.0f}'.format(ln.quantity) }} {{ ln.unit }} ·
+                  cost {{ '{:,.2f}'.format(ln.unit_cost) }} ·
+                  price {{ '{:,.2f}'.format(ln.unit_price) }}
+                </div>
+              </td>
+              <td class="px-4 py-3 align-top">
+                <input name="qty_{{ ln.id }}" type="number" step="0.001" min="0"
+                       value="{{ ln.quantity }}"
+                       class="w-32 text-right px-3 py-2 border border-gray-300 rounded"
+                       data-line="{{ ln.id }}" data-field="qty">
+              </td>
+              <td class="px-4 py-3 align-top">
+                <input name="unit_cost_{{ ln.id }}" type="number" step="0.01" min="0"
+                       value="{{ ln.unit_cost }}"
+                       class="w-28 text-right px-3 py-2 border border-gray-300 rounded"
+                       data-line="{{ ln.id }}" data-field="unit_cost">
+              </td>
+              <td class="px-4 py-3 align-top">
+                <input name="unit_price_{{ ln.id }}" type="number" step="0.01" min="0"
+                       value="{{ ln.unit_price }}"
+                       class="w-28 text-right px-3 py-2 border border-gray-300 rounded"
+                       data-line="{{ ln.id }}" data-field="unit_price">
+              </td>
+              <td class="px-4 py-3 align-top text-right font-semibold text-gray-900"
+                  data-line-sale="{{ ln.id }}">
+                <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(ln.quantity * ln.unit_price) }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot class="bg-gray-50">
+            <tr class="text-sm">
+              <td colspan="4" class="px-4 py-3 text-right font-medium text-gray-600">Total Sale</td>
+              <td class="px-4 py-3 text-right font-bold text-gray-900" id="accept-total-sale">
+                <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(quotation.total_sale) }}
+              </td>
+            </tr>
+            <tr class="text-sm">
+              <td colspan="4" class="px-4 py-3 text-right font-medium text-gray-600">Indicative Profit</td>
+              <td class="px-4 py-3 text-right font-bold text-green-700" id="accept-total-profit">
+                <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(quotation.total_sale - quotation.total_cost) }}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="field-label">Customer Terms (days)</label>
+          <input name="customer_terms_days" type="number" min="0" step="1"
+                 value="{{ quotation.customer_terms_days }}"
+                 class="w-full px-3 py-2.5">
+          <p class="text-xs text-gray-500 mt-1">From the quoted value; adjust if it changed in negotiation.</p>
+        </div>
+        <div>
+          <label class="field-label">Vendor Terms (days)</label>
+          <input name="vendor_terms_days" type="number" min="0" step="1"
+                 value="{{ quotation.vendor_terms_days }}"
+                 class="w-full px-3 py-2.5">
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-2 border-t border-gray-200">
+        <button type="button" class="btn-secondary"
+                onclick="document.getElementById('modal-container').innerHTML = ''">
+          Cancel
+        </button>
+        <button type="submit" class="btn-primary">
+          ✓ Confirm &amp; Create Trade
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function() {
+  const modal = document.querySelector('#modal-container .modal-backdrop');
+  if (!modal) return;
+  const recalc = () => {
+    let totalSale = 0, totalCost = 0;
+    modal.querySelectorAll('tbody tr').forEach(tr => {
+      const id = tr.querySelector('[data-field="qty"]')?.dataset.line;
+      if (!id) return;
+      const qty   = parseFloat(tr.querySelector(`[data-field="qty"]`).value)        || 0;
+      const cost  = parseFloat(tr.querySelector(`[data-field="unit_cost"]`).value)  || 0;
+      const price = parseFloat(tr.querySelector(`[data-field="unit_price"]`).value) || 0;
+      const lineSale = qty * price;
+      totalSale += lineSale;
+      totalCost += qty * cost;
+      const cell = tr.querySelector(`[data-line-sale="${id}"]`);
+      if (cell) cell.innerHTML = `<span class="currency">{{ currency }}</span>${lineSale.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    });
+    const fmt = v => `<span class="currency">{{ currency }}</span>${v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    const totalEl = modal.querySelector('#accept-total-sale');
+    const profitEl = modal.querySelector('#accept-total-profit');
+    if (totalEl) totalEl.innerHTML = fmt(totalSale);
+    if (profitEl) {
+      profitEl.innerHTML = fmt(totalSale - totalCost);
+      profitEl.className = 'px-4 py-3 text-right font-bold ' +
+        ((totalSale - totalCost) >= 0 ? 'text-green-700' : 'text-red-700');
+    }
+  };
+  modal.querySelectorAll('input[type="number"]').forEach(el => el.addEventListener('input', recalc));
+})();
+</script>

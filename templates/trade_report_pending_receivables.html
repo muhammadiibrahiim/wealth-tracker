@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Pending Receivable Items{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Pending Receivable Items</h1>
+      <p class="page-subtitle">
+        Qty still owed by each vendor — grouped by vendor, broken down per trade and per line.
+        As of {{ today }}.
+      </p>
+    </div>
+    <a href="/trade/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  <!-- KPI cards -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="stat-label">Vendors with pending</div>
+      <div class="stat-value">{{ report.vendor_count }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Trades with pending</div>
+      <div class="stat-value">{{ report.trade_count }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Pending line items</div>
+      <div class="stat-value">{{ report.line_count }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Pending value (cost)</div>
+      <div class="stat-value">
+        <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.total_pending_value) }}
+      </div>
+    </div>
+  </div>
+
+  {% if report.vendors %}
+    {% for v in report.vendors %}
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <div class="text-lg font-bold text-gray-900">{{ v.vendor_name }}</div>
+          <div class="text-xs text-gray-500 mt-0.5">
+            {{ v.trade_count }} trade{{ '' if v.trade_count == 1 else 's' }}
+            · pending qty {{ '{:,.0f}'.format(v.pending_qty) }}
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="text-xs text-gray-500 uppercase tracking-wide">Vendor pending value</div>
+          <div class="text-xl font-bold text-orange-700">
+            <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(v.pending_value) }}
+          </div>
+        </div>
+      </div>
+
+      <div class="divide-y divide-gray-100">
+        {% for tr in v.trades %}
+        <div class="px-6 py-4">
+          <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <div class="flex items-center gap-3">
+              <a href="/trade/trades/{{ tr.trade_id }}" class="font-semibold text-gray-900 hover:underline">{{ tr.trade_ref }}</a>
+              <span class="text-sm text-gray-500">{{ tr.trade_date }}</span>
+              <span class="text-sm text-gray-500">→ {{ tr.customer_name }}</span>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize">{{ tr.status }}</span>
+              <span class="text-xs text-gray-400">{{ tr.days_open }} days open</span>
+            </div>
+            <div class="text-sm">
+              <span class="text-gray-500">Trade pending:</span>
+              <span class="font-semibold text-gray-900">
+                <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(tr.pending_value) }}
+              </span>
+            </div>
+          </div>
+
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-gray-500 text-xs uppercase tracking-wide">
+                <th class="text-left py-2 font-medium">Item</th>
+                <th class="text-right py-2 font-medium">Ordered</th>
+                <th class="text-right py-2 font-medium">Received</th>
+                <th class="text-right py-2 font-medium">Pending</th>
+                <th class="text-right py-2 font-medium">Unit Cost</th>
+                <th class="text-right py-2 font-medium">Pending Value</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+              {% for ln in tr.lines %}
+              <tr>
+                <td class="py-2">
+                  <div class="font-medium text-gray-900">{{ ln.item_name }}</div>
+                  {% if ln.specs %}
+                  <div class="text-xs text-gray-500 mt-0.5">{{ ln.specs }}</div>
+                  {% endif %}
+                </td>
+                <td class="text-right py-2 text-gray-700">{{ '{:,.0f}'.format(ln.ordered_qty) }} {{ ln.unit }}</td>
+                <td class="text-right py-2 text-gray-500">{{ '{:,.0f}'.format(ln.received_qty) }}</td>
+                <td class="text-right py-2 font-semibold text-orange-700">{{ '{:,.0f}'.format(ln.pending_qty) }}</td>
+                <td class="text-right py-2 text-gray-700">{{ '{:,.2f}'.format(ln.unit_cost) }}</td>
+                <td class="text-right py-2 font-semibold text-gray-900">
+                  <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(ln.pending_value) }}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="bg-white border border-gray-200 rounded-lg p-12 text-center">
+      <div class="text-lg font-semibold text-gray-900">Nothing pending</div>
+      <p class="text-sm text-gray-500 mt-2">
+        Every active trade has been fully delivered. Nothing's outstanding from any vendor right now.
+      </p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

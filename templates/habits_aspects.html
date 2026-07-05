@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Aspects & Habits - Atomic Habits Tracker{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 max-w-5xl mx-auto">
+    <div class="mb-6">
+        <a href="/habits" class="text-blue-600 hover:text-blue-800">← Back to Dashboard</a>
+    </div>
+
+    <h1 class="text-3xl font-bold text-gray-900 mb-2">⚙️ Manage Life Aspects & Habits</h1>
+    <p class="text-gray-500 mb-6">Define the areas of your life and the habits you want to track.</p>
+
+    <!-- Create Aspect Form -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">Add New Life Aspect</h2>
+        <form hx-post="/habits/aspects/create" hx-target="#aspect-list" hx-swap="innerHTML" class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <input type="text" name="name" required placeholder="e.g., Fitness" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
+            </div>
+            <div class="w-20">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Icon</label>
+                <input type="text" name="icon" value="📌" maxlength="4"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-center text-lg">
+            </div>
+            <div class="w-24">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Color</label>
+                <input type="color" name="color" value="#3B82F6"
+                       class="w-full h-10 border border-gray-300 rounded-lg cursor-pointer">
+            </div>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+                + Add Aspect
+            </button>
+        </form>
+    </div>
+
+    <!-- Create Habit Form -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">Add New Habit</h2>
+        <form hx-post="/habits/habits/create" hx-target="#aspect-list" hx-swap="innerHTML" class="flex flex-wrap items-end gap-3">
+            <div class="w-48">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Aspect</label>
+                <select name="aspect_id" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    {% for ad in aspect_data %}
+                    <option value="{{ ad.aspect.id }}">{{ ad.aspect.icon }} {{ ad.aspect.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Habit Name</label>
+                <input type="text" name="name" required placeholder="e.g., Morning jog"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            </div>
+            <div class="w-48">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <input type="text" name="description" placeholder="Optional"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            </div>
+            <div class="w-28">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select name="is_recurring" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="true" selected>Recurring</option>
+                    <option value="false">One-off</option>
+                </select>
+            </div>
+            <div class="w-24">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Target/wk</label>
+                <input type="number" name="target_per_week" value="7" min="1" max="7"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-center">
+            </div>
+            <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium">
+                + Add Habit
+            </button>
+        </form>
+    </div>
+
+    <!-- Aspect List -->
+    <div id="aspect-list">
+        {% include "partials/aspect_list.html" %}
+    </div>
+</div>
+
+<!-- Edit Aspect Modal Template -->
+<script>
+function openEditAspect(id, name, icon, color) {
+    document.getElementById('modal-container').innerHTML = `
+        <div class="modal-backdrop fixed inset-0 z-40 flex items-center justify-center" onclick="if(event.target===this) document.getElementById('modal-container').innerHTML=''">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4 z-50">
+                <h3 class="text-lg font-semibold mb-4">Edit Aspect</h3>
+                <form hx-post="/habits/aspects/${id}/update" hx-target="#aspect-list" hx-swap="innerHTML" 
+                      onsubmit="setTimeout(()=>document.getElementById('modal-container').innerHTML='',100)">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                            <input type="text" name="name" value="${name}" required class="w-full px-3 py-2 border rounded-lg text-sm">
+                        </div>
+                        <div class="flex space-x-3">
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Icon</label>
+                                <input type="text" name="icon" value="${icon}" maxlength="4" class="w-full px-3 py-2 border rounded-lg text-center text-lg">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Color</label>
+                                <input type="color" name="color" value="${color}" class="w-full h-10 border rounded-lg">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <button type="button" onclick="document.getElementById('modal-container').innerHTML=''" 
+                                class="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>`;
+    htmx.process(document.getElementById('modal-container'));
+}
+
+function openEditHabit(id, name, description, isRecurring, targetPerWeek, isActive) {
+    document.getElementById('modal-container').innerHTML = `
+        <div class="modal-backdrop fixed inset-0 z-40 flex items-center justify-center" onclick="if(event.target===this) document.getElementById('modal-container').innerHTML=''">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4 z-50">
+                <h3 class="text-lg font-semibold mb-4">Edit Habit</h3>
+                <form hx-post="/habits/habits/${id}/update" hx-target="#aspect-list" hx-swap="innerHTML"
+                      onsubmit="setTimeout(()=>document.getElementById('modal-container').innerHTML='',100)">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                            <input type="text" name="name" value="${name}" required class="w-full px-3 py-2 border rounded-lg text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                            <input type="text" name="description" value="${description || ''}" class="w-full px-3 py-2 border rounded-lg text-sm">
+                        </div>
+                        <div class="flex space-x-3">
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                                <select name="is_recurring" class="w-full px-3 py-2 border rounded-lg text-sm">
+                                    <option value="true" ${isRecurring ? 'selected' : ''}>Recurring</option>
+                                    <option value="false" ${!isRecurring ? 'selected' : ''}>One-off</option>
+                                </select>
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Target/wk</label>
+                                <input type="number" name="target_per_week" value="${targetPerWeek}" min="1" max="7" class="w-full px-3 py-2 border rounded-lg text-sm text-center">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="flex items-center space-x-2 text-sm">
+                                <input type="checkbox" name="is_active" value="true" ${isActive ? 'checked' : ''} class="rounded">
+                                <span>Active</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <button type="button" onclick="document.getElementById('modal-container').innerHTML=''" 
+                                class="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>`;
+    htmx.process(document.getElementById('modal-container'));
+}
+</script>
+{% endblock %}

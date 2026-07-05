@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Vouchers{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Vouchers</h1>
+      <p class="page-subtitle">Every journal entry — auto-posted trade events + manual cashbook entries.</p>
+    </div>
+    <div class="flex gap-2 flex-wrap">
+      <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=receipt"   hx-target="#modal-container">Receipt</button>
+      <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=payment"   hx-target="#modal-container">Payment</button>
+      <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=contra"    hx-target="#modal-container">Contra</button>
+      <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=expense"   hx-target="#modal-container">Expense</button>
+      <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=owner_in"  hx-target="#modal-container">Owner In</button>
+      <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=owner_out" hx-target="#modal-container">Owner Out</button>
+      <button class="btn-primary" hx-get="/trade/vouchers/new?preset=journal" hx-target="#modal-container">+ Journal Voucher</button>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div>
+        <label class="field-label">Type</label>
+        <select name="type" class="px-3 py-2.5">
+          <option value="">All types</option>
+          {% for t in types %}<option value="{{ t }}" {% if current_type == t %}selected{% endif %}>{{ t.replace('_',' ').title() }}</option>{% endfor %}
+        </select>
+      </div>
+      <div><label class="field-label">From</label>
+        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+      <div><label class="field-label">To</label>
+        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
+      <button type="submit" class="btn-primary">Apply</button>
+      <a href="/trade/vouchers" class="btn-secondary">Reset</a>
+    </form>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+    {% if rows %}
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Ref</th>
+          <th class="text-left">Date</th>
+          <th class="text-left">Type</th>
+          <th class="text-left">Description</th>
+          <th class="text-right">Amount</th>
+          <th class="text-left">Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        {% set e = r.entry %}
+        <tr>
+          <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/vouchers/{{ e.id }}">{{ e.reference }}</a></td>
+          <td class="text-gray-700 whitespace-nowrap">{{ e.entry_date }}</td>
+          <td class="text-gray-700">{{ (e.entry_type.value if e.entry_type.value is defined else e.entry_type).replace('_',' ').title() }}</td>
+          <td class="text-gray-900">{{ e.description }}</td>
+          <td class="text-right tabular-nums font-medium">{{ currency }} {{ '{:,.2f}'.format(r.total) }}</td>
+          <td>{% if e.is_reversed %}<span class="pill-cr">Reversed</span>{% else %}<span class="pill-dr">Posted</span>{% endif %}</td>
+          <td class="text-right">
+            {% if e.trade_id %}
+              <span class="text-xs text-gray-400" title="Linked to a trade — manage via the trade page">Trade-linked</span>
+            {% else %}
+              <form hx-post="/trade/vouchers/{{ e.id }}/delete" hx-confirm="Permanently delete voucher {{ e.reference }}? Its journal lines (and any reversal entry) will be removed." class="inline">
+                <button class="text-red-600 text-xs hover:underline font-medium">Delete</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="px-6 py-16 text-center text-sm text-gray-500">No vouchers in range.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+
+<div class="space-y-8">
+  <div>
+    <h1 class="page-title">Reports</h1>
+    <p class="page-subtitle">Financial statements, business intelligence, and operational reports.</p>
+  </div>
+
+  {% macro section(title, items) -%}
+  <div>
+    <div class="stat-label mb-3">{{ title }}</div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {% for href, name, blurb in items %}
+      <a href="{{ href }}" class="bg-white border border-gray-200 rounded-lg p-6 hover:border-gray-900 hover:shadow-md transition">
+        <h3 class="text-base font-bold text-gray-900">{{ name|safe }}</h3>
+        <p class="mt-2 text-sm text-gray-500">{{ blurb }}</p>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {%- endmacro %}
+
+  {{ section('Financial Statements', [
+    ('/trade/reports/trial-balance', 'Trial Balance', 'Every account, grouped by class — debits and credits must match.'),
+    ('/trade/reports/pnl',           'Profit &amp; Loss', 'Revenue, COGS, and operating expenses for a period.'),
+    ('/trade/reports/balance-sheet', 'Balance Sheet', 'Assets, liabilities and equity at a date.'),
+    ('/trade/reports/cash-flow',     'Cash Flow Statement', 'Where cash came from and where it went — indirect method.'),
+    ('/trade/reports/general-ledger','General Ledger', 'Per-account transaction history with running balance.'),
+    ('/trade/reports/cashbook',      'Cashbook',  'Every transaction touching a cash or bank account.'),
+    ('/trade/reports/day-book',      'Day Book', 'All vouchers for a specific date — audit view.'),
+  ]) }}
+
+  {{ section('Business Intelligence', [
+    ('/trade/reports/customer-profitability', 'Customer Profitability', 'Revenue, GP, DSO, concentration risk per customer.'),
+    ('/trade/reports/vendor-performance',     'Vendor Performance',     'Purchases, GP contributed, delivery accuracy, DPO.'),
+    ('/trade/reports/item-profitability',     'Item Profitability',     'Per item + per spec combination: revenue, GP%, velocity.'),
+    ('/trade/reports/working-capital',        'Working Capital',        'DSO · DPO · Cash Conversion Cycle · Current Ratio · ROCE.'),
+    ('/trade/reports/forecast',               'Cash Forecast',          'Projected cash 30/60/90 days out — warns if going negative.'),
+    ('/trade/reports/trade-profitability',    'Trade Profitability',    'Top trades by GP, biggest variances, oldest unsettled.'),
+  ]) }}
+
+  {{ section('Operational', [
+    ('/trade/reports/sales',  'Sales Report',  'Revenue, cost, and profit by month, optionally filtered.'),
+    ('/trade/reports/ledger', 'Party Ledger',  'Dated ledger for a customer or vendor.'),
+    ('/trade/reports/items',  'Item Report',   'Units sold, revenue, margin per item.'),
+    ('/trade/reports/aging',  'AR Aging',      'Customer receivables bucketed by days overdue.'),
+    ('/trade/reports/pending-receivables', 'Pending Receivable Items', 'Qty still owed by each vendor — per trade, per line, with pending value.'),
+    ('/trade/reports/bilty',  'Bilty Report',  'Every bilty entry — date, trade, customer + city, terminal, weight, amount, paid-by-customer status.'),
+  ]) }}
+</div>
+
+{% endblock %}

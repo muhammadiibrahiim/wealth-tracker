@@ -1,0 +1,481 @@
+{% extends "base.html" %}
+
+{% block title %}{{ investment.name }} - Investment Details{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="mb-6">
+        <a href="/investments" class="text-blue-600 hover:text-blue-800 mb-2 inline-block">← Back to Investments</a>
+        <div class="flex justify-between items-center">
+            <h1 class="text-3xl font-bold text-gray-900">{{ investment.name }}</h1>
+            <div class="space-x-2">
+                <button 
+                    hx-get="/investments/{{ investment.id }}/edit" 
+                    hx-target="#modal-container" 
+                    hx-swap="innerHTML"
+                    class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition">
+                    Edit
+                </button>
+                <button 
+                    hx-post="/investments/{{ investment.id }}/delete" 
+                    hx-confirm="Are you sure you want to delete this investment?"
+                    class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition">
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Investment Details -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Input Parameters Card -->
+        <div class="bg-white shadow-md rounded-lg p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Investment Parameters</h2>
+            <dl class="space-y-3">
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Investment Start Date:</dt>
+                    <dd class="text-sm font-semibold text-gray-900">{{ investment.investment_start_date.strftime('%B %d, %Y') }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Type:</dt>
+                    <dd class="text-sm font-semibold text-blue-700">
+                        {% if investment.investment_type.value == 'asset' %}
+                        Asset (with salvage value)
+                        {% else %}
+                        Business/Project
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Total Investment:</dt>
+                    <dd class="text-sm font-semibold text-gray-900">Rs {{ "{:,.2f}".format(investment.total_investment_value) }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Payment Method:</dt>
+                    <dd class="text-sm text-gray-900">{{ "Installments (spread over time)" if investment.installments else "Upfront (all at month 0)" }}</dd>
+                </div>
+                {% if investment.installments %}
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Installment Payment:</dt>
+                    <dd class="text-sm text-gray-900">Rs {{ "{:,.2f}".format(investment.installment_value) }}/month</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Payment Duration:</dt>
+                    <dd class="text-sm text-gray-900">{{ investment.installment_months }} months</dd>
+                </div>
+                {% endif %}
+                
+                <!-- Revenue/Income Section (different for business vs asset) -->
+                {% if investment.investment_type.value == 'business' %}
+                    {% if investment.has_revenue and investment.revenue_amount > 0 %}
+                    <div class="flex justify-between border-t pt-3 mt-3">
+                        <dt class="text-sm font-medium text-gray-500">Revenue from Sale:</dt>
+                        <dd class="text-sm font-semibold text-green-600">Rs {{ "{:,.2f}".format(investment.revenue_amount) }}</dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">Payment Period:</dt>
+                        <dd class="text-sm text-gray-900">{{ investment.revenue_installment_months }} months (equal installments)</dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">Monthly Inflow:</dt>
+                        <dd class="text-sm text-green-600">Rs {{ "{:,.2f}".format(investment.revenue_amount / investment.revenue_installment_months) }}</dd>
+                    </div>
+                    {% endif %}
+                {% else %}
+                    <!-- Asset type shows income -->
+                    {% if investment.gain_in_income_value > 0 %}
+                    <div class="flex justify-between border-t pt-3 mt-3">
+                        <dt class="text-sm font-medium text-gray-500">Income Generated:</dt>
+                        <dd class="text-sm text-gray-900">Rs {{ "{:,.2f}".format(investment.gain_in_income_value) }} <span class="text-gray-500">({{ "{:.3f}".format(investment.gain_in_income_percent) }}%)</span></dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">Income Frequency:</dt>
+                        <dd class="text-sm text-gray-900">{{ investment.cadence.value.capitalize() }}</dd>
+                    </div>
+                    {% if investment.income_increases %}
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">Income Growth:</dt>
+                        <dd class="text-sm text-green-600 font-semibold">+{{ "{:.3f}".format(investment.income_increase_rate_percent) }}% per {{ investment.income_increase_cadence.value }}</dd>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                {% endif %}
+                
+                <!-- Leverage Details -->
+                {% if investment.is_leveraged and investment.leverage_amount > 0 %}
+                <div class="border-t pt-3 mt-3">
+                    <div class="flex justify-between mb-2">
+                        <dt class="text-sm font-medium text-orange-600">Leverage (Borrowed):</dt>
+                        <dd class="text-sm font-semibold text-orange-600">Rs {{ "{:,.2f}".format(investment.leverage_amount) }}</dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">Repayment Method:</dt>
+                        <dd class="text-sm text-gray-900">
+                            {% if investment.leverage_repayment_type == 'equal_installments' %}
+                            Equal Monthly Installments
+                            {% else %}
+                            Custom Payment Schedule
+                            {% endif %}
+                        </dd>
+                    </div>
+                    {% if investment.leverage_repayment_type == 'equal_installments' %}
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">Monthly Repayment:</dt>
+                        <dd class="text-sm text-gray-900">Rs {{ "{:,.2f}".format(investment.leverage_monthly_repayment) }}</dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">Repayment Period:</dt>
+                        <dd class="text-sm text-gray-900">{{ investment.leverage_repayment_months }} months</dd>
+                    </div>
+                    {% else %}
+                    <!-- Custom Repayment Schedule -->
+                    <div class="mt-2">
+                        <dt class="text-sm font-medium text-gray-500 mb-2">Custom Repayment Schedule:</dt>
+                        <dd class="text-xs">
+                            <table class="w-full">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-2 py-1 text-left text-xs font-medium text-gray-500">Date</th>
+                                        <th class="px-2 py-1 text-right text-xs font-medium text-gray-500">Amount</th>
+                                        <th class="px-2 py-1 text-center text-xs font-medium text-gray-500">Month</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    {% for repayment in investment.leverage_repayments | sort(attribute='repayment_date') %}
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-2 py-1 text-xs text-gray-900">{{ repayment.repayment_date.strftime('%b %d, %Y') }}</td>
+                                        <td class="px-2 py-1 text-xs text-right text-orange-600 font-medium">Rs {{ "{:,.0f}".format(repayment.amount) }}</td>
+                                        <td class="px-2 py-1 text-xs text-center text-gray-500">M{{ repayment.repayment_month }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                    <tr class="bg-gray-50 font-semibold">
+                                        <td class="px-2 py-1 text-xs text-gray-900">Total:</td>
+                                        <td class="px-2 py-1 text-xs text-right text-orange-600">Rs {{ "{:,.0f}".format(investment.leverage_repayments | sum(attribute='amount')) }}</td>
+                                        <td class="px-2 py-1 text-xs text-center text-gray-500">{{ investment.leverage_repayments | length }} payments</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </dd>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                {% if investment.investment_type.value == 'business' and investment.one_off_inflow_value > 0 %}
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">One-off Inflow:</dt>
+                    <dd class="text-sm text-gray-900">Rs {{ "{:,.2f}".format(investment.one_off_inflow_value) }}</dd>
+                </div>
+                {% endif %}
+                {% if investment.investment_type.value == 'asset' %}
+                    {% if investment.salvage_value > 0 %}
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">Salvage/Resale Value:</dt>
+                        <dd class="text-sm text-gray-900">Rs {{ "{:,.2f}".format(investment.salvage_value) }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if investment.asset_appreciates %}
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">Asset Value Change:</dt>
+                        <dd class="text-sm {% if investment.appreciation_rate_percent >= 0 %}text-green-600{% else %}text-red-600{% endif %} font-semibold">
+                            {% if investment.appreciation_rate_percent >= 0 %}+{% endif %}{{ "{:.3f}".format(investment.appreciation_rate_percent) }}% per {{ investment.appreciation_cadence.value }}
+                        </dd>
+                    </div>
+                    {% endif %}
+                {% endif %}
+                <div class="flex justify-between border-t pt-2">
+                    <dt class="text-sm font-medium text-gray-500">Discount Rate (Annual):</dt>
+                    <dd class="text-sm font-semibold text-blue-700">{{ "{:.3f}".format(investment.discount_rate_annual_percent) }}%</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Reinvestment Rate (Annual):</dt>
+                    <dd class="text-sm text-gray-900">{{ "{:.3f}".format(investment.reinvestment_rate_annual_percent) }}%</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Analysis Horizon:</dt>
+                    <dd class="text-sm text-gray-900">{{ investment.analysis_horizon_months }} months</dd>
+                </div>
+            </dl>
+            
+            {% if investment.notes %}
+            <div class="mt-4 pt-4 border-t">
+                <h3 class="text-sm font-medium text-gray-500 mb-2">Notes:</h3>
+                <p class="text-sm text-gray-700 whitespace-pre-wrap">{{ investment.notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Calculated Metrics Card -->
+        <!-- Financial Metrics -->
+        <div class="bg-white shadow-md rounded-lg p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Financial Metrics</h2>
+            {% if metrics %}
+            
+            <!-- Check if leveraged to show both project and equity metrics -->
+            {% if investment.is_leveraged and investment.leverage_amount and investment.leverage_amount > 0 %}
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Project-Level Metrics -->
+                <div class="border-r pr-4">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Project Metrics</h3>
+                    <p class="text-xs text-gray-500 mb-4">Overall project returns including leverage</p>
+                    <dl class="space-y-3">
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">ROI:</dt>
+                            <dd class="text-sm font-semibold {% if metrics.roi_percent is not none %}{% if metrics.roi_percent > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                                {% if metrics.roi_percent is not none %}{{ "{:.2f}".format(metrics.roi_percent) }}%{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">NPV:</dt>
+                            <dd class="text-sm font-semibold {% if metrics.npv is not none %}{% if metrics.npv > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                                {% if metrics.npv is not none %}Rs {{ "{:,.2f}".format(metrics.npv) }}{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">IRR:</dt>
+                            <dd class="text-sm font-semibold {% if metrics.irr_percent is not none %}{% if metrics.irr_percent > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                                {% if metrics.irr_percent is not none %}{{ "{:.2f}".format(metrics.irr_percent) }}%{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">MIRR:</dt>
+                            <dd class="text-sm font-semibold {% if metrics.mirr_percent is not none %}{% if metrics.mirr_percent > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                                {% if metrics.mirr_percent is not none %}{{ "{:.2f}".format(metrics.mirr_percent) }}%{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">Profitability Index:</dt>
+                            <dd class="text-sm font-semibold {% if metrics.profitability_index is not none %}{% if metrics.profitability_index > 1 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                                {% if metrics.profitability_index is not none %}{{ "{:.3f}".format(metrics.profitability_index) }}{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">Payback Period:</dt>
+                            <dd class="text-sm text-gray-900">
+                                {% if metrics.payback_months is not none %}{{ "{:.1f}".format(metrics.payback_months) }} months{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">Discounted Payback:</dt>
+                            <dd class="text-sm text-gray-900">
+                                {% if metrics.discounted_payback_months is not none %}{{ "{:.1f}".format(metrics.discounted_payback_months) }} months{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+                
+                <!-- Equity-Level Metrics -->
+                <div class="pl-4">
+                    <h3 class="text-lg font-semibold text-indigo-700 mb-3 border-b border-indigo-200 pb-2">Equity Metrics</h3>
+                    <p class="text-xs text-indigo-600 mb-4">Return on your actual invested capital</p>
+                    <dl class="space-y-3">
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">Equity ROI:</dt>
+                            <dd class="text-sm font-bold {% if metrics.equity_roi_percent is not none %}{% if metrics.equity_roi_percent > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                                {% if metrics.equity_roi_percent is not none %}{{ "{:.2f}".format(metrics.equity_roi_percent) }}%{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">Equity NPV:</dt>
+                            <dd class="text-sm font-bold {% if metrics.equity_npv is not none %}{% if metrics.equity_npv > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                                {% if metrics.equity_npv is not none %}Rs {{ "{:,.2f}".format(metrics.equity_npv) }}{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">Equity IRR:</dt>
+                            <dd class="text-sm font-bold {% if metrics.equity_irr_percent is not none %}{% if metrics.equity_irr_percent > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                                {% if metrics.equity_irr_percent is not none %}{{ "{:.2f}".format(metrics.equity_irr_percent) }}%{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">Equity MIRR:</dt>
+                            <dd class="text-sm font-bold {% if metrics.equity_mirr_percent is not none %}{% if metrics.equity_mirr_percent > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                                {% if metrics.equity_mirr_percent is not none %}{{ "{:.2f}".format(metrics.equity_mirr_percent) }}%{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">Equity PI:</dt>
+                            <dd class="text-sm font-bold {% if metrics.equity_profitability_index is not none %}{% if metrics.equity_profitability_index > 1 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                                {% if metrics.equity_profitability_index is not none %}{{ "{:.3f}".format(metrics.equity_profitability_index) }}{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">Equity Payback:</dt>
+                            <dd class="text-sm text-gray-900">
+                                {% if metrics.equity_payback_months is not none %}{{ "{:.1f}".format(metrics.equity_payback_months) }} months{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-sm font-medium text-gray-500">Equity Disc. Payback:</dt>
+                            <dd class="text-sm text-gray-900">
+                                {% if metrics.equity_discounted_payback_months is not none %}{{ "{:.1f}".format(metrics.equity_discounted_payback_months) }} months{% else %}N/A{% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+            
+            <!-- Additional Shared Metrics -->
+            <div class="mt-6 pt-4 border-t">
+                <dl class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">Total Inflows:</dt>
+                        <dd class="text-sm font-semibold text-blue-600">
+                            {% if metrics.total_inflows is not none %}Rs {{ "{:,.2f}".format(metrics.total_inflows) }}{% else %}N/A{% endif %}
+                        </dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">PV of Inflows:</dt>
+                        <dd class="text-sm font-semibold text-blue-600">
+                            {% if metrics.pv_inflows is not none %}Rs {{ "{:,.2f}".format(metrics.pv_inflows) }}{% else %}N/A{% endif %}
+                        </dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="text-sm font-medium text-gray-500">CAGR:</dt>
+                        <dd class="text-sm font-semibold {% if metrics.cagr_percent is not none %}{% if metrics.cagr_percent > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                            {% if metrics.cagr_percent is not none %}{{ "{:.2f}".format(metrics.cagr_percent) }}%{% else %}N/A{% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+            
+            {% else %}
+            <!-- Non-leveraged investment - show only project metrics -->
+            <dl class="space-y-3">
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">ROI:</dt>
+                    <dd class="text-sm font-semibold {% if metrics.roi_percent is not none %}{% if metrics.roi_percent > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                        {% if metrics.roi_percent is not none %}{{ "{:.2f}".format(metrics.roi_percent) }}%{% else %}N/A{% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">NPV:</dt>
+                    <dd class="text-sm font-semibold {% if metrics.npv is not none %}{% if metrics.npv > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                        {% if metrics.npv is not none %}Rs {{ "{:,.2f}".format(metrics.npv) }}{% else %}N/A{% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Total Inflows:</dt>
+                    <dd class="text-sm font-semibold text-blue-600">
+                        {% if metrics.total_inflows is not none %}Rs {{ "{:,.2f}".format(metrics.total_inflows) }}{% else %}N/A{% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">PV of Inflows:</dt>
+                    <dd class="text-sm font-semibold text-blue-600">
+                        {% if metrics.pv_inflows is not none %}Rs {{ "{:,.2f}".format(metrics.pv_inflows) }}{% else %}N/A{% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">IRR:</dt>
+                    <dd class="text-sm font-semibold {% if metrics.irr_percent is not none %}{% if metrics.irr_percent > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                        {% if metrics.irr_percent is not none %}{{ "{:.2f}".format(metrics.irr_percent) }}%{% else %}N/A{% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">MIRR:</dt>
+                    <dd class="text-sm font-semibold {% if metrics.mirr_percent is not none %}{% if metrics.mirr_percent > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                        {% if metrics.mirr_percent is not none %}{{ "{:.2f}".format(metrics.mirr_percent) }}%{% else %}N/A{% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Payback Period:</dt>
+                    <dd class="text-sm text-gray-900">
+                        {% if metrics.payback_months is not none %}{{ "{:.1f}".format(metrics.payback_months) }} months{% else %}N/A{% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Discounted Payback:</dt>
+                    <dd class="text-sm text-gray-900">
+                        {% if metrics.discounted_payback_months is not none %}{{ "{:.1f}".format(metrics.discounted_payback_months) }} months{% else %}N/A{% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">Profitability Index:</dt>
+                    <dd class="text-sm font-semibold {% if metrics.profitability_index is not none %}{% if metrics.profitability_index > 1 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                        {% if metrics.profitability_index is not none %}{{ "{:.3f}".format(metrics.profitability_index) }}{% else %}N/A{% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-500">CAGR:</dt>
+                    <dd class="text-sm font-semibold {% if metrics.cagr_percent is not none %}{% if metrics.cagr_percent > 0 %}text-green-600{% else %}text-red-600{% endif %}{% endif %}">
+                        {% if metrics.cagr_percent is not none %}{{ "{:.2f}".format(metrics.cagr_percent) }}%{% else %}N/A{% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between border-t pt-2">
+                    <dt class="text-sm font-medium text-gray-500">Break-even Units:</dt>
+                    <dd class="text-sm text-gray-900">
+                        {% if metrics.break_even_units is not none %}{{ "{:,.2f}".format(metrics.break_even_units) }}{% else %}N/A{% endif %}
+                    </dd>
+                </div>
+            </dl>
+            {% endif %}
+            
+            {% else %}
+            <div class="text-center py-8">
+                <p class="text-sm text-gray-500 mb-4">Metrics not yet calculated</p>
+                <button 
+                    hx-post="/investments/{{ investment.id }}/recalculate" 
+                    hx-target="body"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition">
+                    Calculate Metrics
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Cash Flow Table -->
+    <div class="bg-white shadow-md rounded-lg p-6">
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">Cash Flow Analysis</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Month
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Inflow
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Outflow
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Net CF
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Discounted CF
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for row in cash_flow_table %}
+                    <tr class="{% if row.month == 'TOTAL' %}bg-gray-100 font-bold border-t-2 border-gray-300{% else %}hover:bg-gray-50{% endif %}">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm {% if row.month == 'TOTAL' %}font-bold text-gray-900{% else %}text-gray-900{% endif %}">
+                            {{ row.month }}
+                        </td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-right {% if row.month == 'TOTAL' %}font-bold{% endif %} text-green-600">
+                            {% if row.inflow > 0 %}Rs {{ "{:,.2f}".format(row.inflow) }}{% endif %}
+                        </td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-right {% if row.month == 'TOTAL' %}font-bold{% endif %} text-red-600">
+                            {% if row.outflow > 0 %}Rs {{ "{:,.2f}".format(row.outflow) }}{% endif %}
+                        </td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-right {% if row.month == 'TOTAL' %}font-bold{% endif %} {% if row.net > 0 %}text-green-600{% elif row.net < 0 %}text-red-600{% else %}text-gray-900{% endif %}">
+                            Rs {{ "{:,.2f}".format(row.net) }}
+                        </td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-right {% if row.month == 'TOTAL' %}font-bold{% endif %} text-gray-600">
+                            Rs {{ "{:,.2f}".format(row.discounted_net) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Container -->
+<div id="modal-container"></div>
+{% endblock %}

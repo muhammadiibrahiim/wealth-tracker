@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Receivables Aging{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Receivables Aging</h1>
+      <p class="page-subtitle">
+        One row per delivery event — partial receipts and full deliveries.
+        Sorted by <strong>earliest payment due first</strong> so the most urgent collections sit at the top.
+      </p>
+    </div>
+    <a href="/trade/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  {# ── Bucket KPI strip ── #}
+  {% set b = report.buckets %}
+  {% set bc = report.bucket_count %}
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+    <div class="stat-card">
+      <div class="stat-label">Not Yet Due</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b.not_due) }}</div>
+      <div class="stat-foot">{{ bc.not_due }} deliveries</div>
+    </div>
+    <div class="stat-card" style="border-color: #ca8a04;">
+      <div class="stat-label">1–30 days overdue</div>
+      <div class="stat-value" style="color: #a16207;"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['1_30']) }}</div>
+      <div class="stat-foot">{{ bc['1_30'] }} deliveries</div>
+    </div>
+    <div class="stat-card" style="border-color: #ea580c;">
+      <div class="stat-label">31–60 days</div>
+      <div class="stat-value" style="color: #c2410c;"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['31_60']) }}</div>
+      <div class="stat-foot">{{ bc['31_60'] }} deliveries</div>
+    </div>
+    <div class="stat-card" style="border-color: #dc2626;">
+      <div class="stat-label">61–90 days</div>
+      <div class="stat-value" style="color: #b91c1c;"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['61_90']) }}</div>
+      <div class="stat-foot">{{ bc['61_90'] }} deliveries</div>
+    </div>
+    <div class="stat-card" style="border-color: #991b1b; border-width: 2px;">
+      <div class="stat-label">90+ days</div>
+      <div class="stat-value" style="color: #991b1b;"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['90_plus']) }}</div>
+      <div class="stat-foot">{{ bc['90_plus'] }} deliveries</div>
+    </div>
+  </div>
+
+  <div class="accent-card flex items-center justify-between" style="border-left-color: #2c84e0; background: #dceaf6;">
+    <div>
+      <div class="stat-label">Total Outstanding (collect-against deliveries)</div>
+      <div class="text-2xl font-bold mt-1" style="color: #08245f;">
+        {{ currency }} {{ '{:,.2f}'.format(report.total_outstanding) }}
+      </div>
+    </div>
+    <div class="text-right text-sm" style="color: #08245f;">
+      {{ report.rows | length }} delivery event{% if report.rows | length != 1 %}s{% endif %} outstanding<br>
+      <span style="color: var(--mute);">as of {{ report.today }}</span>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+    {% if report.rows %}
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Customer</th>
+          <th class="text-left">City</th>
+          <th class="text-left">Trade</th>
+          <th class="text-left">Delivery</th>
+          <th class="text-right">Invoiced</th>
+          <th class="text-right">Bilty Credit</th>
+          <th class="text-right">Cash Applied</th>
+          <th class="text-right">Outstanding</th>
+          <th class="text-left">Due</th>
+          <th class="text-right">Days</th>
+          <th class="text-left">Bucket</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in report.rows %}
+        {% set bcol = {
+          'not_due': '#374151',
+          '1_30':    '#a16207',
+          '31_60':   '#c2410c',
+          '61_90':   '#b91c1c',
+          '90_plus': '#991b1b',
+        }[r.bucket] %}
+        {% set blabel = {
+          'not_due': 'Not yet due',
+          '1_30':    '1–30',
+          '31_60':   '31–60',
+          '61_90':   '61–90',
+          '90_plus': '90+',
+        }[r.bucket] %}
+        <tr>
+          <td class="font-medium text-gray-900">{{ r.customer }}</td>
+          <td class="text-gray-700 text-sm">{{ r.customer_city or '—' }}</td>
+          <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/trades/{{ r.trade_id }}">{{ r.trade_ref }}</a></td>
+          <td class="text-gray-700 whitespace-nowrap text-sm">
+            <a class="text-indigo-600 hover:underline" href="/trade/trades/{{ r.trade_id }}/invoice/by-date/{{ r.event_date }}.pdf" target="_blank">
+              {{ r.event_date }}
+            </a>
+          </td>
+          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(r.gross) }}</td>
+          <td class="text-right tabular-nums text-sm">
+            {% if r.bilty_credit > 0 %}<span style="color: #15803d;">- {{ currency }} {{ '{:,.2f}'.format(r.bilty_credit) }}</span>
+            {% else %}<span class="text-gray-400">—</span>{% endif %}
+          </td>
+          <td class="text-right tabular-nums text-sm">
+            {% if r.cash_applied > 0 %}<span style="color: #15803d;">- {{ currency }} {{ '{:,.2f}'.format(r.cash_applied) }}</span>
+            {% else %}<span class="text-gray-400">—</span>{% endif %}
+          </td>
+          <td class="text-right tabular-nums font-bold" style="color: {{ bcol }};">{{ currency }} {{ '{:,.2f}'.format(r.outstanding) }}</td>
+          <td class="text-gray-700 whitespace-nowrap">{{ r.due_date }}</td>
+          <td class="text-right tabular-nums {% if r.days_over > 0 %}font-semibold{% endif %}" style="{% if r.days_over > 0 %}color: {{ bcol }};{% else %}color: var(--mute);{% endif %}">
+            {% if r.days_over > 0 %}+{{ r.days_over }}{% else %}{{ (r.due_date - report.today).days }}{% endif %}
+          </td>
+          <td>
+            <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide"
+                  style="background: {{ bcol }}1a; color: {{ bcol }};">{{ blabel }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot style="background: #fafaf9;">
+        <tr>
+          <td colspan="7" class="text-right text-xs uppercase tracking-widest font-bold text-gray-700">Total Outstanding</td>
+          <td class="text-right tabular-nums font-bold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(report.total_outstanding) }}</td>
+          <td colspan="3"></td>
+        </tr>
+      </tfoot>
+    </table>
+    {% else %}
+    <div class="px-6 py-16 text-center text-sm text-gray-500">No outstanding deliveries — every invoice is paid. 🎉</div>
+    {% endif %}
+  </div>
+
+  <div class="text-xs text-gray-500">
+    <p><strong>How rows are formed:</strong> each row is one <em>delivery event</em>.
+    Partial receipts (one event per unique receipt date) and full deliveries
+    (one event on the trade's <em>Mark Complete</em> date for anything the
+    partial receipts didn't cover) are listed separately, so you can chase
+    the right invoice per shipment.</p>
+    <p><strong>Cash allocation:</strong> customer cash payments and any
+    <em>paid-by-customer</em> trade costs that aren't tagged to a specific
+    delivery date are applied <em>FIFO</em> across delivery events ordered by
+    due date — earliest invoice paid first. The <em>Bilty Credit</em> column
+    shows the customer-paid bilty that's specifically tagged to that one
+    delivery, deducted directly from that event's invoice.</p>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Vendor Performance{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Vendor Performance</h1>
+      <p class="page-subtitle">Purchases, gross profit contributed, delivery accuracy and DPO per vendor.</p>
+    </div>
+    <a href="/trade/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div><label class="field-label">From</label>
+        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+      <div><label class="field-label">To</label>
+        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
+      <button type="submit" class="btn-primary">Generate Report</button>
+      <a href="/trade/reports/vendor-performance" class="btn-secondary">Reset</a>
+    </form>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Total Purchases</div>
+    <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.total_purchases) }}</div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Vendor</th>
+          <th class="text-right">Trades</th>
+          <th class="text-right">Purchases</th>
+          <th class="text-right">GP Contributed</th>
+          <th class="text-right">Avg Pay Days (DPO)</th>
+          <th class="text-right">Qty Variance</th>
+          <th class="text-right">Outstanding AP</th>
+          <th class="text-right">Share</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in report.rows %}
+        <tr>
+          <td class="font-medium text-gray-900">{{ r.vendor.name }}</td>
+          <td class="text-right">{{ r.trade_count }}</td>
+          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(r.purchases) }}</td>
+          <td class="text-right tabular-nums font-semibold" style="color: #15803d;">{{ currency }} {{ '{:,.0f}'.format(r.gp_contributed) }}</td>
+          <td class="text-right tabular-nums">{{ r.avg_pay_days }}<span class="text-xs text-gray-500">d</span></td>
+          <td class="text-right tabular-nums" style="color: {% if r.avg_qty_variance_pct > 0 %}#15803d{% elif r.avg_qty_variance_pct < 0 %}#c2410c{% else %}#6b7280{% endif %};">{{ r.avg_qty_variance_pct }}%</td>
+          <td class="text-right tabular-nums {% if r.outstanding > 0 %}font-semibold{% endif %}" style="{% if r.outstanding > 0 %}color: #c2410c;{% endif %}">{{ currency }} {{ '{:,.0f}'.format(r.outstanding) }}</td>
+          <td class="text-right tabular-nums">{{ r.share_pct }}%</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="px-6 py-16 text-center text-sm text-gray-500">No vendor activity yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

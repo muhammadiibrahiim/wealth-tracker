@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Cash Flow Statement{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Cash Flow Statement</h1>
+      <p class="page-subtitle">Where cash came from and where it went — indirect method.</p>
+    </div>
+    <a href="/trade/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div><label class="field-label">From</label>
+        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+      <div><label class="field-label">To</label>
+        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
+      <button type="submit" class="btn-primary">Generate Report</button>
+      <a href="/trade/reports/cash-flow" class="btn-secondary">Reset</a>
+    </form>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="stat-card">
+      <div class="stat-label">Beginning Cash</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.beginning_cash) }}</div>
+    </div>
+    <div class="stat-card" style="border-color: {% if report.net_change_in_cash >= 0 %}#16a34a{% else %}#ea580c{% endif %};">
+      <div class="stat-label">Net Change in Cash</div>
+      <div class="stat-value" style="color: {% if report.net_change_in_cash >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+        <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.net_change_in_cash|abs) }}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Ending Cash</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.ending_cash) }}</div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between" style="background: #fafaf9;">
+      <h2>Operating Activities</h2>
+      <span class="text-lg font-bold tabular-nums" style="color: {% if report.cash_from_ops >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+        {{ currency }} {{ '{:,.2f}'.format(report.cash_from_ops) }}
+      </span>
+    </div>
+    <table class="min-w-full">
+      <tbody>
+        {% for r in report.operating %}
+        <tr>
+          <td class="text-gray-900">{{ r.label }}</td>
+          <td class="text-right tabular-nums font-medium" style="color: {% if r.amount < 0 %}#c2410c{% else %}#111827{% endif %};">{{ currency }} {{ '{:,.2f}'.format(r.amount) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between" style="background: #fafaf9;">
+      <h2>Financing Activities</h2>
+      <span class="text-lg font-bold tabular-nums">{{ currency }} {{ '{:,.2f}'.format(report.cash_from_financing) }}</span>
+    </div>
+    <table class="min-w-full">
+      <tbody>
+        {% for r in report.financing %}
+        <tr>
+          <td class="text-gray-900">{{ r.label }}</td>
+          <td class="text-right tabular-nums font-medium" style="color: {% if r.amount < 0 %}#c2410c{% else %}#111827{% endif %};">{{ currency }} {{ '{:,.2f}'.format(r.amount) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="accent-card flex items-center justify-between" style="border-left-color: {% if report.net_change_in_cash >= 0 %}#16a34a{% else %}#ea580c{% endif %};">
+    <div>
+      <div class="stat-label">Net Change in Cash</div>
+      <div class="text-xs text-gray-500 mt-1">Operating + Financing</div>
+    </div>
+    <div class="text-4xl font-bold tabular-nums" style="color: {% if report.net_change_in_cash >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+      <span class="text-2xl text-gray-500 font-semibold mr-1">{{ currency }}</span>{{ '{:,.2f}'.format(report.net_change_in_cash|abs) }}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

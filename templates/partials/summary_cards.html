@@ -1,0 +1,29 @@
+<div id="summary-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+        <div class="text-sm text-gray-600 mb-1">Previous Networth</div>
+        <div class="text-xl font-bold text-blue-700">
+            {{ format_currency(changes.networth_prev) }}
+        </div>
+    </div>
+    
+    <div class="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
+        <div class="text-sm text-gray-600 mb-1">Current Networth</div>
+        <div class="text-xl font-bold text-green-700">
+            {{ format_currency(changes.networth_curr) }}
+        </div>
+    </div>
+    
+    <div class="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-500">
+        <div class="text-sm text-gray-600 mb-1">Networth Change</div>
+        <div class="text-xl font-bold {{ 'text-green-700' if changes.networth_change >= 0 else 'text-red-700' }}">
+            {{ format_delta(changes.networth_change) }}
+        </div>
+    </div>
+    
+    <div class="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-500">
+        <div class="text-sm text-gray-600 mb-1">Total Change</div>
+        <div class="text-xl font-bold {{ 'text-green-700' if changes.total_change >= 0 else 'text-red-700' }}">
+            {{ format_delta(changes.total_change) }}
+        </div>
+    </div>
+</div>

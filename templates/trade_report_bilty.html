@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Bilty Report{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Bilty Report</h1>
+      <p class="page-subtitle">Every bilty (transport) entry — date, trade, customer + city, terminal, weight, amount, paid-by-customer status.</p>
+    </div>
+    <div class="flex gap-2">
+      <a href="/trade/reports" class="btn-secondary">← Reports</a>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div><label class="field-label">From</label>
+        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+      <div><label class="field-label">To</label>
+        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
+      <button type="submit" class="btn-primary">Apply</button>
+      <a href="/trade/reports/bilty" class="btn-secondary">Reset</a>
+    </form>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="stat-label">Bilty Entries</div>
+      <div class="stat-value">{{ rows|length }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Amount</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(total_amount) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Paid by Customer</div>
+      <div class="stat-value" style="color: #15803d;"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(total_by_cust) }}</div>
+      <div class="stat-foot">Reduces customer A/R</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Weight</div>
+      <div class="stat-value">{{ '{:g}'.format(total_kgs) }}<span class="text-base text-gray-500 ml-1">kg</span></div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+    {% if rows %}
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Delivery Date</th>
+          <th class="text-left">Trade</th>
+          <th class="text-left">Customer</th>
+          <th class="text-left">City</th>
+          <th class="text-left">Terminal</th>
+          <th class="text-right">Weight (kg)</th>
+          <th class="text-right">Amount</th>
+          <th class="text-left">Paid By</th>
+          <th class="text-left">Ref</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="text-gray-900 whitespace-nowrap">{{ r.delivery_date }}</td>
+          <td><a href="/trade/trades/{{ r.trade_id }}" class="text-indigo-600 hover:underline font-medium font-mono text-xs">{{ r.trade_ref }}</a></td>
+          <td class="text-gray-900">{{ r.customer }}</td>
+          <td class="text-gray-700 text-sm">{{ r.customer_city or '—' }}</td>
+          <td class="text-gray-700 text-sm">{{ r.terminal or '—' }}</td>
+          <td class="text-right tabular-nums">{% if r.weight_kgs %}{{ '{:g}'.format(r.weight_kgs|float) }}{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
+          <td class="text-right tabular-nums font-medium">{{ currency }} {{ '{:,.2f}'.format(r.amount) }}</td>
+          <td>
+            {% if r.paid_by_customer %}
+            <span class="inline-block px-2 py-0.5 rounded text-xs font-medium" style="background:#fef3c7;color:#78350f;">Customer</span>
+            {% else %}
+            <span class="text-xs text-gray-500">Us (cash)</span>
+            {% endif %}
+          </td>
+          <td class="text-gray-500 text-xs font-mono">{{ r.ref }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot style="background: #fafaf9;">
+        <tr>
+          <td colspan="5" class="text-right text-xs uppercase tracking-widest font-bold text-gray-700">Total</td>
+          <td class="text-right tabular-nums font-bold">{{ '{:g}'.format(total_kgs) }}</td>
+          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(total_amount) }}</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+    {% else %}
+    <div class="px-6 py-16 text-center text-sm text-gray-500">No bilty entries in this range.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

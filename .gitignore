@@ -1,0 +1,51 @@
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Databases — NEVER commit these (each install has its own real data)
+*.db
+*.sqlite
+*.sqlite3
+
+# Env / secrets
+.env
+.env.*
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Local build artifacts
+build/
+dist/
+*.egg-info/
+downloads/
+eggs/
+.eggs/
+
+# Backups written by start.bat before migrations
+backups/
+*.backup-*
+
+# Legacy standalone project folder in this workspace — not part of Wealth Tracker
+accounting/
+
+# Prompt-plan scratch files
+promps/
+
+# Scratch / dev logs
+start.log
+*.tmp

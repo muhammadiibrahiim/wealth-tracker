@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Voucher {{ entry.reference }}{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <div class="flex items-center gap-3 flex-wrap">
+        <h1 class="page-title">{{ entry.reference }}</h1>
+        {% if entry.is_reversed %}<span class="pill-cr">Reversed</span>{% else %}<span class="pill-dr">Posted</span>{% endif %}
+      </div>
+      <p class="page-subtitle">
+        {{ entry.entry_date }} · {{ (entry.entry_type.value if entry.entry_type.value is defined else entry.entry_type).replace('_',' ').title() }}
+      </p>
+      <p class="mt-3 text-gray-800">{{ entry.description }}</p>
+    </div>
+    <div class="flex gap-2">
+      {% set _et = entry.entry_type.value if entry.entry_type.value is defined else entry.entry_type %}
+      {% set _editable_types = ['journal','expense','contra','capital_injection','capital_withdrawal'] %}
+      {% set _is_editable = (not entry.is_reversed) and (not entry.reversal_of_id) and (entry.trade_id is none) and (_et in _editable_types) %}
+      {% if _is_editable %}
+      <button class="btn-primary" hx-get="/trade/vouchers/{{ entry.id }}/edit" hx-target="#modal-container">Edit</button>
+      {% endif %}
+      {% if not entry.is_reversed and not entry.reversal_of_id %}
+      <form hx-post="/trade/vouchers/{{ entry.id }}/reverse" hx-confirm="Reverse this voucher?">
+        <input type="hidden" name="reason" value="Reversed by user">
+        <button class="btn-secondary" style="color: #b91c1c;">Reverse</button>
+      </form>
+      {% endif %}
+      <a href="/trade/vouchers" class="btn-secondary">← Back</a>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Account</th>
+          <th class="text-left">Description</th>
+          <th class="text-right">Debit</th>
+          <th class="text-right">Credit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set total_dr = lines | sum(attribute='line.debit') %}
+        {% set total_cr = lines | sum(attribute='line.credit') %}
+        {% for ln in lines %}
+        <tr>
+          <td>
+            {% if ln.account %}<span class="font-mono text-xs text-gray-500">{{ ln.account.code }}</span> <span class="text-gray-900">{{ ln.account.name }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-gray-700">{{ ln.line.description or '' }}</td>
+          <td class="text-right tabular-nums">{% if ln.line.debit > 0 %}<span class="font-medium text-gray-900">{{ currency }} {{ '{:,.2f}'.format(ln.line.debit) }}</span>{% endif %}</td>
+          <td class="text-right tabular-nums">{% if ln.line.credit > 0 %}<span class="font-medium text-gray-900">{{ currency }} {{ '{:,.2f}'.format(ln.line.credit) }}</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot class="bg-gray-50 border-t-2 border-gray-200">
+        <tr>
+          <td colspan="2" class="text-xs uppercase tracking-widest font-bold text-gray-700">Totals</td>
+          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(total_dr) }}</td>
+          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(total_cr) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

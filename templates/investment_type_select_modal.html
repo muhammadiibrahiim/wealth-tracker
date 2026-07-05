@@ -1,0 +1,81 @@
+<!-- Modal for selecting investment type -->
+<div class="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <!-- Background overlay -->
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+
+        <!-- Center modal -->
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div class="sm:flex sm:items-start">
+                    <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4" id="modal-title">
+                            Select Investment Type
+                        </h3>
+                        
+                        <p class="text-sm text-gray-600 mb-6">Choose the type of investment you want to add:</p>
+
+                        <!-- Investment Type Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Asset Type -->
+                            <button 
+                                hx-get="/investments/new?type=asset" 
+                                hx-target="#modal-container" 
+                                hx-swap="innerHTML"
+                                class="group p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition text-left">
+                                <div class="flex items-center mb-3">
+                                    <svg class="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                    </svg>
+                                    <h4 class="ml-3 text-lg font-semibold text-gray-900 group-hover:text-blue-700">Asset</h4>
+                                </div>
+                                <p class="text-sm text-gray-600 mb-3">
+                                    Physical or appreciating assets with resale value
+                                </p>
+                                <ul class="text-xs text-gray-500 space-y-1">
+                                    <li>• Real estate, property</li>
+                                    <li>• Equipment, machinery</li>
+                                    <li>• Vehicles, aircraft</li>
+                                    <li>• Has salvage/resale value</li>
+                                    <li>• May generate rental income</li>
+                                </ul>
+                            </button>
+
+                            <!-- Business/Project Type -->
+                            <button 
+                                hx-get="/investments/new?type=business" 
+                                hx-target="#modal-container" 
+                                hx-swap="innerHTML"
+                                class="group p-6 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition text-left">
+                                <div class="flex items-center mb-3">
+                                    <svg class="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    </svg>
+                                    <h4 class="ml-3 text-lg font-semibold text-gray-900 group-hover:text-green-700">Business/Project</h4>
+                                </div>
+                                <p class="text-sm text-gray-600 mb-3">
+                                    Business ventures, loans, or financial investments
+                                </p>
+                                <ul class="text-xs text-gray-500 space-y-1">
+                                    <li>• Business ventures</li>
+                                    <li>• Lending/loans to others</li>
+                                    <li>• Bonds, financial products</li>
+                                    <li>• No salvage value</li>
+                                    <li>• Returns via installments</li>
+                                </ul>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button type="button" onclick="document.getElementById('modal-container').innerHTML = ''"
+                    class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:w-auto sm:text-sm">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

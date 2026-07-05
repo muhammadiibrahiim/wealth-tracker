@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Parties{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Parties</h1>
+      <p class="page-subtitle">Vendors you buy from and customers you sell to.</p>
+    </div>
+    <button class="btn-primary" hx-get="/trade/parties/new" hx-target="#modal-container">+ New Party</button>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+    {% if parties %}
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Name</th>
+          <th class="text-left">Role</th>
+          <th class="text-left">Contact</th>
+          <th class="text-left">Phone</th>
+          <th class="text-right">Terms (C / V)</th>
+          <th class="text-right">Opening Balance</th>
+          <th class="text-left">Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in parties %}
+        <tr>
+          <td>
+            <a class="text-indigo-600 hover:text-indigo-900 font-medium" href="/trade/reports/ledger?party_id={{ p.id }}">{{ p.name }}</a>
+          </td>
+          <td class="text-gray-700">
+            {% if p.is_vendor and p.is_customer %}Vendor + Customer
+            {% elif p.is_vendor %}Vendor
+            {% else %}Customer{% endif %}
+          </td>
+          <td class="text-gray-700">{{ p.contact_person or '—' }}</td>
+          <td class="text-gray-700">{{ p.phone or '—' }}</td>
+          <td class="text-right text-gray-700">{{ p.default_customer_terms_days }}d / {{ p.default_vendor_terms_days }}d</td>
+          <td class="text-right tabular-nums">
+            {% if p.opening_balance > 0 %}
+              <span class="font-medium text-gray-900">{{ currency }} {{ '{:,.2f}'.format(p.opening_balance) }}</span>
+              <div class="text-xs text-gray-500">they owe us</div>
+            {% elif p.opening_balance < 0 %}
+              <span class="font-medium" style="color: #c2410c;">{{ currency }} {{ '{:,.2f}'.format(-p.opening_balance) }}</span>
+              <div class="text-xs text-gray-500">we owe them</div>
+            {% else %}
+              <span class="text-gray-400">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if p.is_active %}<span class="pill-dr">Active</span>{% else %}<span class="pill-cr">Disabled</span>{% endif %}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <button class="text-indigo-600 text-xs hover:underline font-medium" hx-get="/trade/parties/{{ p.id }}/edit" hx-target="#modal-container">Edit</button>
+            <form class="inline" hx-post="/trade/parties/{{ p.id }}/delete" hx-confirm="Disable this party?">
+              <button class="text-red-600 text-xs hover:underline ml-3 font-medium">Disable</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="px-6 py-16 text-center text-sm text-gray-500">No parties yet. Add your first vendor or customer.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

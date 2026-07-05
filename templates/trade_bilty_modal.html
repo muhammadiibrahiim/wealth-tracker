@@ -1,0 +1,166 @@
+<div class="modal-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8">
+  <div class="bg-white p-7 w-full max-w-2xl mx-4">
+    <div class="flex items-start justify-between mb-5">
+      <div>
+        <h2 class="modal-title">{% if existing %}Edit Bilty{% else %}Add Bilty{% endif %} · {{ event_date }}</h2>
+        <p class="modal-subtitle">
+          Transport / bilty expense for the delivery on <strong>{{ event_date }}</strong>.
+          Posts <strong>DR Profit / Loss A/C</strong> / <strong>CR cash</strong> (or the customer's
+          receivable if they paid). Per project convention bilty always routes through
+          <strong>P&amp;L A/C (3903)</strong> — never a generic operating-expense account.
+          Leave amount at <strong>0</strong> if there's no bilty for this delivery.
+        </p>
+      </div>
+      <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
+    </div>
+
+    {% if not pl_acct %}
+    <div class="accent-card" style="border-left-color: #cd4239; background: #f7d6d3;">
+      <p class="text-sm" style="color: #722024;">⚠️ Profit / Loss A/C (3903) not found. Seed it in <a href="/trade/coa" class="underline">Chart of A/Cs</a> first.</p>
+    </div>
+    {% else %}
+
+    <form hx-post="/trade/trades/{{ trade.id }}/bilty/by-date/{{ event_date }}" class="space-y-4">
+
+      <div>
+        <label class="field-label">Description</label>
+        <input name="description" placeholder="e.g. Bilty Karachi → Lahore"
+               value="{% if existing %}{% set _d = existing.description.split(' ',1)[1] if ' ' in existing.description else existing.description %}{% set _d = _d.replace(' [bilty-for:' ~ event_date ~ ']', '').replace(' [paid-by-customer]', '').strip() %}{{ _d }}{% endif %}"
+               class="w-full px-3 py-2.5">
+      </div>
+
+      <label class="flex items-start gap-2 cursor-pointer p-3 border border-gray-200 rounded" style="background: #fefce8;">
+        <input type="checkbox" name="paid_by_customer" id="paid-by-customer" value="on" {% if existing_by_customer %}checked{% endif %} class="mt-1">
+        <span class="text-sm">
+          <strong>Customer paid this on our behalf</strong>
+          <span class="block text-xs mt-1" style="color: var(--mute);">
+            Tick if <strong>{{ purchaser.name if purchaser else 'the customer' }}</strong> paid this bilty out of pocket.
+            The amount is deducted from their outstanding on this trade — the CR side becomes their receivable
+            instead of a cash account.
+          </span>
+        </span>
+      </label>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div id="paid-from-row">
+          <label class="field-label field-label-required">Paid from (cash / bank)</label>
+          <select name="paid_from_id" class="w-full px-3 py-2.5">
+            <option value="">— pick account —</option>
+            {% for a in accounts %}
+            <option value="{{ a.id }}"
+              {% if existing and not existing_by_customer %}
+                {% for ln in existing.lines if ln.credit > 0 %}{% if ln.account_id == a.id %}selected{% endif %}{% endfor %}
+              {% elif default_cash_id and a.id == default_cash_id %}selected{% endif %}>
+              {{ a.code }} — {{ a.name }}
+            </option>
+            {% endfor %}
+          </select>
+          <p class="text-xs mt-1" style="color: var(--mute);">This account will be <strong>credited</strong> (cash out).</p>
+        </div>
+        <div>
+          <label class="field-label">Expense Account · locked</label>
+          <div class="w-full px-3 py-2.5 rounded" style="background: #f4f5f8; border: 1px solid var(--hairline); color: var(--ink);">
+            🔒 {{ pl_acct.code }} — {{ pl_acct.name }}
+          </div>
+          <p class="text-xs mt-1" style="color: var(--mute);">
+            Trade-related cost — always routes through <strong>P&amp;L A/C</strong> per convention. This account will be <strong>debited</strong>.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div>
+          <label class="field-label">Amount ({{ currency }})</label>
+          <input id="amount-input" type="number" step="0.01" min="0"
+                 name="amount"
+                 value="{% if existing %}{% for ln in existing.lines if ln.debit > 0 %}{{ ln.debit }}{% endfor %}{% else %}0{% endif %}"
+                 class="w-full px-3 py-2.5 text-right tabular-nums" placeholder="0.00">
+          <p class="text-xs mt-1" style="color: var(--mute);">
+            Enter <strong>0</strong> for "no bilty".
+            {% if existing %}Saving with 0 will <strong>reverse</strong> the existing bilty.{% endif %}
+          </p>
+        </div>
+        <div>
+          <label class="field-label">Weight (kgs)</label>
+          <input type="number" step="0.001" min="0"
+                 name="weight_kgs"
+                 value="{% if existing_meta and existing_meta.weight_kgs is not none %}{{ existing_meta.weight_kgs }}{% endif %}"
+                 placeholder="e.g. 250" class="w-full px-3 py-2.5 text-right tabular-nums">
+          <p class="text-xs mt-1" style="color: var(--mute);">Optional — for record-keeping &amp; reporting.</p>
+        </div>
+        <div>
+          <label class="field-label">Terminal / Carrier</label>
+          <input list="bilty-terminals" name="terminal"
+                 value="{{ existing_terminal_name }}"
+                 placeholder="e.g. Lahore Thokar / Faysal Movers"
+                 autocomplete="off"
+                 class="w-full px-3 py-2.5">
+          <datalist id="bilty-terminals">
+            {% for t in terminals %}<option value="{{ t.name }}">{% endfor %}
+          </datalist>
+          <p class="text-xs mt-1" style="color: var(--mute);">Type a new name to create, or pick from previously-used terminals.</p>
+        </div>
+      </div>
+
+      <div class="accent-card" style="border-left-color: #2c84e0; background: #dceaf6;">
+        <p class="text-sm" style="color: #08245f;">
+          <strong>Journal that will post:</strong><br>
+          DR <span id="prev-exp">{{ pl_acct.code }} — {{ pl_acct.name }}</span> &nbsp;·&nbsp; <span id="prev-amt-dr">{{ currency }} 0.00</span><br>
+          CR <span id="prev-cash">— pick cash / bank —</span> &nbsp;·&nbsp; <span id="prev-amt-cr">{{ currency }} 0.00</span>
+        </p>
+      </div>
+
+      <input type="hidden" id="purchaser-acct-code" value="{{ purchaser_acct.code if purchaser_acct else '' }}">
+      <input type="hidden" id="purchaser-acct-name" value="{{ purchaser.name if purchaser else '' }}">
+
+      <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Cancel</button>
+        <button type="submit" class="btn-primary">{% if existing %}Update Bilty{% else %}Save Bilty{% endif %}</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+(function(){
+  var amount  = document.getElementById('amount-input');
+  var prevDr  = document.getElementById('prev-amt-dr');
+  var prevCr  = document.getElementById('prev-amt-cr');
+  var prevCash= document.getElementById('prev-cash');
+  var cashSel = document.querySelector('select[name=paid_from_id]');
+  var paidByCust = document.getElementById('paid-by-customer');
+  var paidFromRow = document.getElementById('paid-from-row');
+  var purchaserCode = document.getElementById('purchaser-acct-code').value;
+  var purchaserName = document.getElementById('purchaser-acct-name').value;
+
+  function fmt(v){
+    var n = parseFloat(v||0);
+    return '{{ currency }} ' + n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  }
+  function syncAmt(){
+    var v = amount.value || '';
+    prevDr.textContent = fmt(v); prevCr.textContent = fmt(v);
+  }
+  function syncCash(){
+    var t = cashSel.selectedOptions[0] ? cashSel.selectedOptions[0].textContent : '';
+    if (cashSel.value) prevCash.textContent = t;
+  }
+  function syncPaidBy(){
+    if (paidByCust.checked) {
+      paidFromRow.style.display = 'none';
+      cashSel.removeAttribute('required');
+      prevCash.textContent = (purchaserCode + ' — ' + purchaserName + ' receivable').trim();
+    } else {
+      paidFromRow.style.display = '';
+      cashSel.setAttribute('required', 'required');
+      if (cashSel.value) syncCash();
+      else prevCash.textContent = '— pick cash / bank —';
+    }
+  }
+  amount.addEventListener('input', syncAmt);
+  cashSel.addEventListener('change', syncCash);
+  paidByCust.addEventListener('change', syncPaidBy);
+  syncAmt(); syncPaidBy(); if (!paidByCust.checked) syncCash();
+})();
+</script>

@@ -1,0 +1,237 @@
+<div class="modal-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8">
+  <div class="bg-white p-7 w-full {% if preset == 'journal' %}max-w-4xl{% else %}max-w-2xl{% endif %} mx-4">
+    <div class="flex items-start justify-between mb-5">
+      <div>
+        <h2 class="modal-title">{{ preset_label }}</h2>
+        <p class="modal-subtitle">{{ preset_hint }}</p>
+      </div>
+      <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
+    </div>
+
+    {# ── Simple "From / To / Amount" layout for single-flow vouchers ───── #}
+    {% set _simple_presets = ['payment','receipt','expense','contra','owner_in','owner_out'] %}
+    {% if preset in _simple_presets %}
+      {# Map preset → labels & posting direction.
+         FROM = credit side (money leaves / source reduces)
+         TO   = debit  side (money arrives / account is charged) #}
+      {% set _meta = {
+        'payment':   {'from_label': 'Paid from (cash / bank)',          'to_label': 'Paid to (vendor / expense / payable)'},
+        'receipt':   {'from_label': 'Received from (customer / source)', 'to_label': 'Received into (cash / bank)'},
+        'expense':   {'from_label': 'Paid from (cash / bank)',          'to_label': 'Expense account'},
+        'contra':    {'from_label': 'Transfer from',                    'to_label': 'Transfer to'},
+        'owner_in':  {'from_label': "From (Owner's Capital)",            'to_label': 'Into (cash / bank)'},
+        'owner_out': {'from_label': 'From (cash / bank)',                'to_label': "To (Owner's Capital)"},
+      }[preset] %}
+
+      <form hx-post="/trade/vouchers" hx-target="#modal-container" class="space-y-4">
+        <input type="hidden" name="entry_type" value="{{ preset_type }}">
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="field-label field-label-required">Entry Date</label>
+            <input type="date" name="entry_date" value="{{ today }}" required class="w-full px-3 py-2.5">
+          </div>
+          <div>
+            <label class="field-label field-label-required">Description</label>
+            <input name="description" required placeholder="e.g. June rent, Bilty Karachi → Lahore, Salary advance" class="w-full px-3 py-2.5">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="field-label field-label-required">{{ _meta.from_label }}</label>
+            <select name="line_0_account_id" required class="w-full px-3 py-2.5">
+              <option value="">— pick account —</option>
+              {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
+            </select>
+            <p class="text-xs mt-1" style="color: var(--mute);">This account will be <strong>credited</strong> (balance reduces / liability increases).</p>
+          </div>
+
+          <div>
+            <label class="field-label field-label-required">{{ _meta.to_label }}</label>
+            <select name="line_1_account_id" required class="w-full px-3 py-2.5">
+              <option value="">— pick account —</option>
+              {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
+            </select>
+            <p class="text-xs mt-1" style="color: var(--mute);">This account will be <strong>debited</strong> (balance increases / liability reduces).</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="md:col-span-1">
+            <label class="field-label field-label-required">Amount ({{ currency }})</label>
+            <input id="amount-input" type="number" step="0.01" min="0.01" required class="w-full px-3 py-2.5 text-right tabular-nums" placeholder="0.00">
+            {# Hidden mirrors that map amount → line_0 credit + line_1 debit so
+               the existing /trade/vouchers handler accepts the payload unchanged. #}
+            <input type="hidden" name="line_0_credit" id="line-0-credit">
+            <input type="hidden" name="line_0_debit"  value="0">
+            <input type="hidden" name="line_1_debit"  id="line-1-debit">
+            <input type="hidden" name="line_1_credit" value="0">
+          </div>
+        </div>
+
+        <div class="accent-card" style="border-left-color: #2c84e0; background: #dceaf6;">
+          <p class="text-sm" style="color: #08245f;">
+            <strong>Journal that will post:</strong><br>
+            DR <span id="prev-to">— {{ _meta.to_label|lower }} —</span> &nbsp;·&nbsp; <span id="prev-amt-dr">0.00</span><br>
+            CR <span id="prev-from">— {{ _meta.from_label|lower }} —</span> &nbsp;·&nbsp; <span id="prev-amt-cr">0.00</span>
+          </p>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
+          <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Cancel</button>
+          <button type="submit" class="btn-primary">Post Voucher</button>
+        </div>
+      </form>
+
+      <script>
+      (function(){
+        var amount  = document.getElementById('amount-input');
+        var hidDr   = document.getElementById('line-1-debit');
+        var hidCr   = document.getElementById('line-0-credit');
+        var prevDr  = document.getElementById('prev-amt-dr');
+        var prevCr  = document.getElementById('prev-amt-cr');
+        var fromSel = document.querySelector('select[name=line_0_account_id]');
+        var toSel   = document.querySelector('select[name=line_1_account_id]');
+        var prevFrom = document.getElementById('prev-from');
+        var prevTo   = document.getElementById('prev-to');
+
+        function fmt(v){ var n = parseFloat(v||0); return '{{ currency }} ' + n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+        function sync(){
+          var v = amount.value || '';
+          hidDr.value = v; hidCr.value = v;
+          prevDr.textContent = fmt(v); prevCr.textContent = fmt(v);
+        }
+        function syncSel(el, prev){
+          var txt = el.selectedOptions[0] ? el.selectedOptions[0].textContent : '';
+          prev.textContent = txt && el.value ? txt : prev.textContent;
+        }
+        amount.addEventListener('input', sync);
+        fromSel.addEventListener('change', function(){ syncSel(fromSel, prevFrom); });
+        toSel.addEventListener('change',   function(){ syncSel(toSel,   prevTo); });
+      })();
+      </script>
+
+    {# ── Multi-line debit/credit table for Journal vouchers ──────────────── #}
+    {% else %}
+      {% set _action = ('/trade/vouchers/' ~ entry.id) if editing else '/trade/vouchers' %}
+      <form hx-post="{{ _action }}" hx-target="#modal-container" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="field-label">Entry Date</label>
+            <input type="date" name="entry_date"
+                   value="{% if editing %}{{ entry.entry_date }}{% else %}{{ today }}{% endif %}"
+                   required class="w-full px-3 py-2.5">
+          </div>
+          <div>
+            <label class="field-label">Type</label>
+            <select name="entry_type" class="w-full px-3 py-2.5">
+              {% set known = [('journal','Journal'),('expense','Expense'),('capital_injection','Capital Injection'),('capital_withdrawal','Capital Withdrawal'),('contra','Contra')] %}
+              {% for v, lbl in known %}<option value="{{ v }}" {% if preset_type == v %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="field-label field-label-required">Description</label>
+            <input name="description" required placeholder="e.g. June rent"
+                   value="{% if editing %}{{ entry.description }}{% endif %}"
+                   class="w-full px-3 py-2.5">
+          </div>
+        </div>
+
+        <div class="border border-gray-200 rounded-lg overflow-hidden">
+          <table class="min-w-full">
+            <thead>
+              <tr>
+                <th class="text-left" style="width:42%">Account</th>
+                <th class="text-left">Description</th>
+                <th class="text-right" style="width:140px">Debit</th>
+                <th class="text-right" style="width:140px">Credit</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody id="voucher-lines"></tbody>
+            <tfoot style="background: #fafaf9;">
+              <tr>
+                <td colspan="2" class="text-right text-xs uppercase tracking-widest font-bold text-gray-700">Totals</td>
+                <td class="text-right tabular-nums font-bold" id="total-dr">{{ currency }} 0.00</td>
+                <td class="text-right tabular-nums font-bold" id="total-cr">{{ currency }} 0.00</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td colspan="2" class="text-right text-xs uppercase tracking-widest font-bold text-gray-700">Difference</td>
+                <td colspan="2" class="text-right tabular-nums font-bold" id="diff-cell">{{ currency }} 0.00</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <button type="button" class="text-indigo-600 hover:text-indigo-900 text-sm font-medium" onclick="addLine()">+ Add line</button>
+          <p id="warn" class="text-sm font-medium" style="display:none; color: #c2410c;">Debit and credit must match before submit.</p>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
+          <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Cancel</button>
+          <button type="submit" id="submit-btn" class="btn-primary">{% if editing %}Save Changes{% else %}Post Voucher{% endif %}</button>
+        </div>
+      </form>
+
+      <script>
+        const OPTS = [{% for a in accounts %}`<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>`{% if not loop.last %},{% endif %}{% endfor %}].join('');
+        let idx = 0;
+        function addLine(seed) {
+          const i = idx++;
+          const tr = document.createElement('tr');
+          // Build OPTS with the seeded account pre-selected when present.
+          let opts = '<option value="">— pick —</option>';
+          if (seed && seed.account_id) {
+            opts = [{% for a in accounts %}`<option value="{{ a.id }}"${seed.account_id == {{ a.id }} ? ' selected' : ''}>{{ a.code }} — {{ a.name }}</option>`{% if not loop.last %},{% endif %}{% endfor %}].join('');
+          } else {
+            opts += OPTS;
+          }
+          tr.innerHTML = `
+            <td class="p-2"><select name="line_${i}_account_id" required class="w-full px-2 py-1.5 text-sm">${opts}</select></td>
+            <td class="p-2"><input name="line_${i}_description" placeholder="Optional" value="${(seed && seed.description) ? String(seed.description).replace(/"/g,'&quot;') : ''}" class="w-full px-2 py-1.5 text-sm"></td>
+            <td class="p-2"><input name="line_${i}_debit" type="number" step="0.01" min="0" value="${(seed && seed.debit) ? seed.debit : ''}" class="dr w-full px-2 py-1.5 text-sm text-right"></td>
+            <td class="p-2"><input name="line_${i}_credit" type="number" step="0.01" min="0" value="${(seed && seed.credit) ? seed.credit : ''}" class="cr w-full px-2 py-1.5 text-sm text-right"></td>
+            <td class="p-2 text-right"><button type="button" class="text-gray-400 hover:text-red-600" onclick="this.closest('tr').remove(); recalc();">✕</button></td>
+          `;
+          document.getElementById('voucher-lines').appendChild(tr);
+          tr.querySelector('.dr').addEventListener('input', recalc);
+          tr.querySelector('.cr').addEventListener('input', recalc);
+          if (window._enhanceSelects) window._enhanceSelects(tr);
+          recalc();
+        }
+        function recalc() {
+          let tdr = 0, tcr = 0;
+          document.querySelectorAll('#voucher-lines tr').forEach(r => {
+            tdr += parseFloat(r.querySelector('.dr').value || 0);
+            tcr += parseFloat(r.querySelector('.cr').value || 0);
+          });
+          const fmt = n => '{{ currency }} ' + Number(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+          document.getElementById('total-dr').textContent = fmt(tdr);
+          document.getElementById('total-cr').textContent = fmt(tcr);
+          const diff = tdr - tcr;
+          const dc = document.getElementById('diff-cell');
+          dc.textContent = fmt(diff);
+          dc.style.color = Math.abs(diff) < 0.005 ? '#15803d' : '#c2410c';
+          document.getElementById('warn').style.display = Math.abs(diff) < 0.005 ? 'none' : 'block';
+          document.getElementById('submit-btn').disabled = Math.abs(diff) >= 0.005 || (tdr === 0 && tcr === 0);
+        }
+        {% if editing and existing_lines %}
+          {% for ln in existing_lines %}
+          addLine({
+            account_id: {{ ln.account_id }},
+            debit: {{ ln.debit if ln.debit is not none else 0 }},
+            credit: {{ ln.credit if ln.credit is not none else 0 }},
+            description: {{ (ln.description or '') | tojson }}
+          });
+          {% endfor %}
+        {% else %}
+          addLine(); addLine();
+        {% endif %}
+      </script>
+    {% endif %}
+  </div>
+</div>

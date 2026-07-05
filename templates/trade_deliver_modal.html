@@ -1,0 +1,117 @@
+<div class="modal-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8">
+  <div class="bg-white p-7 w-full max-w-2xl mx-4">
+    <div class="flex items-start justify-between mb-5">
+      <div>
+        <h2 class="modal-title">Mark Trade Complete</h2>
+        <p class="modal-subtitle">{{ trade.reference }} · Final quantities are pre-filled from receipt history. Customer payment due {{ trade.customer_terms_days }} days after this date. Posts SALE + PURCHASE journal entries.</p>
+      </div>
+      <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
+    </div>
+
+    <form hx-post="/trade/trades/{{ trade.id }}/deliver" class="space-y-4">
+      <div>
+        <label class="field-label">Delivered On</label>
+        <input type="date" name="delivered_on" value="{{ today }}" required class="px-3 py-2.5">
+      </div>
+
+      <div class="border border-gray-200 rounded-lg overflow-hidden">
+        <table class="min-w-full">
+          <thead>
+            <tr>
+              <th class="text-left">Item</th>
+              <th class="text-right">Ordered</th>
+              <th class="text-right">Final Qty</th>
+              <th class="text-right">Unit Cost</th>
+              <th class="text-right">Unit Price</th>
+              <th class="text-right">Δ</th>
+            </tr>
+          </thead>
+          <tbody id="deliver-rows">
+            {% for ln in trade.lines %}
+            <tr data-line-id="{{ ln.id }}">
+              <td>
+                <div class="font-medium text-gray-900">{{ ln.item_name }}</div>
+                {% if ln.specs %}<div class="text-xs text-gray-500 mt-1">{% for s in ln.specs %}{{ s.label }}: {{ s.value }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+              </td>
+              <td class="text-right tabular-nums text-gray-500">{{ '{:g}'.format(ln.ordered_quantity or ln.quantity) }} {{ ln.unit }}</td>
+              <td class="text-right">
+                <input type="number" step="0.001" min="0"
+                       name="final_qty_{{ ln.id }}"
+                       value="{{ line_defaults.get(ln.id, ln.quantity) }}"
+                       data-ordered="{{ ln.ordered_quantity or ln.quantity }}"
+                       data-unit-cost="{{ ln.unit_cost }}"
+                       data-unit-price="{{ ln.unit_price }}"
+                       class="qty-input w-24 text-right">
+              </td>
+              <td class="text-right tabular-nums text-gray-700">{{ currency }} {{ '{:,.2f}'.format(ln.unit_cost) }}</td>
+              <td class="text-right tabular-nums text-gray-700">{{ currency }} {{ '{:,.2f}'.format(ln.unit_price) }}</td>
+              <td class="text-right tabular-nums delta-cell text-gray-400">—</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot style="background: #fafaf9;">
+            <tr>
+              <td colspan="3" class="text-right text-xs uppercase tracking-widest font-bold text-gray-700">New cost / sale / profit</td>
+              <td class="text-right tabular-nums font-bold" id="new-cost-cell">—</td>
+              <td class="text-right tabular-nums font-bold" id="new-sale-cell">—</td>
+              <td class="text-right tabular-nums font-bold" id="new-profit-cell">—</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="accent-card" style="border-left-color: #4f46e5; background: #eef2ff;">
+        <p class="text-sm text-indigo-900">💡 Common in print/packaging — vendors over- or under-deliver. The final quantity is what gets billed; the original order is kept for reference.</p>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Cancel</button>
+        <button type="submit" class="btn-primary">Mark Delivered</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  const fmt = n => '{{ currency }} ' + Number(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const rows = document.querySelectorAll('#deliver-rows tr[data-line-id]');
+  const newCost = document.getElementById('new-cost-cell');
+  const newSale = document.getElementById('new-sale-cell');
+  const newProfit = document.getElementById('new-profit-cell');
+
+  function recalc() {
+    let totalCost = 0, totalSale = 0;
+    rows.forEach(r => {
+      const input = r.querySelector('.qty-input');
+      const qty = parseFloat(input.value) || 0;
+      const ordered = parseFloat(input.dataset.ordered) || 0;
+      const unitCost = parseFloat(input.dataset.unitCost) || 0;
+      const unitPrice = parseFloat(input.dataset.unitPrice) || 0;
+      totalCost += qty * unitCost;
+      totalSale += qty * unitPrice;
+      const delta = qty - ordered;
+      const dcell = r.querySelector('.delta-cell');
+      if (Math.abs(delta) < 0.0005) {
+        dcell.textContent = '—';
+        dcell.className = 'text-right tabular-nums delta-cell text-gray-400';
+      } else if (delta > 0) {
+        dcell.textContent = '+' + delta.toLocaleString();
+        dcell.className = 'text-right tabular-nums delta-cell font-medium';
+        dcell.style.color = '#15803d';
+      } else {
+        dcell.textContent = delta.toLocaleString();
+        dcell.className = 'text-right tabular-nums delta-cell font-medium';
+        dcell.style.color = '#c2410c';
+      }
+    });
+    newCost.textContent = fmt(totalCost);
+    newSale.textContent = fmt(totalSale);
+    const profit = totalSale - totalCost;
+    newProfit.textContent = fmt(profit);
+    newProfit.style.color = profit >= 0 ? '#15803d' : '#c2410c';
+  }
+  rows.forEach(r => r.querySelector('.qty-input').addEventListener('input', recalc));
+  recalc();
+})();
+</script>

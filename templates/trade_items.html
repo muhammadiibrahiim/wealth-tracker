@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Items{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Items</h1>
+      <p class="page-subtitle">Reusable catalog with customizable spec fields per item.</p>
+    </div>
+    <button class="btn-primary" hx-get="/trade/items/new" hx-target="#modal-container">+ New Item</button>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+    {% if items %}
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Name</th>
+          <th class="text-left">SKU</th>
+          <th class="text-left">Unit</th>
+          <th class="text-right">Default Cost</th>
+          <th class="text-right">Default Price</th>
+          <th class="text-left">Spec Fields</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in items %}
+        <tr>
+          <td class="font-medium text-gray-900">{{ i.name }}</td>
+          <td class="text-gray-700">{{ i.sku or '—' }}</td>
+          <td class="text-gray-700">{{ i.unit }}</td>
+          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(i.default_cost) }}</td>
+          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(i.default_price) }}</td>
+          <td class="text-gray-700">
+            {% if i.spec_fields %}
+              {% for f in i.spec_fields %}<span class="inline-block bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded mr-1 mb-1">{{ f.label }}</span>{% endfor %}
+            {% else %}<span class="text-gray-400 text-xs">— none —</span>{% endif %}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <button class="text-indigo-600 text-xs hover:underline font-medium" hx-get="/trade/items/{{ i.id }}/edit" hx-target="#modal-container">Edit</button>
+            <form class="inline" hx-post="/trade/items/{{ i.id }}/delete" hx-confirm="Disable this item?">
+              <button class="text-red-600 text-xs hover:underline ml-3 font-medium">Disable</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="px-6 py-16 text-center text-sm text-gray-500">No items yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

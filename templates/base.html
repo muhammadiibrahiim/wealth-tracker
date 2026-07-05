@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Wealth Tracker{% endblock %}</title>
+
+    <!-- IBM Plex Sans (PostHog spec) + Source Code Pro for mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=Source+Code+Pro:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['IBM Plex Sans', 'system-ui', 'sans-serif'],
+              mono: ['Source Code Pro', 'ui-monospace', 'SF Mono', 'Menlo', 'monospace'],
+            },
+            colors: {
+              // PostHog tokens used directly.
+              canvas:       '#eeefe9',
+              'surface-card':'#ffffff',
+              'surface-soft':'#e5e7e0',
+              'surface-doc':'#fcfcfa',
+              'surface-dark':'#23251d',
+              ink:          '#23251d',
+              body:         '#4d4f46',
+              mute:         '#6c6e63',
+              ash:          '#9b9c92',
+              stone:        '#b6b7af',
+              hairline:     '#bfc1b7',
+              'hairline-soft':'#dcdfd2',
+              brand: '#f7a501',
+              'brand-pressed':'#dd9001',
+              'brand-active':'#b17816',
+              // Remap blue/indigo so existing utility classes pick up the warm-link accent.
+              blue: {
+                50:'#dceaf6', 100:'#dceaf6', 200:'#bcd5ee', 300:'#9bbfe5',
+                400:'#5b9bd6', 500:'#2c84e0', 600:'#1d4ed8', 700:'#1041b0',
+                800:'#0a3088', 900:'#08245f',
+              },
+              indigo: { 50:'#dceaf6', 500:'#2c84e0', 600:'#1d4ed8', 700:'#1041b0' },
+              // PostHog accent palette
+              green: { 50:'#d9eddf', 100:'#d9eddf', 600:'#2c8c66', 700:'#1f6b4e', 800:'#1f6b4e' },
+              red:   { 50:'#f7d6d3', 100:'#f7d6d3', 600:'#cd4239', 700:'#a52e26', 800:'#a52e26' },
+              amber: { 50:'#fdebc7', 100:'#fdebc7', 600:'#dd9001', 700:'#b17816', 800:'#7a5210' },
+            }
+          }
+        }
+      }
+    </script>
+
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <style>
+      :root {
+        --canvas:       #eeefe9;
+        --surface-card: #ffffff;
+        --surface-soft: #e5e7e0;
+        --surface-dark: #23251d;
+        --ink:          #23251d;
+        --body:         #4d4f46;
+        --mute:         #6c6e63;
+        --hairline:     #bfc1b7;
+        --hairline-soft:#dcdfd2;
+        --brand:        #f7a501;
+        --brand-pressed:#dd9001;
+        --brand-active: #b17816;
+        --link:         #1d4ed8;
+        --accent-green: #2c8c66;
+        --accent-red:   #cd4239;
+        --accent-blue:  #2c84e0;
+      }
+      html, body {
+        font-family: 'IBM Plex Sans', system-ui, sans-serif;
+        background: var(--canvas);
+        color: var(--body);
+        -webkit-font-smoothing: antialiased;
+      }
+      .tabular-nums { font-variant-numeric: tabular-nums; }
+
+      /* ─── Top progress bar ─── */
+      #ux-progress-bar {
+        position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+        background: var(--brand);
+        z-index: 9998; opacity: 0; pointer-events: none;
+        transition: width 0.4s cubic-bezier(.4,0,.2,1), opacity 0.3s;
+      }
+      #ux-progress-bar.active { opacity: 1; }
+
+      /* ─── Sidebar — PostHog dark surface, BRAND yellow accent on active ─── */
+      .sidebar {
+        position: fixed; left: 0; top: 0; height: 100vh;
+        width: 64px; z-index: 1000;
+        background: var(--surface-dark);
+        transition: width 0.2s ease;
+        display: flex; flex-direction: column;
+        border-right: 1px solid #1a1c15;
+      }
+      .sidebar.expanded { width: 260px; }
+      .sidebar.expanded .side-text { display: inline; }
+      .sidebar .side-text { display: none; }
+      .side-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 18px 16px; min-height: 64px;
+        border-bottom: 1px solid #1a1c15;
+      }
+      .side-logo { display: flex; align-items: center; gap: 10px; color: #fff; }
+      .side-logo-icon {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 32px; height: 32px; min-width: 32px; flex-shrink: 0;
+        color: var(--brand);
+      }
+      .side-logo-text {
+        font-size: 17px; font-weight: 800; color: #fff;
+        white-space: nowrap; opacity: 1; transition: opacity 0.2s ease;
+        letter-spacing: -0.02em;
+      }
+      .sidebar:not(.expanded) .side-logo-text { opacity: 0; width: 0; }
+      .side-toggle {
+        width: 28px; height: 28px; background: transparent; border: none;
+        color: #b6b7af; border-radius: 6px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .side-toggle:hover { background: #33342d; color: #fff; }
+      .sidebar:not(.expanded) .side-toggle { transform: rotate(180deg); }
+
+      .side-nav { flex: 1; overflow-y: auto; padding: 12px 8px;
+        scrollbar-width: thin; scrollbar-color: #33342d transparent; }
+      .side-nav::-webkit-scrollbar { width: 6px; }
+      .side-nav::-webkit-scrollbar-thumb { background: #33342d; border-radius: 3px; }
+
+      .side-item, .side-parent {
+        display: flex; align-items: center; gap: 12px;
+        padding: 9px 12px; margin: 1px 0;
+        color: #b6b7af; text-decoration: none;
+        border-radius: 6px; font-size: 14px; font-weight: 500;
+        transition: all 0.15s ease; border: none; background: transparent;
+        width: 100%; text-align: left; cursor: pointer; position: relative;
+      }
+      .side-item:hover, .side-parent:hover { background: #33342d; color: #fff; }
+      .side-item.active, .side-parent.active { color: #fff; background: rgba(247, 165, 1, 0.10); }
+      .side-item.active::before, .side-parent.active::before {
+        content: ''; position: absolute; left: -8px; top: 8px; bottom: 8px;
+        width: 3px; background: var(--brand); border-radius: 0 3px 3px 0;
+      }
+      .side-icon { width: 20px; height: 20px; min-width: 20px; flex-shrink: 0; }
+      .side-chev { width: 14px; height: 14px; margin-left: auto; transition: transform 0.2s; }
+      .side-parent.expanded .side-chev { transform: rotate(180deg); }
+      .side-children {
+        display: none; padding-left: 8px; margin-left: 22px;
+        border-left: 1px solid #1a1c15; margin-top: 2px; margin-bottom: 6px;
+      }
+      .side-parent.expanded + .side-children { display: block; }
+      .side-child {
+        display: flex; align-items: center; gap: 10px;
+        padding: 7px 12px; margin: 1px 0;
+        color: #9b9c92; text-decoration: none;
+        border-radius: 5px; font-size: 13px; font-weight: 500; position: relative;
+      }
+      .side-child:hover { background: #33342d; color: #fff; }
+      .side-child.active { color: #fff; }
+      .side-child.active::before {
+        content: ''; position: absolute; left: -9px; top: 6px; bottom: 6px;
+        width: 2px; background: var(--brand); border-radius: 0 2px 2px 0;
+      }
+      .side-child-dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: 0.5; }
+      .sidebar:not(.expanded) .side-children,
+      .sidebar:not(.expanded) .side-chev { display: none; }
+      .side-footer { padding: 12px 16px; border-top: 1px solid #1a1c15; font-size: 12px; color: #9b9c92; }
+
+      /* ─── Main shell ─── */
+      .main-shell { margin-left: 64px; transition: margin-left 0.2s ease; min-height: 100vh; }
+      .sidebar.expanded ~ .main-shell { margin-left: 260px; }
+      @media (max-width: 768px) {
+        .main-shell, .sidebar.expanded ~ .main-shell { margin-left: 0; }
+        .sidebar { transform: translateX(-100%); }
+        .sidebar.expanded { transform: translateX(0); box-shadow: 4px 0 20px rgba(0,0,0,0.3); }
+      }
+
+      /* ─── Typography — PostHog spec ─── */
+      .page-title {
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 2.25rem; font-weight: 800; color: var(--ink);
+        letter-spacing: -0.025em; line-height: 1.15;
+      }
+      .page-subtitle { font-size: 0.9375rem; color: var(--body); margin-top: 0.5rem; line-height: 1.5; }
+      h2 {
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 1.25rem; font-weight: 700; color: var(--ink); letter-spacing: -0.015em;
+      }
+
+      /* ─── Card surfaces ─── */
+      /* Override the generic Tailwind "bg-white" so cards keep the PostHog white tone on cream canvas. */
+      .bg-white { background-color: var(--surface-card) !important; }
+
+      /* ─── Stat card with HUGE numeric ─── */
+      .stat-card {
+        background: var(--surface-card);
+        border: 1px solid var(--hairline-soft);
+        border-radius: 6px;
+        padding: 1.25rem 1.25rem;
+        min-width: 0;             /* let grid children shrink */
+        overflow-wrap: break-word;
+      }
+      .stat-label {
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 0.75rem; font-weight: 700; color: var(--body);
+        text-transform: uppercase; letter-spacing: 0; margin-bottom: 0.5rem;
+        line-height: 1.33;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .stat-value {
+        font-size: 2.25rem; font-weight: 800; color: var(--ink);
+        line-height: 1.1; font-variant-numeric: tabular-nums;
+        letter-spacing: -0.025em;
+      }
+      .stat-value.neg, .stat-value.cr { color: var(--accent-red); }
+      .stat-value .currency { font-size: 1.4rem; font-weight: 700; color: var(--mute); margin-right: 0.25rem; }
+      .stat-foot { font-size: 0.75rem; font-weight: 600; color: var(--mute); text-transform: uppercase; margin-top: 0.5rem; }
+
+      /* Compact KPI variant — for strips with 5-6 tiles where the full
+         2.25rem stat-value would overflow the column. */
+      .stat-card-sm { padding: 1rem 1rem; }
+      .stat-card-sm .stat-value { font-size: 1.5rem; line-height: 1.15; }
+      .stat-card-sm .stat-value .currency { font-size: 0.95rem; }
+      .stat-card-sm .stat-label { font-size: 0.7rem; margin-bottom: 0.375rem; }
+      .stat-card-sm .stat-foot { font-size: 0.65rem; margin-top: 0.375rem; }
+
+      /* ─── Buttons — PostHog spec: yellow primary with dark text ─── */
+      .btn-primary {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        padding: 8px 16px; height: 40px;
+        background: var(--brand); color: var(--ink);
+        border: none; border-radius: 6px;
+        font-size: 0.875rem; font-weight: 700; line-height: 1;
+        transition: background 0.15s ease;
+      }
+      .btn-primary:hover { background: var(--brand-pressed); }
+      .btn-primary:active { background: var(--brand-active); }
+      .btn-secondary {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        padding: 8px 16px; height: 40px;
+        background: var(--surface-soft); color: var(--ink);
+        border: 1px solid var(--hairline-soft); border-radius: 6px;
+        font-size: 0.875rem; font-weight: 700; line-height: 1;
+      }
+      .btn-secondary:hover { background: var(--hairline-soft); }
+
+      /* ─── DR / CR mini-pill — PostHog accent palette ─── */
+      .pill-dr, .pill-cr {
+        display: inline-flex; align-items: center; padding: 2px 8px;
+        border-radius: 999px; font-size: 0.7rem; font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+      .pill-dr { background: #d9eddf; color: #1f6b4e; }
+      .pill-cr { background: #f7d6d3; color: #a52e26; }
+
+      /* ─── Accent card with brand-yellow left border ─── */
+      .accent-card {
+        background: var(--surface-card);
+        border: 1px solid var(--hairline-soft);
+        border-radius: 6px;
+        border-left: 4px solid var(--brand);
+        padding: 1.25rem 1.5rem;
+      }
+
+      /* ─── Form controls ─── */
+      /* Avoid a fixed height — let padding + line-height size the field so text
+         never clips. This handles inputs with various Tailwind py-* classes too. */
+      input[type="text"], input[type="number"], input[type="date"], input[type="email"],
+      input[type="password"], input[type="search"], input[type="tel"], input[type="url"],
+      select, textarea {
+        background-color: var(--surface-card);
+        color: var(--ink);
+        border: 1px solid var(--hairline);
+        border-radius: 6px;
+        font-size: 0.9375rem;
+        line-height: 1.4;
+        padding: 8px 12px;
+        min-height: 40px;
+        box-sizing: border-box;
+      }
+      textarea { min-height: auto; line-height: 1.5; }
+      select {
+        /* Allow native chevron, give right padding for it */
+        padding-right: 32px;
+        background-position: right 10px center;
+      }
+      input::placeholder, textarea::placeholder { color: var(--ash); }
+      input:focus, select:focus, textarea:focus {
+        outline: none !important;
+        border-color: var(--ink) !important;
+        box-shadow: 0 0 0 3px rgba(35, 37, 29, 0.12) !important;
+      }
+      .field-label {
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 0.75rem; font-weight: 700; color: var(--body);
+        text-transform: uppercase; letter-spacing: 0;
+        margin-bottom: 0.375rem; display: block;
+      }
+      .field-label-required::after { content: ' *'; color: var(--accent-red); }
+
+      /* ─── Tables ─── */
+      table { background: var(--surface-card); }
+      table thead {
+        background: var(--surface-soft);
+        border-bottom: 1px solid var(--hairline-soft);
+      }
+      table thead th {
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 0.75rem; font-weight: 700; color: var(--body);
+        text-transform: uppercase; letter-spacing: 0;
+        padding: 0.875rem 1.25rem;
+      }
+      table tbody td { padding: 1rem 1.25rem; font-size: 0.9375rem; color: var(--ink); }
+      table tbody tr { border-top: 1px solid var(--hairline-soft); }
+      table tbody tr:hover { background: #faf9f5; }
+
+      /* ─── Modal — keep white card on dimmed cream backdrop ─── */
+      .modal-backdrop {
+        background-color: rgba(35, 37, 29, 0.55) !important;
+        backdrop-filter: blur(2px);
+      }
+      #modal-container .bg-white {
+        background: var(--surface-card) !important;
+        border-radius: 8px !important;
+        box-shadow: 0 20px 40px -10px rgba(35,37,29,0.25), 0 8px 16px -8px rgba(35,37,29,0.1) !important;
+      }
+      .modal-title {
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 1.5rem; font-weight: 800; color: var(--ink); letter-spacing: -0.02em;
+      }
+      .modal-subtitle { font-size: 0.875rem; color: var(--body); margin-top: 0.25rem; line-height: 1.5; }
+      .modal-close { color: var(--ash); background: transparent; border: none; cursor: pointer; padding: 4px; font-size: 1.25rem; }
+      .modal-close:hover { color: var(--ink); }
+
+      /* ─── Anchor color — PostHog uses blue links ─── */
+      a { color: var(--link); }
+      a:hover { color: #0a3088; }
+
+      /* Shadows: softer per PostHog (flat-ish) */
+      .shadow-sm { box-shadow: 0 1px 2px rgba(35,37,29,0.04) !important; }
+      .shadow-md { box-shadow: 0 4px 8px -2px rgba(35,37,29,0.06) !important; }
+
+      /* ─── Searchable select (global) ─── */
+      .ss-wrap { position: relative; }
+      .ss-input {
+        background-color: var(--surface-card); color: var(--ink);
+        border: 1px solid var(--hairline); border-radius: 6px;
+        font-size: 0.9375rem; line-height: 1.4;
+        padding: 8px 12px; min-height: 40px; width: 100%;
+        box-sizing: border-box;
+      }
+      .ss-input:focus {
+        outline: none !important; border-color: var(--ink) !important;
+        box-shadow: 0 0 0 3px rgba(35, 37, 29, 0.12) !important;
+      }
+      .ss-dropdown {
+        position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
+        background: var(--surface-card); border: 1px solid var(--hairline);
+        border-top: none; border-radius: 0 0 6px 6px;
+        max-height: 280px; overflow-y: auto;
+        box-shadow: 0 8px 16px rgba(35,37,29,0.10);
+      }
+      .ss-option {
+        padding: 8px 12px; cursor: pointer; font-size: 14px;
+        border-bottom: 1px solid var(--hairline-soft);
+        color: var(--ink);
+      }
+      .ss-option:last-child { border-bottom: none; }
+      .ss-option:hover, .ss-option.active { background: #fef7e6; }
+      .ss-empty { padding: 16px; text-align: center; color: var(--mute); font-size: 13px; }
+      .ss-chip {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 12px;
+        background: var(--surface-card);
+        border: 1px solid var(--hairline); border-radius: 6px;
+        min-height: 40px; box-sizing: border-box;
+        cursor: pointer;
+      }
+      .ss-chip:hover { border-color: var(--ink); }
+      .ss-chip-label { flex: 1; color: var(--ink); font-weight: 500; font-size: 14px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ss-chip-clear {
+        background: transparent; border: none; cursor: pointer;
+        color: var(--mute); padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+      }
+      .ss-chip-clear:hover { background: #f3f4f6; color: var(--accent-red); }
+      .ss-hidden { position: absolute; opacity: 0; pointer-events: none; height: 0; width: 0; }
+    </style>
+</head>
+<body class="h-full">
+
+    <div id="ux-progress-bar"></div>
+
+    {% include "partials/sidebar.html" %}
+
+    <div class="main-shell">
+        <main class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <div id="toast-container" class="fixed top-4 right-4 z-50"></div>
+    <div id="modal-container"></div>
+
+    <script>
+        // Sidebar persistence + interaction
+        (function () {
+            try {
+                var saved = localStorage.getItem('sidebar-state');
+                var open = saved === 'open';
+                var sb = document.getElementById('global-sidebar');
+                if (sb && open) sb.classList.add('expanded');
+            } catch(e) {}
+            var active = document.querySelector('.side-child.active');
+            if (active) {
+                var section = active.closest('.side-section');
+                if (section) {
+                    var btn = section.querySelector('.side-parent');
+                    if (btn) btn.classList.add('expanded');
+                }
+            }
+        })();
+        function toggleSidebar() {
+            var sb = document.getElementById('global-sidebar');
+            sb.classList.toggle('expanded');
+            try { localStorage.setItem('sidebar-state', sb.classList.contains('expanded') ? 'open' : 'closed'); } catch(e) {}
+        }
+        function toggleSideSection(btn) { btn.classList.toggle('expanded'); }
+
+        // HTMX progress bar
+        var bar = document.getElementById('ux-progress-bar');
+        document.body.addEventListener('htmx:beforeRequest', function() {
+            if (!bar) return; bar.style.width = '30%'; bar.classList.add('active');
+            setTimeout(function() { bar.style.width = '70%'; }, 150);
+        });
+        document.body.addEventListener('htmx:afterRequest', function() {
+            if (!bar) return; bar.style.width = '100%';
+            setTimeout(function() { bar.classList.remove('active'); bar.style.width = '0%'; }, 250);
+        });
+
+        // Modal close on backdrop click
+        document.addEventListener('htmx:afterSwap', function(event) {
+            if (event.detail.target.id === 'modal-container') {
+                var backdrop = event.detail.target.querySelector('.modal-backdrop');
+                if (backdrop) backdrop.addEventListener('click', function(e) {
+                    if (e.target === backdrop) event.detail.target.innerHTML = '';
+                });
+            }
+        });
+
+        // ══════════════════════════════════════════════════════════════════
+        // Keyboard navigation — works on EVERY form, every field.
+        //   Enter / Tab / ↓ → / ↑ ← all navigate. Textareas untouched.
+        // ══════════════════════════════════════════════════════════════════
+        function _focusableFields(scope) {
+            // Include the search input of enhanced selects (.ss-input). They
+            // are the visible, user-facing input for those widgets — the
+            // `offsetParent !== null` filter still excludes any that are
+            // currently display:none because a chip is shown in their place.
+            return Array.from(scope.querySelectorAll(
+                'input:not([type=hidden]):not([disabled]):not([readonly]),' +
+                'select:not([disabled]):not([data-enhanced]),' +
+                'textarea:not([disabled]):not([readonly])'
+            )).filter(el => el.offsetParent !== null);
+        }
+        function _focusFirstField(scope) {
+            var list = _focusableFields(scope);
+            // Required-and-empty preference. For enhanced searchable selects,
+            // the visible input doesn't have `required` set (the hidden <select>
+            // does), so we mirror it via data-ss-required on the input — see
+            // _wrapSelect — and check that here too.
+            var first = list.find(function(el) {
+                var req = el.required || el.dataset.ssRequired === '1';
+                return req && !el.value;
+            }) || list[0];
+            if (first) { try { first.focus(); if (first.select && first.tagName === 'INPUT') first.select(); } catch(e) {} }
+        }
+        function _advanceField(currentEl, direction) {
+            var form = currentEl.closest('form') || document.body;
+            var list = _focusableFields(form);
+            var idx = list.indexOf(currentEl);
+            if (idx === -1) return false;
+            var next = list[idx + direction];
+            if (next) {
+                next.focus();
+                // Selection is now handled by the global focusin listener below.
+                return true;
+            }
+            return false;
+        }
+
+        // Select-all on focus for text + number inputs, so typing the first
+        // digit replaces the default value instead of appending to it (standard
+        // accounting-software UX: tab/click into a field with "1" or "0.00",
+        // start typing → the value is replaced).
+        document.addEventListener('focusin', function(e) {
+            var t = e.target;
+            if (!t || t.tagName !== 'INPUT') return;
+            var type = (t.type || '').toLowerCase();
+            if (!['text','number','email','password','search','tel','url'].includes(type)) return;
+            // Delay so the browser's own click-positions-cursor logic runs first,
+            // then we override with .select().
+            setTimeout(function() {
+                try {
+                    if (document.activeElement === t) t.select();
+                } catch(e) {}
+            }, 0);
+        });
+        function _caretAtStart(input) {
+            var t = (input.type || '').toLowerCase();
+            if (!['text','email','password','search','tel','url'].includes(t)) return true;
+            try { return input.selectionStart === 0 && input.selectionEnd === 0; } catch(e) { return true; }
+        }
+        function _caretAtEnd(input) {
+            var t = (input.type || '').toLowerCase();
+            if (!['text','email','password','search','tel','url'].includes(t)) return true;
+            try { var len = input.value.length; return input.selectionStart === len && input.selectionEnd === len; } catch(e) { return true; }
+        }
+        // True if the field is required AND has no value yet. For enhanced
+        // searchable selects, `required` lives on the hidden <select>, so we
+        // mirrored it onto the input via data-ss-required. When such an input
+        // is "filled", the chip is shown and the <input> itself is hidden —
+        // by then the hidden select has a value, so we look that up too.
+        function _isRequiredEmpty(el) {
+            if (!el) return false;
+            // Enhanced searchable-select input — backing <select> is the source of truth
+            if (el.dataset && el.dataset.ssRequired === '1') {
+                var wrap = el.closest('.ss-wrap');
+                var sel = wrap ? wrap.querySelector('select') : null;
+                if (sel) return sel.required && !sel.value;
+            }
+            return el.required && !el.value;
+        }
+        document.addEventListener('keydown', function(e) {
+            var t = e.target;
+            if (!t || !t.tagName) return;
+            var tag = t.tagName.toLowerCase();
+            var type = (t.type || '').toLowerCase();
+            if (tag === 'textarea' || tag === 'button') return;
+            var key = e.key;
+            // ── "Stay until filled" guard ────────────────────────────────
+            // For any navigation key, if the current field is required and
+            // still empty, swallow the key — focus stays on this field. The
+            // user can't jump away until they pick/type a value. Arrow keys
+            // inside an enhanced-select widget are handled by the widget's
+            // own listener (which also calls stopPropagation), so this guard
+            // only ever fires for plain inputs.
+            var navKeys = ['Enter','ArrowDown','ArrowUp','ArrowLeft','ArrowRight','Tab'];
+            if (navKeys.includes(key) && _isRequiredEmpty(t)) {
+                // Tab and ArrowDown/Up should NOT advance away — but allow
+                // typing characters to land in the field normally.
+                if (key !== 'Tab') e.preventDefault();
+                else e.preventDefault();
+                return;
+            }
+            if (key === 'Enter') {
+                var form = t.closest('form');
+                if (form) {
+                    var list = _focusableFields(form);
+                    var idx = list.indexOf(t);
+                    if (idx !== -1 && idx < list.length - 1) {
+                        e.preventDefault(); _advanceField(t, 1); return;
+                    }
+                }
+                return;
+            }
+            if (key === 'ArrowDown' || key === 'ArrowUp') {
+                if (tag === 'select') return;
+                if (tag === 'input' && (type === 'number' || type === 'date' || type === 'datetime-local' || type === 'time')) return;
+                e.preventDefault(); _advanceField(t, key === 'ArrowDown' ? 1 : -1); return;
+            }
+            if (key === 'ArrowRight') {
+                if (tag === 'input' && ['text','email','password','search','tel','url'].includes(type)) {
+                    if (!_caretAtEnd(t)) return;
+                }
+                e.preventDefault(); _advanceField(t, 1); return;
+            }
+            if (key === 'ArrowLeft') {
+                if (tag === 'input' && ['text','email','password','search','tel','url'].includes(type)) {
+                    if (!_caretAtStart(t)) return;
+                }
+                e.preventDefault(); _advanceField(t, -1); return;
+            }
+        });
+        // ══════════════════════════════════════════════════════════════════
+        // Searchable selects — convert every native <select> with > 4 options
+        // (unless data-no-search is set) into a search-as-you-type widget.
+        // Underlying <select> stays in the DOM so form submission works as-is.
+        // ══════════════════════════════════════════════════════════════════
+        function _escapeHtml(s) {
+            return String(s).replace(/[&<>"]/g, function(c) {
+                return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];
+            });
+        }
+        function _enhanceSelects(scope) {
+            scope = scope || document;
+            scope.querySelectorAll('select:not([data-enhanced])').forEach(function(sel) {
+                sel.dataset.enhanced = '1';
+                if (sel.hasAttribute('data-no-search')) return;
+                // Need at least one real option to enhance. Below that, the
+                // native <select> is the right tool anyway (e.g. only one item).
+                var real = Array.from(sel.options).filter(function(o) { return o.value !== ''; });
+                if (real.length === 0) return;
+                _wrapSelect(sel);
+            });
+        }
+        // Expose for in-page DOM mutations (e.g. dynamically-added voucher lines).
+        window._enhanceSelects = _enhanceSelects;
+        function _wrapSelect(sel) {
+            var placeholder = (sel.options[0] && sel.options[0].value === '')
+                              ? sel.options[0].text : 'Search…';
+            var wrap = document.createElement('div');
+            wrap.className = 'ss-wrap';
+
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'ss-input';
+            input.placeholder = placeholder;
+            input.autocomplete = 'off';
+            // Mirror the <select>'s required state onto the search input so
+            // _focusFirstField counts this widget when looking for the first
+            // empty-required field. (We can't put `required` directly on the
+            // input — that would block native form submission.)
+            if (sel.required) {
+                input.setAttribute('aria-required', 'true');
+                input.dataset.ssRequired = '1';
+            }
+
+            var chip = document.createElement('div');
+            chip.className = 'ss-chip';
+            chip.style.display = 'none';
+
+            var dropdown = document.createElement('div');
+            dropdown.className = 'ss-dropdown';
+            dropdown.style.display = 'none';
+
+            sel.classList.add('ss-hidden');
+            sel.tabIndex = -1;
+
+            var parent = sel.parentNode;
+            parent.insertBefore(wrap, sel);
+            wrap.appendChild(input);
+            wrap.appendChild(chip);
+            wrap.appendChild(dropdown);
+            wrap.appendChild(sel);
+
+            var activeIdx = -1;
+            var visible = [];
+
+            function readOptions() {
+                return Array.from(sel.options)
+                    .map(function(o) { return { value: o.value, label: o.text }; })
+                    .filter(function(o) { return o.value !== ''; });
+            }
+            function render(filter) {
+                var q = (filter || '').trim().toLowerCase();
+                visible = readOptions().filter(function(o) {
+                    if (!q) return true;
+                    return o.label.toLowerCase().includes(q);
+                }).slice(0, 100);
+                if (!visible.length) {
+                    dropdown.innerHTML = '<div class="ss-empty">No matches</div>';
+                } else {
+                    dropdown.innerHTML = visible.map(function(o, i) {
+                        return '<div class="ss-option' + (i === activeIdx ? ' active' : '') + '" data-idx="' + i + '">' +
+                               _escapeHtml(o.label) + '</div>';
+                    }).join('');
+                    dropdown.querySelectorAll('.ss-option').forEach(function(el) {
+                        el.addEventListener('mousedown', function(e) {
+                            e.preventDefault();
+                            pick(parseInt(el.dataset.idx, 10));
+                        });
+                    });
+                }
+                dropdown.style.display = 'block';
+            }
+            function pick(idx) {
+                if (idx < 0 || idx >= visible.length) return;
+                var o = visible[idx];
+                sel.value = o.value;
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                showChip(o);
+                // Anchor for "next field" lookup is the wrap container, not the
+                // chip — _advanceField uses anchor's position in the form's
+                // focusable list. If the next focusable is another enhanced
+                // select's wrap, focus its input directly so the user can keep
+                // typing without a Tab.
+                setTimeout(function() {
+                    var fields = _focusableFields(document);
+                    fields = fields.concat(Array.from(document.querySelectorAll('.ss-input')));
+                    // Visual order: rebuild by DOM position.
+                    fields.sort(function(a, b) {
+                        return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
+                    });
+                    var anchorWrap = wrap;
+                    var idxInList = fields.findIndex(function(f) {
+                        return anchorWrap.contains(f);
+                    });
+                    var next = idxInList >= 0 ? fields[idxInList + 1] : null;
+                    if (next) {
+                        next.focus();
+                        if (next.select) next.select();
+                    }
+                }, 0);
+            }
+            function showChip(o) {
+                input.style.display = 'none';
+                dropdown.style.display = 'none';
+                chip.style.display = 'flex';
+                chip.innerHTML = '<span class="ss-chip-label">' + _escapeHtml(o.label) +
+                                 '</span><button type="button" class="ss-chip-clear" tabindex="-1" title="Change">✕</button>';
+                chip.querySelector('.ss-chip-clear').addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    clearChip();
+                });
+                chip.tabIndex = 0;
+                chip.onclick = function() { clearChip(); };
+            }
+            function clearChip() {
+                sel.value = '';
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                chip.style.display = 'none';
+                input.style.display = '';
+                input.value = '';
+                input.focus();
+                render('');
+            }
+            input.addEventListener('focus', function() { activeIdx = -1; render(input.value); });
+            input.addEventListener('input', function() { activeIdx = -1; render(input.value); });
+            input.addEventListener('blur', function() {
+                setTimeout(function() { dropdown.style.display = 'none'; }, 120);
+            });
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault(); e.stopPropagation();
+                    activeIdx = Math.min(activeIdx + 1, visible.length - 1);
+                    render(input.value);
+                }
+                else if (e.key === 'ArrowUp') {
+                    e.preventDefault(); e.stopPropagation();
+                    activeIdx = Math.max(activeIdx - 1, 0);
+                    render(input.value);
+                }
+                else if (e.key === 'Enter') {
+                    // Pick the highlighted option, or if nothing's highlighted
+                    // and the search matched a single option, pick that one.
+                    var idx = activeIdx >= 0 ? activeIdx : (visible.length >= 1 ? 0 : -1);
+                    if (idx >= 0 && visible[idx]) {
+                        e.preventDefault(); e.stopPropagation();
+                        pick(idx);
+                    } else {
+                        // Empty / no matches → still swallow Enter so the form
+                        // doesn't submit and the document-level handler doesn't
+                        // try to advance to the next field.
+                        e.preventDefault(); e.stopPropagation();
+                    }
+                }
+                else if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    dropdown.style.display = 'none';
+                }
+                else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                    // Inside the search input, horizontal arrows should move
+                    // the caret in the typed text — not advance fields.
+                    e.stopPropagation();
+                }
+            });
+
+            // If select already has a value (edit mode), show chip immediately.
+            var preselected = readOptions().find(function(o) { return o.value === sel.value; });
+            if (preselected) showChip(preselected);
+
+            // Sync chip when the underlying select is changed programmatically.
+            sel.addEventListener('change', function() {
+                if (sel.value === '') {
+                    chip.style.display = 'none';
+                    input.style.display = '';
+                } else {
+                    var match = readOptions().find(function(o) { return o.value === sel.value; });
+                    if (match) showChip(match);
+                }
+            });
+        }
+
+        document.addEventListener('htmx:afterSwap', function(event) {
+            if (event.detail.target.id === 'modal-container') {
+                setTimeout(function() {
+                    _enhanceSelects(event.detail.target);
+                    _focusFirstField(event.detail.target);
+                }, 50);
+            } else {
+                // Any other HTMX swap might have brought new selects in.
+                _enhanceSelects(event.detail.target);
+            }
+        });
+        window.addEventListener('load', function() {
+            _enhanceSelects(document);
+            var firstForm = document.querySelector('main form');
+            if (firstForm) _focusFirstField(firstForm);
+        });
+
+        function showToast(message, type) {
+            type = type || 'success';
+            var t = document.createElement('div');
+            var bg = type === 'success' ? 'background: #2c8c66' : 'background: #cd4239';
+            t.style.cssText = 'margin-bottom: 8px; padding: 10px 16px; border-radius: 6px; color: #fff; font-weight: 600; font-size: 14px; ' + bg;
+            t.style.boxShadow = '0 8px 24px rgba(35,37,29,0.15)';
+            t.textContent = message;
+            document.getElementById('toast-container').appendChild(t);
+            setTimeout(function() { t.remove(); }, 3000);
+        }
+    </script>
+</body>
+</html>

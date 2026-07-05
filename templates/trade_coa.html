@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Chart of Accounts{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Chart of Accounts</h1>
+      <p class="page-subtitle">Every monetary item the business tracks, auto-numbered within its subclass.</p>
+    </div>
+    <button class="btn-primary" hx-get="/trade/coa/new" hx-target="#modal-container">+ New Account</button>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left" style="width: 100px;">Code</th>
+          <th class="text-left">Name</th>
+          <th class="text-right">Balance</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in groups %}
+        <tr style="background: #fef3e8;">
+          <td class="font-mono text-xs font-bold text-orange-900">{{ g['class'].code }}</td>
+          <td class="font-bold text-orange-900 text-base">{{ g['class'].name }}</td>
+          <td colspan="2"></td>
+        </tr>
+        {% for sb in g['subclasses'] %}
+        <tr style="background: #fafaf9;">
+          <td class="font-mono text-xs text-gray-600 pl-8">{{ sb['subclass'].code }}</td>
+          <td class="text-gray-700 font-medium">{{ sb['subclass'].name }}</td>
+          <td colspan="2"></td>
+        </tr>
+        {% for a in sb['accounts'] %}
+        <tr>
+          <td class="font-mono text-xs text-gray-700 pl-12">{{ a.code }}</td>
+          <td>
+            <a class="text-indigo-600 hover:text-indigo-900 font-medium" href="/trade/reports/general-ledger?account_id={{ a.id }}">{{ a.name }}</a>
+            {% if a.is_system %}<span class="ml-2 text-xs text-gray-400">(system)</span>{% endif %}
+            {% if not a.is_active %}<span class="ml-2 text-xs" style="color: #c2410c;">disabled</span>{% endif %}
+          </td>
+          <td class="text-right tabular-nums">
+            {% set b = balances.get(a.id, 0) %}
+            {% if b == 0 %}<span class="text-gray-400">—</span>
+            {% elif b > 0 %}<span class="font-medium text-gray-900">{{ currency }} {{ '{:,.2f}'.format(b) }}</span> <span class="pill-dr ml-1">DR</span>
+            {% else %}<span class="font-medium" style="color: #c2410c;">{{ currency }} {{ '{:,.2f}'.format(-b) }}</span> <span class="pill-cr ml-1">CR</span>
+            {% endif %}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            {% if not a.is_system %}
+              <button class="text-indigo-600 text-xs hover:underline font-medium" hx-get="/trade/coa/{{ a.id }}/edit" hx-target="#modal-container">Edit</button>
+              {% if a.is_active %}
+              <form class="inline" hx-post="/trade/coa/{{ a.id }}/delete" hx-confirm="Disable this account?">
+                <button class="text-red-600 text-xs hover:underline ml-3 font-medium">Disable</button>
+              </form>
+              {% endif %}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

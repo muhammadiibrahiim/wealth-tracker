@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}General Ledger{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">General Ledger</h1>
+      <p class="page-subtitle">Per-account transaction history with running balance.</p>
+    </div>
+    <a href="/trade/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div class="flex-1 min-w-[260px]">
+        <label class="field-label field-label-required">Account</label>
+        <select name="account_id" required class="w-full px-4 py-2.5">
+          <option value="">— pick —</option>
+          {% for a in accounts %}<option value="{{ a.id }}" {% if account_id == a.id %}selected{% endif %}>{{ a.code }} — {{ a.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div><label class="field-label">From</label>
+        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+      <div><label class="field-label">To</label>
+        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
+      <button type="submit" class="btn-primary">Generate Report</button>
+    </form>
+  </div>
+
+  {% if ledger and ledger.account %}
+  <div class="accent-card flex items-center justify-between">
+    <div>
+      <div class="stat-label">Account</div>
+      <h2 class="text-2xl font-bold text-gray-900 mt-1 tracking-tight"><span class="text-gray-500 text-base font-mono">{{ ledger.account.code }}</span> {{ ledger.account.name }}</h2>
+    </div>
+    <div class="text-right">
+      <div class="stat-label">Closing Balance</div>
+      <div class="mt-1 flex items-baseline gap-3 justify-end">
+        <span class="text-3xl font-bold tabular-nums {% if ledger.closing_balance < 0 %}text-orange-700{% else %}text-gray-900{% endif %}">
+          <span class="text-xl text-gray-500 font-semibold mr-1">{{ currency }}</span>{{ '{:,.2f}'.format(ledger.closing_balance|abs) }}
+        </span>
+        {% if ledger.closing_balance < 0 %}<span class="pill-cr">CR</span>{% else %}<span class="pill-dr">DR</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="stat-label">Opening Balance</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(ledger.opening_balance|abs) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Debits</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(ledger.total_debit) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Credits</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(ledger.total_credit) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Closing Balance</div>
+      <div class="stat-value {% if ledger.closing_balance < 0 %}neg{% endif %}"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(ledger.closing_balance|abs) }}</div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Date</th>
+          <th class="text-left">Ref</th>
+          <th class="text-left">Description</th>
+          <th class="text-right">Debit</th>
+          <th class="text-right">Credit</th>
+          <th class="text-right">Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background: #fafaf9;">
+          <td colspan="3" class="text-gray-500 text-sm"><em>Opening balance</em></td>
+          <td colspan="2"></td>
+          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ledger.opening_balance) }}</td>
+        </tr>
+        {% for r in ledger.lines %}
+        <tr>
+          <td class="text-gray-700 whitespace-nowrap">{{ r.date }}</td>
+          <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/vouchers/{{ r.entry_id }}">{{ r.reference }}</a></td>
+          <td class="text-gray-900">{{ r.description }}</td>
+          <td class="text-right tabular-nums">{% if r.debit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(r.debit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
+          <td class="text-right tabular-nums">{% if r.credit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(r.credit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
+          <td class="text-right tabular-nums font-semibold {% if r.balance < 0 %}text-orange-700{% else %}text-gray-900{% endif %}">
+            {{ currency }} {{ '{:,.2f}'.format(r.balance|abs) }}
+            {% if r.balance < 0 %}<span class="pill-cr ml-2">CR</span>{% else %}<span class="pill-dr ml-2">DR</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot class="bg-gray-50 border-t-2 border-gray-200">
+        <tr>
+          <td colspan="3" class="text-xs uppercase tracking-widest font-bold text-gray-700">Period Totals</td>
+          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(ledger.total_debit) }}</td>
+          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(ledger.total_credit) }}</td>
+          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(ledger.closing_balance) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+    <p class="text-sm text-blue-700">Pick an account above to see its ledger.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

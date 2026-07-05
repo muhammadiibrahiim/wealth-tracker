@@ -1,0 +1,62 @@
+{% set p = request.url.path %}
+<aside id="global-sidebar" class="sidebar">
+    <div class="side-header">
+        <a href="/wealth" class="side-logo">
+            <span class="side-logo-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+            </span>
+            <span class="side-logo-text">Wealth Tracker</span>
+        </a>
+        <button class="side-toggle" onclick="toggleSidebar()" aria-label="Toggle">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+            </svg>
+        </button>
+    </div>
+
+    <nav class="side-nav">
+        {% macro item(href, label, icon_d, prefix) -%}
+        {% set active = (p == href) or (prefix and prefix != '/wealth' and p.startswith(prefix)) or (prefix == '/wealth' and p == '/wealth') %}
+        <a href="{{ href }}" class="side-item {% if active %}active{% endif %}" title="{{ label }}">
+            <svg class="side-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="{{ icon_d }}"/></svg>
+            <span class="side-text">{{ label }}</span>
+        </a>
+        {%- endmacro %}
+
+        {{ item('/wealth', 'Wealth', 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', '/wealth') }}
+        {{ item('/habits', 'Habits', 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z', '/habits') }}
+        {{ item('/investments', 'Investments', 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', '/investments') }}
+
+        <div class="side-section">
+            <button class="side-parent {% if p.startswith('/trade') %}active expanded{% endif %}" onclick="toggleSideSection(this)">
+                <svg class="side-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span class="side-text">Trade</span>
+                <svg class="side-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="side-children">
+                {% macro child(href, label, exact) -%}
+                {% set act = (p == href) if exact else p.startswith(href) %}
+                <a href="{{ href }}" class="side-child {% if act %}active{% endif %}">
+                    <span class="side-child-dot"></span>
+                    <span class="side-text">{{ label }}</span>
+                </a>
+                {%- endmacro %}
+                {{ child('/trade', 'Dashboard', true) }}
+                {{ child('/trade/quotations', 'Quotations', false) }}
+                {{ child('/trade/trades', 'Trades', false) }}
+                {{ child('/trade/parties', 'Parties', false) }}
+                {{ child('/trade/items', 'Items', false) }}
+                {{ child('/trade/accounts', 'Cash Accounts', false) }}
+                {{ child('/trade/coa', 'Chart of A/Cs', false) }}
+                {{ child('/trade/vouchers', 'Vouchers', false) }}
+                {{ child('/trade/reports', 'Reports', false) }}
+            </div>
+        </div>
+    </nav>
+
+    <div class="side-footer">
+        <div class="side-text">localhost · v1</div>
+    </div>
+</aside>

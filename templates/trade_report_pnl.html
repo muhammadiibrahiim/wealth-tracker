@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Profit & Loss{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Profit &amp; Loss</h1>
+      <p class="page-subtitle">Income, cost of goods, and operating expenses for the period.</p>
+    </div>
+    <div class="flex gap-2"><a href="/trade/reports" class="btn-secondary">← Reports</a></div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div><label class="field-label">From</label>
+        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+      <div><label class="field-label">To</label>
+        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
+      <button type="submit" class="btn-primary">Generate Report</button>
+      <a href="/trade/reports/pnl" class="btn-secondary">Reset</a>
+    </form>
+  </div>
+
+  <!-- Headline stat strip -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="stat-label">Revenue</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.total_income) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Cost of Goods</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.total_cogs) }}</div>
+    </div>
+    <div class="stat-card" style="border-color: {% if report.gross_profit >= 0 %}#16a34a{% else %}#ea580c{% endif %};">
+      <div class="stat-label">Gross Profit</div>
+      <div class="stat-value" style="color: {% if report.gross_profit >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+        <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.gross_profit|abs) }}
+      </div>
+      <div class="stat-foot">{% if report.gross_profit >= 0 %}Profit{% else %}Loss{% endif %}</div>
+    </div>
+    <div class="stat-card" style="border-color: {% if report.net_income >= 0 %}#16a34a{% else %}#ea580c{% endif %}; border-width: 2px;">
+      <div class="stat-label">Net Income</div>
+      <div class="stat-value" style="color: {% if report.net_income >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+        <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.net_income|abs) }}
+      </div>
+      <div class="stat-foot">{% if report.net_income >= 0 %}Profit{% else %}Loss{% endif %}</div>
+    </div>
+  </div>
+
+  {% macro section(title, rows, total, tone) -%}
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between" style="background: #fafaf9;">
+      <h2>{{ title }}</h2>
+      <span class="text-lg font-bold tabular-nums" style="color: {{ tone }};">{{ currency }} {{ '{:,.2f}'.format(total) }}</span>
+    </div>
+    {% if rows %}
+    <table class="min-w-full">
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="font-mono text-xs text-gray-500" style="width: 80px;">{{ r.account.code }}</td>
+          <td class="text-gray-900">{{ r.account.name }}</td>
+          <td class="text-right tabular-nums text-gray-900 font-medium">{{ currency }} {{ '{:,.2f}'.format(r.amount) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="px-6 py-8 text-center text-sm text-gray-400">— no activity —</p>{% endif %}
+  </div>
+  {%- endmacro %}
+
+  {{ section('Income', report.income, report.total_income, '#15803d') }}
+  {{ section('Cost of Goods', report.cogs, report.total_cogs, '#c2410c') }}
+
+  <div class="accent-card flex items-center justify-between" style="border-left-color: {% if report.gross_profit >= 0 %}#16a34a{% else %}#ea580c{% endif %};">
+    <div>
+      <div class="stat-label">Gross Profit</div>
+      <div class="text-xs text-gray-500 mt-1">Revenue − COGS</div>
+    </div>
+    <div class="text-3xl font-bold tabular-nums" style="color: {% if report.gross_profit >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+      <span class="text-xl text-gray-500 font-semibold mr-1">{{ currency }}</span>{{ '{:,.2f}'.format(report.gross_profit|abs) }}
+    </div>
+  </div>
+
+  {{ section('Operating Expenses', report.expenses, report.total_expenses, '#c2410c') }}
+
+  <div class="accent-card flex items-center justify-between" style="border-left-color: {% if report.net_income >= 0 %}#16a34a{% else %}#ea580c{% endif %}; border-left-width: 6px;">
+    <div>
+      <div class="stat-label">Net Income</div>
+      <div class="text-xs text-gray-500 mt-1">Gross Profit − Operating Expenses</div>
+    </div>
+    <div class="text-4xl font-bold tabular-nums" style="color: {% if report.net_income >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+      <span class="text-2xl text-gray-500 font-semibold mr-1">{{ currency }}</span>{{ '{:,.2f}'.format(report.net_income|abs) }}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

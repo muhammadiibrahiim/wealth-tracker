@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Trades{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Trades</h1>
+      <p class="page-subtitle">Every back-to-back vendor → customer transaction.</p>
+    </div>
+    <button class="btn-primary" hx-get="/trade/trades/new" hx-target="#modal-container">+ New Trade</button>
+  </div>
+
+  <!-- Filter -->
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div>
+        <label class="field-label">Status</label>
+        <select name="status" class="px-3 py-2.5">
+          <option value="">All</option>
+          {% for s in statuses %}<option value="{{ s }}" {% if current_status == s %}selected{% endif %}>{{ s.replace('_',' ').title() }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Party</label>
+        <select name="party_id" class="px-3 py-2.5">
+          <option value="">All</option>
+          {% for p in parties %}<option value="{{ p.id }}" {% if current_party == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn-primary">Apply</button>
+      <a href="/trade/trades" class="btn-secondary">Reset</a>
+    </form>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+    {% if trades %}
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Ref</th>
+          <th class="text-left">Date</th>
+          <th class="text-left">Vendor</th>
+          <th class="text-left">Purchaser</th>
+          <th class="text-right">Cost</th>
+          <th class="text-right">Sale</th>
+          <th class="text-right">Profit</th>
+          <th class="text-left">Status</th>
+          <th class="text-left">Due</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in trades %}
+        <tr>
+          <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/trades/{{ t.id }}">{{ t.reference }}</a></td>
+          <td class="text-gray-700 whitespace-nowrap">{{ t.trade_date }}</td>
+          <td class="text-gray-800">{{ party_map[t.vendor_id].name if party_map.get(t.vendor_id) else '—' }}</td>
+          <td class="text-gray-800">{{ party_map[t.purchaser_id].name if party_map.get(t.purchaser_id) else '—' }}</td>
+          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(t.total_cost) }}</td>
+          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(t.total_sale) }}</td>
+          <td class="text-right tabular-nums font-semibold" style="color: {% if (t.total_sale - t.total_cost) >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+            {{ currency }} {{ '{:,.0f}'.format(t.total_sale - t.total_cost) }}
+          </td>
+          <td>{% include "partials/trade_status_badge.html" %}</td>
+          <td class="text-gray-600 whitespace-nowrap">
+            {% if t.customer_due_date %}
+              {{ t.customer_due_date }}
+              {% if t.customer_due_date < today and (t.total_sale - t.paid_by_customer) > 0 %}<span class="pill-cr ml-1">OVERDUE</span>{% endif %}
+            {% else %}<span class="text-gray-400">—</span>{% endif %}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <form class="inline" hx-post="/trade/trades/{{ t.id }}/delete" hx-confirm="Permanently delete {{ t.reference }}? Linked journals will be reversed.">
+              <button class="text-red-600 text-xs hover:underline font-medium">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="px-6 py-16 text-center text-sm text-gray-500">No trades match the current filter.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

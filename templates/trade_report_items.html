@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Item Report{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Item Report</h1>
+      <p class="page-subtitle">Units sold, revenue, and margin per item.</p>
+    </div>
+    <a href="/trade/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div><label class="field-label">From</label>
+        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+      <div><label class="field-label">To</label>
+        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
+      <button type="submit" class="btn-primary">Apply</button>
+      <a href="/trade/reports/items" class="btn-secondary">Reset</a>
+    </form>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+    {% if rows %}
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Item</th>
+          <th class="text-right">Units Sold</th>
+          <th class="text-right">Trades</th>
+          <th class="text-right">Revenue</th>
+          <th class="text-right">Cost</th>
+          <th class="text-right">Profit</th>
+          <th class="text-right">Margin %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="font-medium text-gray-900">{{ r.item_name }}</td>
+          <td class="text-right tabular-nums">{{ '{:g}'.format(r.units) }}</td>
+          <td class="text-right">{{ r.trades }}</td>
+          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(r.revenue) }}</td>
+          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(r.cost) }}</td>
+          <td class="text-right tabular-nums font-semibold" style="color: {% if r.profit >= 0 %}#15803d{% else %}#c2410c{% endif %};">{{ currency }} {{ '{:,.0f}'.format(r.profit) }}</td>
+          <td class="text-right tabular-nums">{% if r.revenue > 0 %}{{ '{:.1f}'.format((r.profit / r.revenue) * 100) }}%{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="px-6 py-16 text-center text-sm text-gray-500">No items sold in this range.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

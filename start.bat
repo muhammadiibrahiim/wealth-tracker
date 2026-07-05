@@ -138,28 +138,34 @@ call :say ""
 
 where winget >nul 2>&1
 if !errorlevel! equ 0 (
-    call :say "  winget is available on this PC."
-    echo.
-    echo   I can install Python 3.12 for you automatically now via winget.
-    echo   This will download about 30 MB and take a couple of minutes.
-    echo.
-    set /p AUTOINSTALL="  Install Python 3.12 now? [Y/N] "
-    if /i "!AUTOINSTALL!"=="Y" (
-        call :say "  User accepted auto-install"
-        call :say "  Running: winget install -e --id Python.Python.3.12 --silent --accept-source-agreements --accept-package-agreements"
-        winget install -e --id Python.Python.3.12 --silent --accept-source-agreements --accept-package-agreements 2>>"%LOG%"
-        if !errorlevel! equ 0 (
-            call :say "  [OK] Python 3.12 installed via winget"
+    call :say "  winget is available — auto-installing Python 3.12."
+    call :say "  This is a one-time download of ~30 MB. Please wait 1-3 minutes."
+    call :say "  Running: winget install -e --id Python.Python.3.12 --silent --accept-source-agreements --accept-package-agreements"
+    winget install -e --id Python.Python.3.12 --silent --accept-source-agreements --accept-package-agreements 2>>"%LOG%"
+    if !errorlevel! equ 0 (
+        call :say "  [OK] Python 3.12 installed via winget."
+        call :say ""
+        call :say "  Re-scanning for the new Python installation..."
+        REM winget put Python in %LOCALAPPDATA%\Programs\Python\Python312 — probe it directly.
+        call :probe_path "!LOCALAPPDATA!\Programs\Python\Python312\python.exe"
+        call :probe_path "C:\Program Files\Python312\python.exe"
+        REM Try the py launcher too (installed alongside)
+        if not defined PY_EXE call :try_py_launcher
+        if defined PY_EXE (
+            call :say "  [OK] found Python — continuing without a restart."
             call :say ""
-            call :say "  IMPORTANT: You now need to CLOSE this window,"
-            call :say "  open a NEW Command Prompt and run start.bat again."
-            call :say "  (Windows needs to refresh the PATH.)"
-            echo.
-            pause
-            exit /b 0
+            goto :python_ok
         )
-        call :say "  [X] winget install failed. Please install Python manually."
+        REM Fallback: PATH isn't refreshed for this cmd, so ask the user to relaunch.
+        call :say ""
+        call :say "  Python is installed but this Command Prompt started before"
+        call :say "  the install, so it can't see the new PATH yet."
+        call :say "  Close this window and double-click start.bat again."
+        call :say ""
+        pause
+        exit /b 0
     )
+    call :say "  [X] winget install failed — see start.log. Falling back to manual instructions."
 )
 
 call :show_manual_help

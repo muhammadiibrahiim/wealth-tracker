@@ -66,6 +66,10 @@ SYSTEM_ACCOUNTS = [
     # Trading clearing account — every trade flows DR/CR through here and
     # the closing entry zeroes it back to nil into Capital A/C.
     ("3903", "Profit / Loss A/C",          "3900", True),
+    # Owner's capital — where P&L closes into and where trade costs land via
+    # Record Cost. Every code path that reads Account.name == "Capital A/C"
+    # depends on this row existing on every install.
+    ("3101", "Capital A/C",                "3100", True),
     # Operating expenses common to a flyer printing brokerage (editable)
     ("5201", "Rent — Office / Warehouse",  "5200", False),
     ("5202", "Utilities — Electricity",    "5200", False),

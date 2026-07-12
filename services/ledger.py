@@ -13,6 +13,7 @@ from models import (
     AccountNature,
     AccountSubClass,
     JournalEntry,
+    JournalEntryType,
     JournalLine,
 )
 
@@ -254,6 +255,53 @@ def profit_and_loss(
                 total_cogs += amt
             else:
                 expense_rows.append({"account": a, "amount": amt.quantize(Decimal("0.01"))})
+                total_expense += amt
+
+    # ── Trade activity via P&L A/C (3903) ──────────────────────────────
+    # Trades post DR customer / CR 3903 (sale), DR 3903 / CR vendor
+    # (purchase) and DR 3903 (bilty) — never touching Sales Revenue / COGS
+    # accounts. Surface that activity here so the report reflects trading.
+    # Reversed originals + their REV entries are both excluded (they cancel).
+    from types import SimpleNamespace
+    pl_acct = session.exec(
+        select(Account).where(Account.user_id == user_id, Account.code == "3903")
+    ).first()
+    if pl_acct:
+        tq = (
+            select(
+                JournalEntry.entry_type,
+                func.coalesce(func.sum(JournalLine.debit), 0),
+                func.coalesce(func.sum(JournalLine.credit), 0),
+            )
+            .select_from(JournalLine)
+            .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+            .where(
+                JournalLine.account_id == pl_acct.id,
+                JournalEntry.is_reversed == False,  # noqa: E712
+                JournalEntry.entry_type.in_(
+                    [JournalEntryType.SALE, JournalEntryType.PURCHASE, JournalEntryType.EXPENSE]
+                ),
+            )
+        )
+        if from_date is not None:
+            tq = tq.where(JournalEntry.entry_date >= from_date)
+        if to_date is not None:
+            tq = tq.where(JournalEntry.entry_date <= to_date)
+        tq = tq.group_by(JournalEntry.entry_type)
+        for etype, dr, cr in session.exec(tq).all():
+            key = etype.value if hasattr(etype, "value") else etype
+            dr, cr = Decimal(dr or 0), Decimal(cr or 0)
+            if key == "sale" and cr - dr != 0:
+                amt = (cr - dr).quantize(Decimal("0.01"))
+                income_rows.append({"account": SimpleNamespace(code="3903", name="Trade Sales"), "amount": amt})
+                total_income += amt
+            elif key == "purchase" and dr - cr != 0:
+                amt = (dr - cr).quantize(Decimal("0.01"))
+                cogs_rows.append({"account": SimpleNamespace(code="3903", name="Trade Purchases (goods)"), "amount": amt})
+                total_cogs += amt
+            elif key == "expense" and dr - cr != 0:
+                amt = (dr - cr).quantize(Decimal("0.01"))
+                expense_rows.append({"account": SimpleNamespace(code="3903", name="Bilty / Delivery costs"), "amount": amt})
                 total_expense += amt
 
     gross_profit = (total_income - total_cogs).quantize(Decimal("0.01"))

@@ -6,7 +6,7 @@
   <div class="flex items-start justify-between flex-wrap gap-4">
     <div>
       <h1 class="page-title">Bank Position Forecast</h1>
-      <p class="page-subtitle">Projected cash 30/60/90 days out based on scheduled inflows and outflows.</p>
+      <p class="page-subtitle">Cash position 30/60/90 days out. Today's figure is your net funding through the CEO account — negative because it's all deployed in live trades. As receivables come in and vendor bills are paid, it recovers. <b>Delivered</b> collections are timed by each customer's real average payment lag; <b>projected</b> rows predict open-order deliveries from the vendor's average lead time (cost netted in).</p>
     </div>
     <a href="/trade/reports" class="btn-secondary">← Reports</a>
   </div>
@@ -17,7 +17,7 @@
       <span class="text-2xl">⚠️</span>
       <div>
         <div class="stat-label" style="color: #b91c1c;">Cash Warning</div>
-        <div class="text-base font-bold mt-1" style="color: #b91c1c;">Projected to go negative within {{ report.negative_at }} days</div>
+        <div class="text-base font-bold mt-1" style="color: #b91c1c;">Position drops further within {{ report.negative_at }} days — you may need extra funding</div>
       </div>
     </div>
   </div>
@@ -25,16 +25,18 @@
 
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
     <div class="stat-card">
-      <div class="stat-label">Cash Today</div>
-      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.cash_today) }}</div>
+      <div class="stat-label">Funding Deployed Today</div>
+      <div class="stat-value" style="color: {% if report.cash_today < 0 %}#c2410c{% else %}#15803d{% endif %};"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.cash_today) }}</div>
+      <div class="stat-foot text-gray-500">via CEO account</div>
     </div>
     {% for h in [30, 60, 90] %}
-    <div class="stat-card" style="{% if report.projected[h] < 0 %}border-color: #ea580c;{% endif %}">
+    {% set delta = report.projected[h] - report.cash_today %}
+    <div class="stat-card" style="border-color: {% if report.projected[h] < 0 %}#ea580c{% else %}#16a34a{% endif %};">
       <div class="stat-label">+{{ h }} Days</div>
-      <div class="stat-value" style="{% if report.projected[h] < 0 %}color: #c2410c;{% endif %}">
-        <span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.projected[h]|abs) }}
+      <div class="stat-value" style="color: {% if report.projected[h] < 0 %}#c2410c{% else %}#15803d{% endif %};">
+        <span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.projected[h]) }}
       </div>
-      {% if report.projected[h] < 0 %}<div class="stat-foot" style="color: #c2410c;">Deficit</div>{% endif %}
+      <div class="stat-foot" style="color: {% if delta >= 0 %}#15803d{% else %}#c2410c{% endif %};">{% if delta >= 0 %}▲{% else %}▼{% endif %} {{ currency }} {{ '{:,.0f}'.format(delta|abs) }} cash in</div>
     </div>
     {% endfor %}
   </div>
@@ -51,9 +53,12 @@
         <tbody>
           {% for f in report.inflows %}
           <tr>
-            <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/trades/{{ f.trade.id }}">{{ f.trade.reference }}</a></td>
+            <td>
+              <a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/trades/{{ f.trade.id }}">{{ f.trade.reference }}</a>
+              {% if f.kind == 'projected' %}<span class="ml-1 text-xs px-1.5 py-0.5 rounded" style="background:#fef3c7;color:#92400e;">projected</span>{% else %}<span class="ml-1 text-xs px-1.5 py-0.5 rounded" style="background:#dcfce7;color:#166534;">delivered</span>{% endif %}
+            </td>
             <td class="text-gray-700 whitespace-nowrap">{{ f.due_date }}</td>
-            <td class="text-right tabular-nums {% if f.days_out < 0 %}font-semibold{% endif %}" style="{% if f.days_out < 0 %}color: #c2410c;{% endif %}">{{ f.days_out }}d</td>
+            <td class="text-right tabular-nums {% if f.days_out < 0 %}font-semibold{% endif %}" style="{% if f.days_out < 0 %}color: #c2410c;{% endif %}">{% if f.days_out < 0 %}overdue{% else %}{{ f.days_out }}d{% endif %}</td>
             <td class="text-right tabular-nums font-medium" style="color: #15803d;">+ {{ currency }} {{ '{:,.0f}'.format(f.amount) }}</td>
           </tr>
           {% else %}<tr><td colspan="4" class="px-6 py-10 text-center text-sm text-gray-400">No outstanding receivables.</td></tr>{% endfor %}
@@ -67,14 +72,14 @@
       </div>
       <table class="min-w-full">
         <thead>
-          <tr><th class="text-left">Trade</th><th class="text-left">Due Date</th><th class="text-right">Days Out</th><th class="text-right">Amount</th></tr>
+          <tr><th class="text-left">Vendor</th><th class="text-left">Due Date</th><th class="text-right">Days Out</th><th class="text-right">Amount</th></tr>
         </thead>
         <tbody>
           {% for o in report.outflows %}
           <tr>
-            <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/trades/{{ o.trade.id }}">{{ o.trade.reference }}</a></td>
+            <td class="font-medium text-gray-900">{{ o.label }}{% if o.kind == 'projected' %}<span class="ml-1 text-xs px-1.5 py-0.5 rounded" style="background:#fef3c7;color:#92400e;">projected</span>{% endif %}</td>
             <td class="text-gray-700 whitespace-nowrap">{{ o.due_date }}</td>
-            <td class="text-right tabular-nums {% if o.days_out < 0 %}font-semibold{% endif %}" style="{% if o.days_out < 0 %}color: #c2410c;{% endif %}">{{ o.days_out }}d</td>
+            <td class="text-right tabular-nums {% if o.days_out < 0 %}font-semibold{% endif %}" style="{% if o.days_out < 0 %}color: #c2410c;{% endif %}">{% if o.days_out < 0 %}overdue{% else %}{{ o.days_out }}d{% endif %}</td>
             <td class="text-right tabular-nums font-medium" style="color: #b91c1c;">− {{ currency }} {{ '{:,.0f}'.format(o.amount) }}</td>
           </tr>
           {% else %}<tr><td colspan="4" class="px-6 py-10 text-center text-sm text-gray-400">No outstanding payables.</td></tr>{% endfor %}

@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
-from sqlmodel import Session, select, func
+from sqlmodel import Session, select, func, or_
 
 from models import (
     Account,
@@ -260,10 +260,18 @@ class ItemService:
 
 
 def _next_reference(session: Session, user_id: int) -> str:
-    n = session.exec(
-        select(func.count()).select_from(Trade).where(Trade.user_id == user_id)
-    ).one() or 0
-    return f"TRD-{int(n) + 1:04d}"
+    # Max existing number + 1 — a plain count collides with existing
+    # references whenever a trade has been deleted (the gap gets recounted).
+    refs = session.exec(
+        select(Trade.reference).where(Trade.user_id == user_id)
+    ).all()
+    top = 0
+    for r in refs:
+        try:
+            top = max(top, int(str(r).rsplit("-", 1)[1]))
+        except (IndexError, ValueError):
+            continue
+    return f"TRD-{top + 1:04d}"
 
 
 class TradeService:
@@ -367,7 +375,7 @@ class TradeService:
         session.flush()
         session.refresh(trade)
         TradeService._recompute_totals(trade)
-        TradeService._refresh_status(trade)
+        TradeService._refresh_status(trade, session)
         session.add(trade)
         session.commit()
         session.refresh(trade)
@@ -385,7 +393,7 @@ class TradeService:
         session.flush()
         session.refresh(trade)
         TradeService._recompute_totals(trade)
-        TradeService._refresh_status(trade)
+        TradeService._refresh_status(trade, session)
         session.add(trade)
         session.commit()
         session.refresh(trade)
@@ -730,6 +738,45 @@ class TradeService:
             PostingEngine.reverse(session, trade.user_id, e.id, reason=reason)
 
     @staticmethod
+    def _purge_event_journals(session: Session, trade: Trade, event_date: date) -> None:
+        """Hard-delete a delivery event's sale/purchase/profit-close journals
+        (and any reversals already chained off them) — used when a receipt is
+        edited or deleted, so corrections leave NO reversal clutter in the
+        ledger. Bilty entries (tagged differently) are untouched.
+        """
+        event_tag = f" · {event_date.isoformat()}"
+        entries = list(session.exec(
+            select(JournalEntry).where(
+                JournalEntry.user_id == trade.user_id,
+                JournalEntry.trade_id == trade.id,
+                JournalEntry.description.contains(event_tag),
+            )
+        ).all())
+        if not entries:
+            return
+        refs = {e.reference for e in entries}
+        je_ids = {e.id for e in entries}
+        rev_chain = list(session.exec(
+            select(JournalEntry).where(
+                JournalEntry.user_id == trade.user_id,
+                JournalEntry.entry_type == JournalEntryType.REVERSAL,
+            )
+        ).all())
+        for r in rev_chain:
+            if r.description and any(
+                r.description.startswith(f"REVERSAL of {ref}:") for ref in refs
+            ):
+                je_ids.add(r.id)
+        for je_id in je_ids:
+            session.exec(
+                JournalLine.__table__.delete().where(JournalLine.journal_entry_id == je_id)
+            )
+            e = session.get(JournalEntry, je_id)
+            if e:
+                session.delete(e)
+        session.flush()
+
+    @staticmethod
     def _reverse_trade_journals(session: Session, trade: Trade, reason: str) -> None:
         """Reverse every un-reversed journal entry tied to this trade."""
         from services.posting import PostingEngine
@@ -776,7 +823,7 @@ class TradeService:
         trade.vendor_due_date = trade.trade_date + timedelta(days=trade.vendor_terms_days)
         if trade.status == TradeStatus.OPEN:
             trade.status = TradeStatus.DELIVERED
-        TradeService._refresh_status(trade)
+        TradeService._refresh_status(trade, session)
         trade.updated_at = datetime.utcnow()
         session.add(trade)
         session.commit()
@@ -792,11 +839,11 @@ class TradeService:
             if rem > 0:
                 residual[ln.id] = rem
         # Re-reverse any prior delivered_at event so re-Mark-Complete updates
-        # cleanly (e.g. final qty was edited).
-        TradeService._reverse_event_journals(
-            session, trade, d, reason="Re-Mark Complete",
-        )
+        # cleanly (e.g. final qty was edited). Only when there is a residual to
+        # re-post — otherwise a receipt event on the same date would get
+        # reversed and never replaced, silently dropping the sale from the books.
         if residual:
+            TradeService._purge_event_journals(session, trade, d)
             TradeService._post_event_journals(session, trade, d, residual)
         return trade
 
@@ -884,8 +931,34 @@ class TradeService:
         trade.total_sale = sale.quantize(Decimal("0.01"))
 
     @staticmethod
-    def _refresh_status(trade: Trade) -> None:
-        """Recompute paid totals and bump status based on customer payment progress."""
+    def _customer_credits(session: Session, trade: Trade) -> Decimal:
+        """Credits on the customer's ledger that settle the invoice like cash:
+        paid-by-customer costs (bilty, Record Cost) AND residual write-offs."""
+        purchaser = session.get(Party, trade.purchaser_id)
+        acct_id = purchaser.account_id if purchaser else None
+        rows = session.exec(
+            select(JournalLine).join(
+                JournalEntry, JournalLine.journal_entry_id == JournalEntry.id
+            ).where(
+                JournalEntry.trade_id == trade.id,
+                JournalEntry.is_reversed == False,  # noqa: E712
+                JournalLine.credit > 0,
+                or_(
+                    JournalEntry.description.like("%[paid-by-customer]"),
+                    JournalEntry.description.like("%[writeoff-residual]"),
+                ),
+            )
+        ).all()
+        total = ZERO
+        for ln in rows:
+            if ln.party_id == trade.purchaser_id or (acct_id and ln.account_id == acct_id):
+                total += Decimal(ln.credit)
+        return total
+
+    @staticmethod
+    def _refresh_status(trade: Trade, session: Optional[Session] = None) -> None:
+        """Recompute paid totals and bump status based on customer payment progress.
+        With a session, customer-paid costs (bilty) count toward settlement."""
         inbound = sum(
             (Decimal(p.amount) for p in trade.payments if p.direction == PaymentDirection.INBOUND),
             ZERO,
@@ -900,14 +973,87 @@ class TradeService:
         if trade.status in (TradeStatus.CANCELLED, TradeStatus.CLOSED):
             return
 
-        if trade.total_sale > ZERO and trade.paid_by_customer >= trade.total_sale:
+        settled = trade.paid_by_customer
+        if session is not None:
+            settled += TradeService._customer_credits(session, trade)
+
+        if trade.total_sale > ZERO and settled >= Decimal(trade.total_sale):
             trade.status = TradeStatus.PAID
-        elif trade.paid_by_customer > ZERO:
+        elif settled > ZERO:
             trade.status = TradeStatus.PARTIALLY_PAID
         elif trade.delivered_at is not None:
             trade.status = TradeStatus.DELIVERED
         else:
             trade.status = TradeStatus.OPEN
+
+    @staticmethod
+    def customer_outstanding(session: Session, trade: Trade) -> Decimal:
+        """What the customer still owes: invoice − cash received − credits."""
+        return (
+            Decimal(trade.total_sale)
+            - Decimal(trade.paid_by_customer)
+            - TradeService._customer_credits(session, trade)
+        ).quantize(Decimal("0.01"))
+
+    @staticmethod
+    def writeoff_residual(session: Session, user_id: int, trade_id: int,
+                          threshold: Decimal = Decimal("100")):
+        """Write off a tiny remaining customer balance to expense and mark paid.
+        Returns (ok, message). Posts DR Other Expenses / CR customer A/R."""
+        from services.posting import PostingEngine
+        from services import account_setup
+
+        trade = TradeService.get(session, user_id, trade_id)
+        if not trade:
+            return False, "Trade not found"
+        residual = TradeService.customer_outstanding(session, trade)
+        if residual <= 0:
+            return False, "Nothing outstanding to write off"
+        if residual > threshold:
+            return False, f"Balance {residual} exceeds the write-off limit ({threshold})"
+
+        purchaser = session.get(Party, trade.purchaser_id)
+        if not purchaser:
+            return False, "Purchaser not found"
+        cust_acct = account_setup.sync_party_account(session, user_id, purchaser)
+
+        # Expense account: reuse "Other Expenses" (5901); create under 5900 if
+        # a business has renamed/removed it.
+        exp = session.exec(
+            select(Account).where(Account.user_id == user_id, Account.code == "5901")
+        ).first()
+        if not exp:
+            exp = session.exec(
+                select(Account).where(
+                    Account.user_id == user_id, Account.name == "Other Expenses"
+                )
+            ).first()
+        if not exp:
+            exp = account_setup.create_account(
+                session, user_id, name="Discounts & Write-offs",
+                subclass_code="5900", description="Small residual write-offs",
+            )
+
+        PostingEngine.post(
+            session, user_id, entry_date=date.today(),
+            entry_type=JournalEntryType.EXPENSE,
+            description=f"{trade.reference} residual write-off [writeoff-residual]",
+            lines=[
+                {"account_id": exp.id, "debit": residual, "credit": ZERO,
+                 "description": f"Residual under-collection written off — {trade.reference}"},
+                {"account_id": cust_acct.id, "debit": ZERO, "credit": residual,
+                 "description": f"Clear residual receivable — {trade.reference}",
+                 "party_id": purchaser.id},
+            ],
+            trade_id=trade.id,
+        )
+        session.flush()
+        session.refresh(trade)
+        TradeService._refresh_status(trade, session)
+        trade.updated_at = datetime.utcnow()
+        session.add(trade)
+        session.commit()
+        return True, "written off"
 
 
 # ─────────────────────────── Receipts ───────────────────────────
@@ -972,16 +1118,12 @@ class ReceiptService:
                     if r.received_on == received_on:
                         same_day_existing[ln.id] = same_day_existing.get(ln.id, ZERO) + Decimal(r.received_qty)
             # same_day_existing now contains the NEW totals (including this insert).
-            TradeService._reverse_event_journals(
-                session, trade, received_on, reason="Receipt updated",
-            )
+            TradeService._purge_event_journals(session, trade, received_on)
             TradeService._post_event_journals(session, trade, received_on, same_day_existing)
             # If trade was already Mark Complete'd, the residual on delivered_at
             # may have shrunk — re-post.
             if trade.delivered_at:
-                TradeService._reverse_event_journals(
-                    session, trade, trade.delivered_at, reason="Receipt updated",
-                )
+                TradeService._purge_event_journals(session, trade, trade.delivered_at)
                 residual: dict[int, Decimal] = {}
                 for ln in trade.lines:
                     rem = Decimal(ln.quantity) - ReceiptService.line_received_total(session, ln.id)
@@ -1013,9 +1155,7 @@ class ReceiptService:
 
         # Reverse this date's event journals, then re-post for any receipts
         # that remain on the same date.
-        TradeService._reverse_event_journals(
-            session, trade, event_date, reason="Receipt deleted",
-        )
+        TradeService._purge_event_journals(session, trade, event_date)
         remaining: dict[int, Decimal] = {}
         for ln in trade.lines:
             for rcpt in (ln.receipts or []):
@@ -1027,9 +1167,7 @@ class ReceiptService:
         # If trade was Mark Complete'd, the residual on delivered_at grew —
         # refresh that event too.
         if trade.delivered_at and trade.delivered_at != event_date:
-            TradeService._reverse_event_journals(
-                session, trade, trade.delivered_at, reason="Receipt deleted",
-            )
+            TradeService._purge_event_journals(session, trade, trade.delivered_at)
             residual: dict[int, Decimal] = {}
             for ln in trade.lines:
                 rem = Decimal(ln.quantity) - ReceiptService.line_received_total(session, ln.id)
@@ -1051,24 +1189,35 @@ class PaymentService:
         session: Session,
         user_id: int,
         trade_id: int,
-        cash_account_id: int,
-        direction: PaymentDirection,
-        amount: Decimal,
+        cash_account_id: Optional[int] = None,
+        direction: PaymentDirection = PaymentDirection.INBOUND,
+        amount: Decimal = Decimal("0"),
         paid_on: Optional[date] = None,
         method: Optional[str] = None,
         reference: Optional[str] = None,
         notes: Optional[str] = None,
+        gl_account_id: Optional[int] = None,
     ) -> Optional[TradePayment]:
         trade = TradeService.get(session, user_id, trade_id)
         if not trade:
             return None
-        account = CashAccountService.get(session, user_id, cash_account_id)
-        if not account:
+        account = None
+        gl_account = None
+        if cash_account_id is not None:
+            account = CashAccountService.get(session, user_id, cash_account_id)
+            if not account:
+                return None
+        elif gl_account_id is not None:
+            gl_account = session.get(Account, gl_account_id)
+            if not gl_account or gl_account.user_id != user_id:
+                return None
+        else:
             return None
         p = TradePayment(
             user_id=user_id,
             trade_id=trade.id,
-            cash_account_id=account.id,
+            cash_account_id=account.id if account else None,
+            account_id=gl_account.id if gl_account else None,
             direction=direction,
             amount=Decimal(str(amount)),
             paid_on=paid_on or date.today(),
@@ -1079,17 +1228,17 @@ class PaymentService:
         session.add(p)
         session.flush()
         session.refresh(trade)
-        TradeService._refresh_status(trade)
+        TradeService._refresh_status(trade, session)
         trade.updated_at = datetime.utcnow()
         session.add(trade)
         session.commit()
         session.refresh(p)
 
-        # Post the cash-side journal entry.
-        if account.kind != "capital":
+        # Post the money-side journal entry against the chosen ledger account.
+        if gl_account is not None or account.kind != "capital":
             from services.posting import PostingEngine
             from services import account_setup
-            cash_acct = account_setup.sync_cash_account(session, user_id, account)
+            cash_acct = gl_account if gl_account is not None else account_setup.sync_cash_account(session, user_id, account)
             party = session.get(
                 Party,
                 trade.purchaser_id if direction == PaymentDirection.INBOUND else trade.vendor_id,
@@ -1148,7 +1297,7 @@ class PaymentService:
         session.flush()
         if trade:
             session.refresh(trade)
-            TradeService._refresh_status(trade)
+            TradeService._refresh_status(trade, session)
             session.add(trade)
         session.commit()
         return True
@@ -1396,11 +1545,13 @@ class TradeReportService:
                 outstanding_payable -= _balance_asof(session, a.id, None)
 
         # ── Overdue is still per-trade (uses customer_due_date) ──────────
+        # Net out customer-paid costs and write-offs (not just cash) so a trade
+        # settled via bilty/adjustment doesn't linger as a phantom overdue.
         overdue_receivable = ZERO
         for t in trades:
-            if t.status == TradeStatus.CANCELLED:
+            if t.status in (TradeStatus.CANCELLED, TradeStatus.PAID, TradeStatus.CLOSED):
                 continue
-            ar = Decimal(t.total_sale) - Decimal(t.paid_by_customer)
+            ar = TradeService.customer_outstanding(session, t)
             if ar > 0 and t.customer_due_date and t.customer_due_date < today:
                 overdue_receivable += ar
 
@@ -1879,11 +2030,13 @@ class TradeReportService:
         for t in trades:
             if t.status in (TradeStatus.CANCELLED, TradeStatus.CLOSED):
                 continue
-            # Once a trade is marked Delivered (or beyond), the vendor side is
-            # complete — Mark Complete reconciles line.quantity to actual qty
-            # received, so there's no "pending" to chase. Only OPEN trades can
-            # have qty still owed by the vendor.
-            if t.status != TradeStatus.OPEN:
+            # A trade with delivered_at set went through Mark Complete — its
+            # residual (ordered − received) was posted as delivered, so nothing
+            # is still owed by the vendor. Trades still awaiting full delivery
+            # (delivered_at is None) CAN have pending qty regardless of their
+            # PAYMENT status: a customer payment flips status to partially_paid
+            # without the vendor having delivered everything.
+            if t.delivered_at is not None:
                 continue
             vendor = session.get(Party, t.vendor_id) if t.vendor_id else None
             customer = session.get(Party, t.purchaser_id) if t.purchaser_id else None

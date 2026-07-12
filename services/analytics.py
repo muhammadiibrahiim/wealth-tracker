@@ -26,6 +26,80 @@ from services.ledger import balance_asof, profit_and_loss
 ZERO = Decimal("0")
 
 
+def _weighted_payment_lag(session, account_ids: list[int], invoice_is_debit: bool,
+                          as_of: Optional[date] = None):
+    """Real payment speed from the LEDGER, not a balance proxy.
+
+    FIFO-matches each payment against the invoice it settles, PER ACCOUNT (a
+    customer's receipt only pays down that customer's invoices), and returns the
+    amount-weighted average lag in days. Advance payments (paid before the
+    invoice exists) contribute a NEGATIVE lag, so a business that pays vendors
+    up-front shows a DPO near — or below — zero, matching reality.
+
+    invoice_is_debit=True for A/R  (sale = debit, receipt = credit)
+    invoice_is_debit=False for A/P (purchase = credit, payment = debit)
+    Returns (weighted_avg_lag_days | None, matched_amount).
+    """
+    from collections import deque
+    total_weighted = ZERO
+    total_matched = ZERO
+    for aid in account_ids:
+        q = (
+            select(JournalEntry.entry_date, JournalLine.debit, JournalLine.credit)
+            .select_from(JournalLine)
+            .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+            .where(
+                JournalLine.account_id == aid,
+                JournalEntry.is_reversed == False,  # noqa: E712
+                JournalEntry.entry_type != JournalEntryType.REVERSAL,
+            )
+        )
+        if as_of is not None:
+            q = q.where(JournalEntry.entry_date <= as_of)
+        rows = session.exec(q.order_by(JournalEntry.entry_date, JournalEntry.id)).all()
+
+        inv_q: deque = deque()  # unmatched invoices (date, amount)
+        pay_q: deque = deque()  # unmatched payments (date, amount)
+        for edate, debit, credit in rows:
+            debit = Decimal(debit or 0)
+            credit = Decimal(credit or 0)
+            inv_amt = debit if invoice_is_debit else credit
+            pay_amt = credit if invoice_is_debit else debit
+
+            if inv_amt > 0:
+                amt = inv_amt
+                while amt > 0 and pay_q:          # settle against any advances first
+                    pdate, pamt = pay_q[0]
+                    m = min(amt, pamt)
+                    total_weighted += m * Decimal((pdate - edate).days)  # advance → negative
+                    total_matched += m
+                    amt -= m
+                    if pamt - m == 0:
+                        pay_q.popleft()
+                    else:
+                        pay_q[0] = (pdate, pamt - m)
+                if amt > 0:
+                    inv_q.append((edate, amt))
+            if pay_amt > 0:
+                amt = pay_amt
+                while amt > 0 and inv_q:          # settle oldest open invoice first
+                    idate, iamt = inv_q[0]
+                    m = min(amt, iamt)
+                    total_weighted += m * Decimal((edate - idate).days)  # on/after → positive
+                    total_matched += m
+                    amt -= m
+                    if iamt - m == 0:
+                        inv_q.popleft()
+                    else:
+                        inv_q[0] = (idate, iamt - m)
+                if amt > 0:
+                    pay_q.append((edate, amt))
+
+    if total_matched > 0:
+        return (total_weighted / total_matched), total_matched
+    return None, ZERO
+
+
 def _sum_balance(session: Session, account_ids: list[int], as_of: Optional[date] = None) -> Decimal:
     return sum((balance_asof(session, aid, as_of) for aid in account_ids), ZERO)
 
@@ -129,16 +203,30 @@ def customer_profitability(session, user_id, from_date=None, to_date=None) -> di
         if to_date: rev_q = rev_q.where(JournalEntry.entry_date <= to_date)
         revenue = Decimal(session.exec(rev_q).one() or 0)
 
-        cogs_q = select(func.coalesce(func.sum(TradeLine.quantity * TradeLine.unit_cost), 0)).select_from(
-            TradeLine
-        ).join(Trade, TradeLine.trade_id == Trade.id).where(
-            Trade.user_id == user_id,
-            Trade.purchaser_id == c.id,
-            Trade.status != TradeStatus.CANCELLED,
-        )
-        if from_date: cogs_q = cogs_q.where(Trade.trade_date >= from_date)
-        if to_date: cogs_q = cogs_q.where(Trade.trade_date <= to_date)
-        cogs = Decimal(session.exec(cogs_q).one() or 0)
+        # COGS on the SAME basis as revenue — the cost of goods actually
+        # DELIVERED, taken from PURCHASE journal entries (posted per delivery
+        # event, mirroring sales). Using full-order quantity×cost here would
+        # count undelivered trades' cost against delivered revenue and make GP
+        # wildly (and wrongly) negative.
+        ctrade_ids = [t.id for t in session.exec(
+            select(Trade).where(
+                Trade.user_id == user_id,
+                Trade.purchaser_id == c.id,
+                Trade.status != TradeStatus.CANCELLED,
+            )
+        ).all()]
+        cogs = ZERO
+        if ctrade_ids:
+            cogs_q = select(func.coalesce(func.sum(JournalLine.debit), 0)).select_from(
+                JournalLine
+            ).join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id).where(
+                JournalEntry.trade_id.in_(ctrade_ids),
+                JournalEntry.entry_type == JournalEntryType.PURCHASE,
+                JournalEntry.is_reversed == False,  # noqa: E712
+            )
+            if from_date: cogs_q = cogs_q.where(JournalEntry.entry_date >= from_date)
+            if to_date: cogs_q = cogs_q.where(JournalEntry.entry_date <= to_date)
+            cogs = Decimal(session.exec(cogs_q).one() or 0)
         gp = revenue - cogs
         gp_pct = (gp / revenue * 100) if revenue > 0 else ZERO
 
@@ -324,8 +412,22 @@ def working_capital_metrics(session, user_id, as_of=None, period_days=365) -> di
     sales = pl["total_income"]
     cogs = pl["total_cogs"]
 
-    ar_balance = _sum_balance(session, [a.id for a in _accounts_in_subclass(session, user_id, "1200")], as_of)
-    ap_balance = -_sum_balance(session, [a.id for a in _accounts_in_subclass(session, user_id, "2100")], as_of)
+    # Scope receivables/payables to the parties we actually TRADE with — the
+    # party that appears as a trade's purchaser (AR) or vendor (AP). This keeps
+    # the funding/equity ledgers (Capital A/C, CEO) — which live under Accounts
+    # Payable but aren't trade payables — out of AR/AP, and correctly counts a
+    # customer's receivable even if their ledger sits under the AP subclass.
+    trade_rows = session.exec(
+        select(Trade.vendor_id, Trade.purchaser_id).where(Trade.user_id == user_id)
+    ).all()
+    vendor_pids = {v for v, _ in trade_rows if v}
+    customer_pids = {c for _, c in trade_rows if c}
+    parties = list(session.exec(select(Party).where(Party.user_id == user_id)).all())
+    ar_ids = [p.account_id for p in parties if p.id in customer_pids and p.account_id]
+    ap_ids = [p.account_id for p in parties if p.id in vendor_pids and p.account_id]
+
+    ar_balance = _sum_balance(session, ar_ids, as_of)          # customers owe us (DR+)
+    ap_balance = -_sum_balance(session, ap_ids, as_of)         # we owe vendors (CR+ → flip)
     cash       = _sum_balance(session, [a.id for a in _accounts_in_subclass(session, user_id, "1100")], as_of)
 
     # Strip opening balances out of AR/AP so the DSO/DPO denominator is
@@ -358,11 +460,17 @@ def working_capital_metrics(session, user_id, as_of=None, period_days=365) -> di
         elif delta < 0:
             operating_ap += -delta
 
-    # Need at least a token amount of in-period sales / cogs before the ratio is
-    # meaningful — otherwise dividing a big AR by tiny sales gives 900+ days.
-    min_for_ratio = Decimal("1000")     # less than Rs 1k of activity → "—"
-    dso = (operating_ar / sales * period_days) if sales >= min_for_ratio else None
-    dpo = (operating_ap / cogs  * period_days) if cogs  >= min_for_ratio else None
+    # DSO / DPO from the ledger — the REAL average lag between an invoice and
+    # the payment that settles it (FIFO-matched per party). Advance payments
+    # count as negative days. This reflects actual payment behaviour instead of
+    # the old balance-÷-flow proxy, which reported nonsense (e.g. 88-day DPO for
+    # a business that pays vendors up-front).
+    # DSO/DPO reuse the trade-scoped AR/AP account ids computed above.
+    min_matched = Decimal("1000")       # need >Rs 1k of settled flow to be meaningful
+    dso_raw, dso_matched = _weighted_payment_lag(session, ar_ids, invoice_is_debit=True, as_of=as_of)
+    dpo_raw, dpo_matched = _weighted_payment_lag(session, ap_ids, invoice_is_debit=False, as_of=as_of)
+    dso = dso_raw if (dso_raw is not None and dso_matched >= min_matched) else None
+    dpo = dpo_raw if (dpo_raw is not None and dpo_matched >= min_matched) else None
     ccc = (dso - dpo) if (dso is not None and dpo is not None) else None
 
     current_assets = cash + ar_balance
@@ -387,7 +495,128 @@ def working_capital_metrics(session, user_id, as_of=None, period_days=365) -> di
         "current_ratio": round(float(current_ratio), 2) if current_ratio is not None else None,
         # Tag the metric as low-confidence when there's < 60 days of sales history
         # (the user can see the warning in the dashboard tile).
-        "limited_history": sales < min_for_ratio or cogs < min_for_ratio,
+        "limited_history": dso is None or dpo is None,
+    }
+
+
+def _bilty_by_trade(session, user_id) -> dict:
+    """Per-trade total of customer/self-paid bilty (delivery freight), read from
+    the P&L A/C (3903) debit side of active bilty EXPENSE entries."""
+    pl = session.exec(
+        select(Account).where(Account.user_id == user_id, Account.code == "3903")
+    ).first()
+    out: dict[int, Decimal] = {}
+    if not pl:
+        return out
+    rows = session.exec(
+        select(JournalEntry.trade_id, func.coalesce(func.sum(JournalLine.debit), 0))
+        .select_from(JournalLine)
+        .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+        .where(
+            JournalEntry.user_id == user_id,
+            JournalEntry.entry_type == JournalEntryType.EXPENSE,
+            JournalEntry.is_reversed == False,  # noqa: E712
+            JournalEntry.description.like("%[bilty-for:%"),
+            JournalLine.account_id == pl.id,
+        )
+        .group_by(JournalEntry.trade_id)
+    ).all()
+    for tid, amt in rows:
+        if tid is not None:
+            out[tid] = Decimal(amt or 0)
+    return out
+
+
+def time_based_performance(session, user_id, as_of=None) -> dict:
+    """Year-to-date, month-to-date, average-monthly profit, and the capital
+    efficiency metric: net profit earned per Rs of capital per 30 days, using
+    each trade's REAL holding period (deploy → collect). Late/unpaid collections
+    stretch the holding period, which lowers the per-30-day return — so the
+    number automatically reflects payment timing.
+    """
+    as_of = as_of or date.today()
+    year_start = date(as_of.year, 1, 1)
+    month_start = as_of.replace(day=1)
+    realised = (
+        TradeStatus.DELIVERED, TradeStatus.PARTIALLY_PAID,
+        TradeStatus.PAID, TradeStatus.CLOSED,
+    )
+
+    trades = list(session.exec(
+        select(Trade).where(Trade.user_id == user_id, Trade.status != TradeStatus.CANCELLED)
+    ).all())
+    bilty = _bilty_by_trade(session, user_id)
+
+    def net_profit(t) -> Decimal:
+        return (Decimal(t.total_sale) - Decimal(t.total_cost) - bilty.get(t.id, ZERO))
+
+    ytd_sales = ytd_profit = ZERO
+    mtd_sales = mtd_profit = ZERO
+    first_trade_date = None
+
+    # Capital-efficiency accumulators (rupee-day weighted).
+    total_net = ZERO
+    rupee_days = ZERO
+    cap_sum = ZERO
+    weighted_days = ZERO
+
+    for t in trades:
+        if first_trade_date is None or t.trade_date < first_trade_date:
+            first_trade_date = t.trade_date
+        if t.trade_date >= year_start:
+            ytd_sales += Decimal(t.total_sale)
+            if t.status in realised:
+                ytd_profit += net_profit(t)
+        if t.trade_date >= month_start:
+            mtd_sales += Decimal(t.total_sale)
+            if t.status in realised:
+                mtd_profit += net_profit(t)
+
+        if t.status in realised:
+            capital = Decimal(t.total_cost)
+            if capital <= 0:
+                continue
+            # Collection date = latest customer payment if fully collected,
+            # else today (money still tied up → holding period keeps growing).
+            fully_paid = Decimal(t.paid_by_customer) >= Decimal(t.total_sale) and t.total_sale > 0
+            inbound_dates = [p.paid_on for p in t.payments
+                             if p.direction == PaymentDirection.INBOUND and p.paid_on]
+            if fully_paid and inbound_dates:
+                collect = max(inbound_dates)
+            else:
+                collect = as_of
+            holding = max(1, (collect - t.trade_date).days)
+            npf = net_profit(t)
+            total_net += npf
+            rupee_days += capital * holding
+            cap_sum += capital
+            weighted_days += capital * holding
+
+    # Average monthly profit — total realised profit ÷ months in business.
+    all_time_profit = sum((net_profit(t) for t in trades if t.status in realised), ZERO)
+    if first_trade_date:
+        months_active = (as_of.year - first_trade_date.year) * 12 + (as_of.month - first_trade_date.month) + 1
+    else:
+        months_active = 1
+    months_active = max(1, months_active)
+    avg_monthly_profit = all_time_profit / months_active
+
+    return_per_rs_30d = (total_net / rupee_days * 30) if rupee_days > 0 else ZERO
+    avg_holding_days = (weighted_days / cap_sum) if cap_sum > 0 else ZERO
+
+    return {
+        "as_of": as_of,
+        "ytd_sales": ytd_sales.quantize(Decimal("0.01")),
+        "ytd_profit": ytd_profit.quantize(Decimal("0.01")),
+        "mtd_sales": mtd_sales.quantize(Decimal("0.01")),
+        "mtd_profit": mtd_profit.quantize(Decimal("0.01")),
+        "avg_monthly_profit": avg_monthly_profit.quantize(Decimal("0.01")),
+        "months_active": months_active,
+        "return_per_rs_30d": return_per_rs_30d.quantize(Decimal("0.0001")),
+        "return_pct_30d": (return_per_rs_30d * 100).quantize(Decimal("0.01")),
+        "avg_holding_days": avg_holding_days.quantize(Decimal("0.1")),
+        "capital_working": cap_sum.quantize(Decimal("0.01")),
+        "realised_profit": total_net.quantize(Decimal("0.01")),
     }
 
 
@@ -407,6 +636,32 @@ def capital_utilization(session, user_id, as_of=None) -> dict:
     pl = profit_and_loss(session, user_id, from_date=as_of - timedelta(days=365), to_date=as_of)
     trailing_ni = pl["net_income"]
     roce = (trailing_ni / capital_deployed * 100) if capital_deployed > 0 else ZERO
+
+    # ── Invested capital & ROI ─────────────────────────────────────────
+    # The owner's money in the business sits in two ledger accounts:
+    #   • the funding account (CEO) — cash the owner actually injected;
+    #   • the Capital A/C — trading profit earned and retained inside.
+    # ROI is measured against that total stake. Accounts are matched by name
+    # (they live under Accounts Payable in this chart), with graceful fallback
+    # if a business renamed them.
+    def _acct_balance_by_name(*names) -> Decimal:
+        total = ZERO
+        for a in session.exec(
+            select(Account).where(Account.user_id == user_id)
+        ).all():
+            nm = (a.name or "").strip().lower()
+            if any(nm == n.lower() for n in names):
+                total += -balance_asof(session, a.id, as_of)  # credit-positive
+        return total
+
+    funding = _acct_balance_by_name("Ibrahim (CEO)", "CEO", "Funding")
+    retained = _acct_balance_by_name("Capital A/C", "Capital")
+    invested_capital = (funding + retained).quantize(Decimal("0.01"))
+    # Return per rupee of money in the business, annualised over trailing 12 mo.
+    roi_pct = (trailing_ni / invested_capital * 100) if invested_capital > 0 else ZERO
+    # Total profit earned per rupee the owner funded, since inception.
+    roi_since_inception = (retained / funding * 100) if funding > 0 else ZERO
+
     return {
         "as_of": as_of,
         "components": [
@@ -418,49 +673,340 @@ def capital_utilization(session, user_id, as_of=None) -> dict:
         "equity_total": equity_total.quantize(Decimal("0.01")),
         "trailing_net_income": trailing_ni,
         "roce_pct": roce.quantize(Decimal("0.01")),
+        "funding_ceo": funding.quantize(Decimal("0.01")),
+        "retained_capital": retained.quantize(Decimal("0.01")),
+        "invested_capital": invested_capital,
+        "roi_pct": roi_pct.quantize(Decimal("0.01")),
+        "roi_since_inception_pct": roi_since_inception.quantize(Decimal("0.01")),
     }
 
 
 # ──────────────────────── Bank Position Forecast ────────────────────────
 
 
+def _avg_delivery_lag_days(session, user_id, vendor_id, default=7) -> int:
+    """Average days from trade creation to goods arriving, for a vendor —
+    learned from history so we can predict when open orders will deliver."""
+    trades = list(session.exec(select(Trade).where(
+        Trade.user_id == user_id, Trade.vendor_id == vendor_id
+    )).all())
+    lags = []
+    for t in trades:
+        deliv = t.delivered_at
+        if not deliv:
+            recs = [r.received_on for ln in t.lines for r in (ln.receipts or [])]
+            deliv = min(recs) if recs else None
+        if deliv and t.trade_date:
+            lags.append(max(0, (deliv - t.trade_date).days))
+    return round(sum(lags) / len(lags)) if lags else default
+
+
+def _vendor_delivery_profile(session, user_id, vendor_id):
+    """Learn a vendor's PARTIAL-delivery pattern from history so open orders can
+    be projected as batches, not a single dump:
+      • first_lag  — avg days from trade open to the first batch
+      • batch_qty  — avg pcs per delivery batch (None if no receipt history)
+      • interval   — avg days between consecutive batches
+    """
+    trades = list(session.exec(select(Trade).where(
+        Trade.user_id == user_id, Trade.vendor_id == vendor_id
+    )).all())
+    first_lags, batch_qtys, intervals = [], [], []
+    for t in trades:
+        recs = sorted(
+            [r for ln in t.lines for r in (ln.receipts or [])],
+            key=lambda r: r.received_on,
+        )
+        if not recs:
+            if t.delivered_at:
+                first_lags.append(max(0, (t.delivered_at - t.trade_date).days))
+            continue
+        first_lags.append(max(0, (recs[0].received_on - t.trade_date).days))
+        for r in recs:
+            batch_qtys.append(Decimal(str(r.received_qty)))
+        for a, b in zip(recs, recs[1:]):
+            intervals.append(max(1, (b.received_on - a.received_on).days))
+    first_lag = round(sum(first_lags) / len(first_lags)) if first_lags else 7
+    batch_qty = (sum(batch_qtys) / len(batch_qtys)) if batch_qtys else None
+    interval = round(sum(intervals) / len(intervals)) if intervals else 14
+    return first_lag, batch_qty, max(1, interval)
+
+
+def _last_delivery_date(session, user_id, vendor_id):
+    """Most recent date this vendor actually delivered anything — the anchor for
+    projecting the NEXT batch at their real cadence."""
+    dates = []
+    for t in session.exec(select(Trade).where(
+        Trade.user_id == user_id, Trade.vendor_id == vendor_id
+    )).all():
+        if t.delivered_at:
+            dates.append(t.delivered_at)
+        for ln in t.lines:
+            for r in (ln.receipts or []):
+                dates.append(r.received_on)
+    return max(dates) if dates else None
+
+
+def _avg_payment_lag_days(session, user_id, customer_id, fallback) -> int:
+    """Average days a customer ACTUALLY takes to pay after delivery — from
+    real receipts. Falls back to the nominal terms when there's no history.
+    (Terms say 25 days but they pay in 30–31? This captures the real number.)"""
+    trades = list(session.exec(select(Trade).where(
+        Trade.user_id == user_id, Trade.purchaser_id == customer_id
+    )).all())
+    lags = []
+    for t in trades:
+        if not t.delivered_at:
+            continue
+        pays = [p.paid_on for p in t.payments
+                if p.direction == PaymentDirection.INBOUND and p.paid_on]
+        if pays:
+            lags.append(max(0, (min(pays) - t.delivered_at).days))
+    return round(sum(lags) / len(lags)) if lags else int(fallback or 0)
+
+
 def bank_position_forecast(session, user_id, horizon_days=30) -> dict:
+    from services.trade import TradeService  # lazy import — avoid circular dep
     today = date.today()
     cash_today = _sum_balance(session, [a.id for a in _accounts_in_subclass(session, user_id, "1100")], today)
+    # The funding account (CEO) is the real cash conduit — every receipt and
+    # payment flows through it. Its balance (credit = money the owner has net
+    # advanced) is a NEGATIVE cash position for the business, i.e. a running
+    # draw on the owner. Include it so "cash today" reflects the true float
+    # instead of Rs 0. balance_asof returns DR−CR, so a credit balance comes
+    # through as the negative it should be.
+    for a in session.exec(select(Account).where(Account.user_id == user_id)).all():
+        nm = (a.name or "").strip().lower()
+        if nm in ("ibrahim (ceo)", "ceo", "funding"):
+            cash_today += balance_asof(session, a.id, today)
 
-    open_trades = list(session.exec(
-        select(Trade).where(
-            Trade.user_id == user_id, Trade.status.in_([
-                TradeStatus.OPEN, TradeStatus.DELIVERED, TradeStatus.PARTIALLY_PAID,
-            ])
-        )
-    ).all())
+    all_trades = list(session.exec(select(Trade).where(Trade.user_id == user_id)).all())
+    open_trades = [t for t in all_trades if t.status in (
+        TradeStatus.OPEN, TradeStatus.DELIVERED, TradeStatus.PARTIALLY_PAID,
+    )]
+
+    # ── Inflows, predicted from real behaviour ─────────────────────────────
+    # FIRM (goods already delivered): collection date = delivery + this
+    #   customer's AVERAGE actual payment lag (not the nominal terms).
+    # PROJECTED (open order, not yet delivered): predict the delivery date from
+    #   the vendor's average delivery lag, then add the customer's payment lag —
+    #   so upcoming deliverables and their value show up in the forecast.
+    inflows = []
+    proj_outflows = []   # projected vendor purchases for open-order batches
+    vendor_queue = {}    # vendor_id -> FIFO list of undelivered order chunks
+    for t in sorted(open_trades, key=lambda x: x.trade_date):
+        pay_lag = _avg_payment_lag_days(session, user_id, t.purchaser_id, t.customer_terms_days)
+
+        # Delivered value + the date of the latest delivery, for the firm part.
+        if t.delivered_at:
+            delivered_value = Decimal(t.total_sale)
+            deliv_date = t.delivered_at
+        else:
+            delivered_value = ZERO
+            recdates = []
+            for ln in t.lines:
+                for r in (ln.receipts or []):
+                    delivered_value += Decimal(r.received_qty) * Decimal(ln.unit_price)
+                    recdates.append(r.received_on)
+            deliv_date = max(recdates) if recdates else None
+
+        # FIRM: delivered goods not yet collected → pay at delivery + real lag.
+        firm_owed = (delivered_value - Decimal(t.paid_by_customer)
+                     - TradeService._customer_credits(session, t))
+        if firm_owed > 0 and deliv_date:
+            collect = deliv_date + timedelta(days=pay_lag)
+            inflows.append({"trade": t, "amount": firm_owed.quantize(Decimal("0.01")),
+                            "days_out": (collect - today).days, "due_date": collect,
+                            "kind": "delivered"})
+
+        # PROJECTED: collect undelivered goods into a per-vendor FIFO QUEUE.
+        # We DON'T schedule per-trade here — instead (below) each vendor delivers
+        # its whole backlog at its real throughput, oldest orders first. That
+        # way, if several orders are overdue, they clear over the coming weeks
+        # at the vendor's pace rather than all landing today.
+        und_qty = und_value = und_cost = ZERO
+        for ln in t.lines:
+            recv = sum((Decimal(r.received_qty) for r in (ln.receipts or [])), ZERO)
+            uq = Decimal(ln.quantity) - recv
+            if uq > 0:
+                und_qty += uq
+                und_value += uq * Decimal(ln.unit_price)
+                und_cost += uq * Decimal(ln.unit_cost)
+        if und_qty > 0:
+            vendor_queue.setdefault(t.vendor_id, []).append({
+                "trade": t, "qty": und_qty, "value": und_value,
+                "cost": und_cost, "pay_lag": pay_lag,
+            })
+
+    # ── Deliver each vendor's backlog at their real throughput ─────────────
+    # batch size + interval learned from history; the next batch is scheduled
+    # from the vendor's LAST actual delivery + interval (or today if they're
+    # already behind), then every interval after. Oldest orders fill first.
+    for vendor_id, queue in vendor_queue.items():
+        first_lag, batch_qty, interval = _vendor_delivery_profile(session, user_id, vendor_id)
+        total_und = sum((item["qty"] for item in queue), ZERO)
+        if not batch_qty or batch_qty <= 0:
+            batch_qty = total_und or Decimal("1")
+        last_deliv = _last_delivery_date(session, user_id, vendor_id)
+        if last_deliv:
+            first_batch = max(today, last_deliv + timedelta(days=interval))
+        else:
+            first_batch = today + timedelta(days=first_lag)
+        idx = 0
+        rem_item = queue[0]["qty"] if queue else ZERO
+        batch_no = 0
+        while idx < len(queue) and batch_no < 60:
+            est_delivery = first_batch + timedelta(days=int(batch_no * interval))
+            batch_rem = batch_qty
+            while batch_rem > 0 and idx < len(queue):
+                item = queue[idx]
+                take = min(batch_rem, rem_item)
+                frac = (take / item["qty"]) if item["qty"] else ZERO
+                cost_part = item["cost"] * frac
+                value_part = item["value"] * frac
+                proj_outflows.append({"label": vendor_id, "ref": item["trade"].reference,
+                                      "amount": cost_part.quantize(Decimal("0.01")),
+                                      "days_out": (est_delivery - today).days,
+                                      "due_date": est_delivery, "kind": "projected"})
+                collect = est_delivery + timedelta(days=item["pay_lag"])
+                inflows.append({"trade": item["trade"], "amount": value_part.quantize(Decimal("0.01")),
+                                "days_out": (collect - today).days, "due_date": collect,
+                                "kind": "projected"})
+                batch_rem -= take
+                rem_item -= take
+                if rem_item <= 0:
+                    idx += 1
+                    rem_item = queue[idx]["qty"] if idx < len(queue) else ZERO
+            batch_no += 1
+
+    # ── Outflows: what we ACTUALLY still owe each vendor, from the ledger — not
+    # total_cost. Vendor payments are made from the funding account (journal
+    # entries), so per-trade paid_to_vendor is 0 and would wildly overstate what
+    # is due. The true payable is the vendor's current credit balance. ──
+    vendor_pids = {t.vendor_id for t in all_trades if t.vendor_id}
+    parties = list(session.exec(select(Party).where(Party.user_id == user_id)).all())
+    vendor_name = {p.id: p.name for p in parties}
+    outflows = []
+    for p in parties:
+        if p.id not in vendor_pids or not p.account_id:
+            continue
+        owed = -balance_asof(session, p.account_id, today)   # CR-positive → we owe
+        if owed <= 0:
+            continue
+        vdues = [t.vendor_due_date for t in open_trades
+                 if t.vendor_id == p.id and t.vendor_due_date]
+        due = min(vdues) if vdues else today
+        outflows.append({"label": p.name, "amount": owed.quantize(Decimal("0.01")),
+                         "days_out": (due - today).days, "due_date": due,
+                         "kind": "delivered"})
+
+    # PROJECTED outflows: the per-batch cost of buying goods for open orders
+    # (built alongside the projected inflows above, at the vendor's real
+    # delivery cadence). Resolve the vendor id to a name for display.
+    for o in proj_outflows:
+        outflows.append({
+            "label": f"{vendor_name.get(o['label'], 'Vendor')} · {o['ref']}",
+            "amount": o["amount"], "days_out": o["days_out"],
+            "due_date": o["due_date"], "kind": "projected",
+        })
 
     buckets = {30: cash_today, 60: cash_today, 90: cash_today}
-    inflows, outflows = [], []
-    for t in open_trades:
-        ar_due = Decimal(t.total_sale) - Decimal(t.paid_by_customer)
-        ap_due = Decimal(t.total_cost) - Decimal(t.paid_to_vendor)
-        if ar_due > 0 and t.customer_due_date:
-            inflows.append({"trade": t, "amount": ar_due, "days_out": (t.customer_due_date - today).days, "due_date": t.customer_due_date})
-        if ap_due > 0 and t.vendor_due_date:
-            outflows.append({"trade": t, "amount": ap_due, "days_out": (t.vendor_due_date - today).days, "due_date": t.vendor_due_date})
-
     for h in buckets:
         for f in inflows:
-            if f["days_out"] <= h: buckets[h] += f["amount"]
+            if f["days_out"] <= h:
+                buckets[h] += f["amount"]
         for o in outflows:
-            if o["days_out"] <= h: buckets[h] -= o["amount"]
+            if o["days_out"] <= h:
+                buckets[h] -= o["amount"]
 
     inflows.sort(key=lambda r: r["days_out"])
     outflows.sort(key=lambda r: r["days_out"])
+    # Warn only if the position drops BELOW where it is today (a genuine extra
+    # shortfall needing more funding) — not merely because deployed capital
+    # leaves the float negative while it's still recovering.
+    floor = min(cash_today, ZERO)
     return {
         "today": today,
         "cash_today": cash_today.quantize(Decimal("0.01")),
         "projected": {h: v.quantize(Decimal("0.01")) for h, v in buckets.items()},
-        "inflows": inflows[:50],
-        "outflows": outflows[:50],
-        "negative_at": next((h for h, v in buckets.items() if v < 0), None),
+        "inflows": inflows,
+        "outflows": outflows,
+        "negative_at": next((h for h in sorted(buckets) if buckets[h] < floor), None),
+    }
+
+
+def daily_cash_requirement(session, user_id, horizon_days=30) -> dict:
+    """Day-by-day cash requirement, starting from ZERO cash (the owner's CEO
+    funding is deliberately ignored — this answers 'how much external cash must
+    I put in, and when'). Reuses the smart batch-based inflows/outflows: each
+    day nets collections against payments; whenever the running balance dips
+    below zero, that dip is cash you must inject by that day.
+    """
+    fc = bank_position_forecast(session, user_id)
+    today = date.today()
+    end = today + timedelta(days=horizon_days)
+
+    # Bucket each cash event onto a day; overdue items land on today.
+    per_day: dict = {}
+    for f in fc["inflows"]:
+        d = f["due_date"] if f["due_date"] > today else today
+        if d <= end:
+            per_day.setdefault(d, {"in": ZERO, "out": ZERO})["in"] += Decimal(f["amount"])
+    for o in fc["outflows"]:
+        d = o["due_date"] if o["due_date"] > today else today
+        if d <= end:
+            per_day.setdefault(d, {"in": ZERO, "out": ZERO})["out"] += Decimal(o["amount"])
+
+    rows = []
+    running = ZERO          # cash on hand assuming NO owner funding
+    peak_shortfall = ZERO   # cumulative funding needed so far
+    total_in = total_out = ZERO
+    d = today
+    while d <= end:
+        day = per_day.get(d, {"in": ZERO, "out": ZERO})
+        cin, cout = day["in"], day["out"]
+        net = cin - cout
+        running += net
+        total_in += cin
+        total_out += cout
+        shortfall = -running if running < 0 else ZERO
+        extra_today = shortfall - peak_shortfall if shortfall > peak_shortfall else ZERO
+        peak_shortfall = max(peak_shortfall, shortfall)
+        if cin or cout or d == today:   # keep active days (and always day 0)
+            rows.append({
+                "date": d,
+                "days_out": (d - today).days,
+                "cash_in": cin.quantize(Decimal("0.01")),
+                "cash_out": cout.quantize(Decimal("0.01")),
+                "net": net.quantize(Decimal("0.01")),
+                "running": running.quantize(Decimal("0.01")),
+                "extra_needed": extra_today.quantize(Decimal("0.01")),
+                "funding_to_date": shortfall.quantize(Decimal("0.01")),
+            })
+        d += timedelta(days=1)
+
+    # The day the funding requirement peaks (max cash you'll ever be down).
+    peak_day = None
+    running2 = ZERO
+    worst = ZERO
+    d = today
+    while d <= end:
+        day = per_day.get(d, {"in": ZERO, "out": ZERO})
+        running2 += day["in"] - day["out"]
+        if running2 < worst:
+            worst = running2
+            peak_day = d
+        d += timedelta(days=1)
+
+    return {
+        "today": today,
+        "horizon_days": horizon_days,
+        "rows": rows,
+        "peak_funding_needed": peak_shortfall.quantize(Decimal("0.01")),
+        "peak_day": peak_day,
+        "ending_balance": running.quantize(Decimal("0.01")),
+        "total_in": total_in.quantize(Decimal("0.01")),
+        "total_out": total_out.quantize(Decimal("0.01")),
     }
 
 

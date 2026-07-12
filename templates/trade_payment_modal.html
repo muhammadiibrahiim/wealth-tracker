@@ -13,9 +13,9 @@
       <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
     </div>
 
-    {% if not accounts %}
+    {% if not accounts and not gl_groups %}
     <div class="accent-card" style="border-left-color: #ca8a04; background: #fef9c3;">
-      <p class="text-sm text-yellow-900">You need at least one cash account first. <a href="/trade/accounts" class="underline font-medium">Add one →</a></p>
+      <p class="text-sm text-yellow-900">You need at least one account first. <a href="/trade/accounts" class="underline font-medium">Add a cash account →</a></p>
     </div>
     {% else %}
     <form hx-post="/trade/trades/{{ trade.id }}/payments" class="space-y-4">
@@ -23,8 +23,17 @@
 
       <div>
         <label class="field-label field-label-required">{% if is_inbound %}Received Into Account{% else %}Paid From Account{% endif %}</label>
-        <select name="cash_account_id" required class="w-full px-3 py-2.5">
-          {% for a in accounts %}<option value="{{ a.id }}">{{ a.name }}{% if a.bank_name %} — {{ a.bank_name }}{% endif %}</option>{% endfor %}
+        <select name="account_ref" required class="w-full px-3 py-2.5">
+          {% if accounts %}
+          <optgroup label="Cash &amp; Bank Accounts">
+            {% for a in accounts %}<option value="cash:{{ a.id }}">{{ a.name }}{% if a.bank_name %} — {{ a.bank_name }}{% endif %}</option>{% endfor %}
+          </optgroup>
+          {% endif %}
+          {% for g in gl_groups %}
+          <optgroup label="{{ g.label }}">
+            {% for a in g.accounts %}<option value="gl:{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
+          </optgroup>
+          {% endfor %}
         </select>
       </div>
 

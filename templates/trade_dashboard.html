@@ -101,6 +101,38 @@
     </div>
   </div>
 
+  <!-- Profitability over time -->
+  <div>
+    <div class="stat-label mb-3">Profitability Over Time</div>
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div class="stat-card stat-card-sm" title="Profit booked so far this month">
+        <div class="stat-label">This Month (MTD)</div>
+        <div class="stat-value" style="color: {% if perf.mtd_profit >= 0 %}#1f6b4e{% else %}#a52e26{% endif %};"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(perf.mtd_profit) }}</div>
+        <div class="text-xs text-gray-500 mt-1">on {{ currency }} {{ '{:,.0f}'.format(perf.mtd_sales) }} sales</div>
+      </div>
+      <div class="stat-card stat-card-sm" title="Profit booked since 1 January">
+        <div class="stat-label">Year to Date (YTD)</div>
+        <div class="stat-value" style="color: {% if perf.ytd_profit >= 0 %}#1f6b4e{% else %}#a52e26{% endif %};"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(perf.ytd_profit) }}</div>
+        <div class="text-xs text-gray-500 mt-1">on {{ currency }} {{ '{:,.0f}'.format(perf.ytd_sales) }} sales</div>
+      </div>
+      <div class="stat-card stat-card-sm" title="Total realised profit ÷ months in business">
+        <div class="stat-label">Avg / Month</div>
+        <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(perf.avg_monthly_profit) }}</div>
+        <div class="text-xs text-gray-500 mt-1">over {{ perf.months_active }} month{{ 's' if perf.months_active != 1 }}</div>
+      </div>
+      <div class="stat-card stat-card-sm" style="border-color: #16a34a;" title="Net profit per Rs of capital per 30 days, using each trade's real deploy→collect period. Late/unpaid collections stretch the period and lower this number.">
+        <div class="stat-label">Return / Rs / 30 days</div>
+        <div class="stat-value" style="color: #1f6b4e;">{{ perf.return_pct_30d }}%</div>
+        <div class="text-xs text-gray-500 mt-1">Rs 1 earns {{ currency }} {{ '%.3f'|format(perf.return_per_rs_30d) }} /mo</div>
+      </div>
+      <div class="stat-card stat-card-sm" title="Average days your capital stays tied up per trade (buy → collect). This is what drags the return down when customers pay late.">
+        <div class="stat-label">Avg Money Tied Up</div>
+        <div class="stat-value">{{ perf.avg_holding_days }}<span class="text-base text-gray-500 ml-1">d</span></div>
+        <div class="text-xs text-gray-500 mt-1">per trade cycle</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Recent trades -->
   <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between" style="background: #fafaf9;">

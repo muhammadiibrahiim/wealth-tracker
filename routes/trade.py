@@ -1,6 +1,7 @@
 """
 Routes for the Trade module.
 """
+import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Optional
@@ -73,9 +74,10 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
     party_map = {p.id: p for p in parties}
     items = ItemService.list(session, user_id, active_only=True)
     accounts = CashAccountService.list(session, user_id, active_only=True)
-    from services.analytics import working_capital_metrics, capital_utilization
+    from services.analytics import working_capital_metrics, capital_utilization, time_based_performance
     wc = working_capital_metrics(session, user_id)
     cap = capital_utilization(session, user_id)
+    perf = time_based_performance(session, user_id)
     return templates.TemplateResponse(
         "trade_dashboard.html",
         _ctx(
@@ -89,6 +91,7 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
             today=date.today(),
             wc=wc,
             cap=cap,
+            perf=perf,
         ),
     )
 
@@ -287,11 +290,9 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
                 if ln.account_id == purchaser_acct_id and Decimal(ln.credit or 0) > 0:
                     customer_paid_costs += Decimal(ln.credit)
 
-    customer_outstanding = (
-        Decimal(trade.total_sale)
-        - Decimal(trade.paid_by_customer)
-        - customer_paid_costs
-    ).quantize(Decimal("0.01"))
+    # Use the shared helper so the button, the status badge and this number
+    # always agree — it nets cash received, customer-paid costs AND write-offs.
+    customer_outstanding = TradeService.customer_outstanding(session, trade)
 
     from models import TradeAttachment, TradeAttachmentKind
     attachments = list(session.exec(
@@ -347,6 +348,14 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
                 "terminal": terminal_name,
             }
 
+    # Net profit = line-item margin minus the direct costs of executing the
+    # trade: bilty (delivery freight) and Record Cost entries.
+    bilty_total = sum((b["amount"] for b in bilties_by_date.values()), Decimal("0"))
+    trade_costs_total = (total_cost_absorbed + bilty_total).quantize(Decimal("0.01"))
+    net_profit = (
+        Decimal(trade.total_sale) - Decimal(trade.total_cost) - trade_costs_total
+    ).quantize(Decimal("0.01"))
+
     return templates.TemplateResponse(
         "trade_detail.html",
         _ctx(
@@ -356,6 +365,8 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
             purchaser=purchaser,
             today=date.today(),
             customer_outstanding=customer_outstanding,
+            trade_costs_total=trade_costs_total,
+            net_profit=net_profit,
             vendor_outstanding=(Decimal(trade.total_cost) - Decimal(trade.paid_to_vendor)).quantize(Decimal("0.01")),
             costs=costs,
             total_cost_absorbed=total_cost_absorbed.quantize(Decimal("0.01")),
@@ -683,6 +694,32 @@ async def trade_invoice_pdf(trade_id: int, session: Session = Depends(get_sessio
             "description": desc,
             "amount": Decimal(payee_line.credit or 0),
         })
+    # Customer-paid bilties use a different shape than the "Record Cost" flow:
+    # EXPENSE entries tagged "{ref} <desc> [bilty-for:{date}] [paid-by-customer]".
+    bilty_entries = session.exec(
+        select(JournalEntry).where(
+            JournalEntry.user_id == user_id,
+            JournalEntry.trade_id == trade.id,
+            JournalEntry.entry_type == JournalEntryType.EXPENSE,
+            JournalEntry.description.like("%[bilty-for:%"),
+            JournalEntry.description.like("%[paid-by-customer]"),
+            JournalEntry.is_reversed == False,  # noqa: E712
+        ).order_by(JournalEntry.entry_date, JournalEntry.id)
+    ).all()
+    for e in bilty_entries:
+        payee_line = next((ln for ln in e.lines if ln.account_id == purchaser_acct_id), None)
+        if not payee_line or not purchaser_acct_id:
+            continue
+        desc = e.description or ""
+        if desc.startswith(trade.reference):
+            desc = desc[len(trade.reference):].strip()
+        desc = re.sub(r"\s*\[bilty-for:[0-9-]+\]", "", desc).removesuffix("[paid-by-customer]").strip()
+        customer_paid_costs.append({
+            "entry_date": e.entry_date,
+            "description": desc or "Bilty",
+            "amount": Decimal(payee_line.credit or 0),
+        })
+    customer_paid_costs.sort(key=lambda c: c["entry_date"])
     customer_paid_costs_total = sum(
         (Decimal(c["amount"]) for c in customer_paid_costs), Decimal("0")
     )
@@ -878,6 +915,19 @@ async def payment_new_modal(
     if not trade:
         raise HTTPException(404, "Trade not found")
     accounts = [a for a in CashAccountService.list(session, user_id, active_only=True) if a.kind != "capital"]
+    # Every other ledger account is also selectable — a payment can land on any
+    # account (CEO's ledger, a party ledger, etc.), grouped for the dropdown.
+    cash_linked_ids = {a.account_id for a in accounts if a.account_id}
+    gl_groups = []
+    for cls_block in account_setup.list_accounts_grouped(session, user_id):
+        for sub_block in cls_block["subclasses"]:
+            sub = sub_block["subclass"]
+            accts = [a for a in sub_block["accounts"] if a.is_active and a.id not in cash_linked_ids]
+            if accts:
+                gl_groups.append({"label": f"{sub.code} · {sub.name}", "accounts": accts})
+        loose = [a for a in cls_block["accounts_without_subclass"] if a.is_active and a.id not in cash_linked_ids]
+        if loose:
+            gl_groups.append({"label": cls_block["class"].name, "accounts": loose})
     dirn = PaymentDirection.OUTBOUND if direction == "outbound" else PaymentDirection.INBOUND
     if dirn == PaymentDirection.INBOUND:
         default_amount = (Decimal(trade.total_sale) - Decimal(trade.paid_by_customer)).quantize(Decimal("0.01"))
@@ -889,6 +939,7 @@ async def payment_new_modal(
             request,
             trade=trade,
             accounts=accounts,
+            gl_groups=gl_groups,
             direction=dirn.value,
             default_amount=default_amount if default_amount > 0 else Decimal("0.00"),
             today=date.today(),
@@ -900,7 +951,7 @@ async def payment_new_modal(
 async def payment_create(
     trade_id: int,
     direction: str = Form(...),
-    cash_account_id: int = Form(...),
+    account_ref: str = Form(...),
     amount: str = Form(...),
     paid_on: Optional[str] = Form(None),
     method: Optional[str] = Form(None),
@@ -912,12 +963,21 @@ async def payment_create(
     amt = _parse_decimal(amount, "0")
     if amt <= 0:
         raise HTTPException(400, "Amount must be greater than zero")
+    # account_ref is "cash:<id>" (managed cash/bank account) or "gl:<id>" (any ledger account)
+    try:
+        kind, raw_id = account_ref.split(":", 1)
+        ref_id = int(raw_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(400, "Invalid account selection")
+    if kind not in ("cash", "gl"):
+        raise HTTPException(400, "Invalid account selection")
     dirn = PaymentDirection.OUTBOUND if direction == "outbound" else PaymentDirection.INBOUND
-    PaymentService.record(
+    p = PaymentService.record(
         session,
         user_id,
         trade_id=trade_id,
-        cash_account_id=cash_account_id,
+        cash_account_id=ref_id if kind == "cash" else None,
+        gl_account_id=ref_id if kind == "gl" else None,
         direction=dirn,
         amount=amt,
         paid_on=_parse_date(paid_on),
@@ -925,6 +985,8 @@ async def payment_create(
         reference=(reference or "").strip() or None,
         notes=(notes or "").strip() or None,
     )
+    if p is None:
+        raise HTTPException(400, "Account not found")
     return _close_modal()
 
 
@@ -932,6 +994,18 @@ async def payment_create(
 async def payment_delete(payment_id: int, session: Session = Depends(get_session)):
     PaymentService.delete(session, DEFAULT_USER_ID, payment_id)
     return _close_modal()
+
+
+@router.post("/trades/{trade_id}/writeoff-residual")
+async def trade_writeoff_residual(trade_id: int, session: Session = Depends(get_session)):
+    """Write off a tiny remaining customer balance (< Rs 100) to expense and mark
+    the trade fully settled. Posts DR Other Expenses / CR customer A/R so the
+    receivable clears and the small under-collection lands in the P&L."""
+    user_id = DEFAULT_USER_ID
+    ok, msg = TradeService.writeoff_residual(session, user_id, trade_id, threshold=Decimal("100"))
+    if not ok:
+        raise HTTPException(400, msg)
+    return Response(status_code=204, headers={"HX-Redirect": f"/trade/trades/{trade_id}"})
 
 
 # ───────── parties ──────────────────────────────────────────────
@@ -1812,6 +1886,16 @@ async def reports_forecast(request: Request, session: Session = Depends(get_sess
     return templates.TemplateResponse("trade_report_forecast.html", _ctx(request, report=r))
 
 
+@router.get("/reports/daily-cash", response_class=HTMLResponse)
+async def reports_daily_cash(
+    request: Request, days: int = Query(30), session: Session = Depends(get_session)
+):
+    from services.analytics import daily_cash_requirement
+    days = max(7, min(int(days or 30), 120))
+    r = daily_cash_requirement(session, DEFAULT_USER_ID, horizon_days=days)
+    return templates.TemplateResponse("trade_report_daily_cash.html", _ctx(request, report=r, days=days))
+
+
 @router.get("/reports/trade-profitability", response_class=HTMLResponse)
 async def reports_trade_profitability(
     request: Request,
@@ -2671,6 +2755,10 @@ async def trade_bilty_post(
             existing_close = _find_bilty_close()
             if existing_close is not None:
                 session.delete(existing_close)
+            session.flush()
+            session.refresh(trade)
+            TradeService._refresh_status(trade, session)
+            session.add(trade)
             session.commit()
         return _close_modal()
 
@@ -2832,6 +2920,11 @@ async def trade_bilty_post(
             existing_close.entry_date = d
             existing_close.description = close_desc
 
+    # Bilty changes what counts as settled — recompute the trade's status.
+    session.flush()
+    session.refresh(trade)
+    TradeService._refresh_status(trade, session)
+    session.add(trade)
     session.commit()
     return _close_modal()
 

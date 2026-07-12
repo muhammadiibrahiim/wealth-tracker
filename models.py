@@ -697,7 +697,14 @@ class TradePayment(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     trade_id: int = Field(sa_column=Column(ForeignKey("trades.id", ondelete="CASCADE")))
-    cash_account_id: int = Field(sa_column=Column(ForeignKey("trade_cash_accounts.id")))
+    # Exactly one of cash_account_id / account_id is set: a payment lands either
+    # in a managed cash/bank account or directly on any GL ledger account.
+    cash_account_id: Optional[int] = Field(
+        default=None, sa_column=Column(ForeignKey("trade_cash_accounts.id"), nullable=True)
+    )
+    account_id: Optional[int] = Field(
+        default=None, sa_column=Column(ForeignKey("accounts.id"), nullable=True)
+    )
     direction: PaymentDirection = Field(sa_column=Column(String(20)))
     amount: Decimal = Field(sa_column=Column(DECIMAL(15, 2)))
     paid_on: date = Field(default_factory=date.today, sa_column=Column(Date))
@@ -708,6 +715,7 @@ class TradePayment(SQLModel, table=True):
 
     trade: Optional[Trade] = Relationship(back_populates="payments")
     cash_account: Optional[CashAccount] = Relationship(back_populates="payments")
+    gl_account: Optional["Account"] = Relationship()
 
     __table_args__ = (
         Index("idx_trade_payment_trade", "trade_id"),

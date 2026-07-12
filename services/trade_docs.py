@@ -349,7 +349,7 @@ def _lines_table(ctx: DocContext) -> TableSpec:
 
 def _payment_paragraph(ctx: DocContext) -> str:
     p = ctx.payment
-    cash_name = (p.cash_account.name if p.cash_account else "cash account")
+    cash_name = (p.cash_account.name if p.cash_account else (p.gl_account.name if p.gl_account else "cash account"))
     return (
         f"Received from <b>{ctx.purchaser.name}</b> on "
         f"<b>{p.paid_on.strftime('%B %d, %Y')}</b> the sum of "

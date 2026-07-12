@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Daily Cash Requirement{% endblock %}
+{% block content %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Daily Cash Requirement</h1>
+      <p class="page-subtitle">How much cash you need to put in, day by day — starting from zero (owner/CEO funding ignored). Each day nets expected collections against vendor payments; whenever the running balance dips below zero, that dip is cash you must inject by that day. Deliveries are projected batch-by-batch at each vendor's real cadence.</p>
+    </div>
+    <a href="/trade/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <form method="get" class="flex items-end gap-4 flex-wrap">
+      <div><label class="field-label">Horizon (days)</label>
+        <input type="number" name="days" value="{{ days }}" min="7" max="120" class="px-3 py-2.5" style="width:120px;"></div>
+      <button type="submit" class="btn-primary">Generate</button>
+      <a href="/trade/reports/daily-cash" class="btn-secondary">Reset</a>
+    </form>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="stat-card" style="border-color: {% if report.peak_funding_needed > 0 %}#ea580c{% else %}#16a34a{% endif %};">
+      <div class="stat-label">Peak Cash Needed</div>
+      <div class="stat-value" style="color: {% if report.peak_funding_needed > 0 %}#c2410c{% else %}#15803d{% endif %};"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.peak_funding_needed) }}</div>
+      <div class="stat-foot text-gray-500">most you'd be down{% if report.peak_day %} · by {{ report.peak_day }}{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Ending Balance</div>
+      <div class="stat-value" style="color: {% if report.ending_balance < 0 %}#c2410c{% else %}#15803d{% endif %};"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.ending_balance) }}</div>
+      <div class="stat-foot text-gray-500">after {{ report.horizon_days }} days</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Cash In</div>
+      <div class="stat-value" style="color: #15803d;"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.total_in) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Cash Out</div>
+      <div class="stat-value" style="color: #b91c1c;"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.total_out) }}</div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200" style="background: #fafaf9;">
+      <h2>Day-by-Day</h2>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Date</th>
+          <th class="text-right">Day</th>
+          <th class="text-right">Cash In</th>
+          <th class="text-right">Cash Out</th>
+          <th class="text-right">Net</th>
+          <th class="text-right">Running (from 0)</th>
+          <th class="text-right">Extra Needed</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in report.rows %}
+        <tr {% if r.running < 0 %}style="background:#fff7ed;"{% endif %}>
+          <td class="text-gray-800 whitespace-nowrap font-medium">{{ r.date }}</td>
+          <td class="text-right text-gray-500 tabular-nums">{% if r.days_out == 0 %}today{% else %}+{{ r.days_out }}d{% endif %}</td>
+          <td class="text-right tabular-nums" style="color: {% if r.cash_in %}#15803d{% else %}#9ca3af{% endif %};">{% if r.cash_in %}+ {{ currency }} {{ '{:,.0f}'.format(r.cash_in) }}{% else %}—{% endif %}</td>
+          <td class="text-right tabular-nums" style="color: {% if r.cash_out %}#b91c1c{% else %}#9ca3af{% endif %};">{% if r.cash_out %}− {{ currency }} {{ '{:,.0f}'.format(r.cash_out) }}{% else %}—{% endif %}</td>
+          <td class="text-right tabular-nums font-medium" style="color: {% if r.net < 0 %}#c2410c{% else %}#15803d{% endif %};">{{ '{:,.0f}'.format(r.net) }}</td>
+          <td class="text-right tabular-nums font-semibold" style="color: {% if r.running < 0 %}#c2410c{% else %}#111827{% endif %};">{{ currency }} {{ '{:,.0f}'.format(r.running) }}</td>
+          <td class="text-right tabular-nums font-bold" style="color: {% if r.extra_needed > 0 %}#c2410c{% else %}#9ca3af{% endif %};">{% if r.extra_needed > 0 %}{{ currency }} {{ '{:,.0f}'.format(r.extra_needed) }}{% else %}—{% endif %}</td>
+        </tr>
+        {% else %}<tr><td colspan="7" class="px-6 py-10 text-center text-sm text-gray-400">No cash activity in this window.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  <p class="text-sm text-gray-500">The <b>Running</b> column is your cash if you started with nothing and used no owner funding — where it goes red, you're short. <b>Extra Needed</b> is fresh cash required that day (beyond what earlier days already needed). The <b>Peak Cash Needed</b> tile is the single largest amount you'd have to have put in.</p>
+</div>
+
+{% endblock %}

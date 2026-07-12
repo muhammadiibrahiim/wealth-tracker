@@ -30,7 +30,7 @@
       </label>
 
       <div id="payee-row">
-        <label class="field-label field-label-required">Payee (who was paid / whose balance to reduce)</label>
+        <label class="field-label field-label-required">Paid From / Owed To</label>
         <div class="payee-search" tabindex="0">
           <input type="text"
                  id="payee-search-input"
@@ -45,7 +45,11 @@
             <button type="button" class="payee-clear" title="Change">✕</button>
           </div>
         </div>
-        <p class="text-xs mt-1" style="color: var(--mute);">Pick any account — cash, bank, a vendor, or even another capital account. Capital A/C will be debited; this account will be credited.</p>
+        <p class="text-xs mt-1" style="color: var(--mute);">
+          Pick a <strong>cash / bank account</strong> if you already paid (that account goes down)
+          — or pick a <strong>vendor / party</strong> if you haven't paid yet and now owe them (their balance goes up).
+          Capital A/C will be debited; the account you pick here will be credited.
+        </p>
       </div>
 
       <div class="grid grid-cols-2 gap-3">

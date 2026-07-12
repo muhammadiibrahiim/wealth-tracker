@@ -151,6 +151,37 @@ async def pdf_as_image(request: Request, call_next):
     return response
 
 
+def _selfheal_schema():
+    """Idempotent DB self-heal for shared installs where alembic migrations
+    didn't land cleanly (e.g. Phase 6 in start.bat ran on an unstamped DB and
+    silently skipped). Only ADDS missing columns — never removes/renames.
+    Every entry is a safe `ADD COLUMN` with a default, so it's re-runnable.
+    """
+    import logging
+    from sqlalchemy import text
+    from database import engine
+    log = logging.getLogger("uvicorn")
+
+    # (table, column, ddl-fragment-to-add)
+    NEEDED_COLUMNS = [
+        ("trade_payments", "account_id", "INTEGER REFERENCES accounts(id)"),
+    ]
+
+    with engine.begin() as conn:
+        for table, column, ddl in NEEDED_COLUMNS:
+            try:
+                rows = conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+            except Exception:
+                # Table itself doesn't exist yet — SQLModel.metadata.create_all
+                # will create it on the next line.
+                continue
+            existing = {r[1] for r in rows}
+            if column in existing:
+                continue
+            log.info(f"[selfheal] adding missing column {table}.{column}")
+            conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
 @app.on_event("startup")
 def on_startup():
     """Initialize database + seed default chart of accounts on startup.
@@ -159,8 +190,19 @@ def on_startup():
     Capital A/C, Profit / Loss A/C etc. before ever visiting Chart of A/Cs,
     which used to be the only path that seeded them. Seed here so the app
     is usable end-to-end on first launch.
+
+    Also runs a lightweight schema self-heal for shared users whose alembic
+    upgrade didn't apply cleanly (e.g. their DB never got stamped in the
+    first place, so `alembic upgrade head` skipped everything). The self-heal
+    is idempotent and only ADDS missing columns via ALTER TABLE.
     """
     create_db_and_tables()
+    try:
+        _selfheal_schema()
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn").warning(f"schema self-heal skipped: {e}")
+
     try:
         from database import engine
         from sqlmodel import Session

@@ -1,0 +1,5 @@
+{% include 'trade_projection_tiles.html' %}
+<div id="proj-daytable" hx-swap-oob="true">
+{% include 'trade_projection_daytable.html' %}
+</div>
+{% for e in id_echoes %}<input id="pline-id-{{ e.idx }}" name="pline_{{ e.idx }}_id" value="{{ e.id }}" type="hidden" hx-swap-oob="true">{% endfor %}

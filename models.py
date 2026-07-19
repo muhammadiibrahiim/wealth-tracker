@@ -401,6 +401,17 @@ class Trade(SQLModel, table=True):
     trade_date: date = Field(default_factory=date.today, sa_column=Column(Date))
     customer_terms_days: int = Field(default=30)
     vendor_terms_days: int = Field(default=7)
+    # Split payment terms (percentages). Each side splits into:
+    #   advance  → paid on the trade date
+    #   delivery → paid on delivery (delivered_at)
+    #   credit   → paid {terms_days} after delivery
+    # Defaults 0/0/100 reproduce the old behaviour: everything on credit terms.
+    cust_advance_pct: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(6, 2)))
+    cust_delivery_pct: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(6, 2)))
+    cust_credit_pct: Decimal = Field(default=Decimal("100"), sa_column=Column(DECIMAL(6, 2)))
+    vend_advance_pct: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(6, 2)))
+    vend_delivery_pct: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(6, 2)))
+    vend_credit_pct: Decimal = Field(default=Decimal("100"), sa_column=Column(DECIMAL(6, 2)))
 
     status: TradeStatus = Field(default=TradeStatus.OPEN, sa_column=Column(String(30)))
     delivered_at: Optional[date] = Field(default=None, sa_column=Column(Date))
@@ -449,8 +460,12 @@ class TradeLine(SQLModel, table=True):
     ordered_quantity: Decimal = Field(default=Decimal("1"), sa_column=Column(DECIMAL(15, 3)))
     quantity: Decimal = Field(default=Decimal("1"), sa_column=Column(DECIMAL(15, 3)))
     unit: str = Field(default="pcs", max_length=20)
-    unit_cost: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 2)))
+    # unit_cost is the EFFECTIVE (weighted-average) purchase rate. When
+    # cost_pending is True the sale rate is fixed but the cost is filled in later
+    # by recording purchases; unit_cost is then derived from those purchases.
+    unit_cost: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 4)))
     unit_price: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 2)))
+    cost_pending: bool = Field(default=False)
     line_notes: Optional[str] = Field(default=None, max_length=500)
 
     trade: Optional[Trade] = Relationship(back_populates="lines")
@@ -488,6 +503,32 @@ class TradeLineReceipt(SQLModel, table=True):
 
     __table_args__ = (
         Index("idx_trade_line_receipt_line", "line_id"),
+    )
+
+
+class TradePurchase(SQLModel, table=True):
+    """A recorded purchase of goods for a trade line — a quantity bought at a
+    specific rate. A line's cost is the weighted average of its purchases, so
+    the SAME product bought across several batches at different rates lives on
+    ONE line instead of being split into separate line items.
+
+    Recorded via the 'Record Purchase' action, independently of physical
+    delivery receipts. Total line cost = Σ(qty × rate) across its purchases."""
+    __tablename__ = "trade_purchases"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    trade_id: int = Field(sa_column=Column(ForeignKey("trades.id", ondelete="CASCADE")))
+    line_id: int = Field(sa_column=Column(ForeignKey("trade_lines.id", ondelete="CASCADE")))
+    quantity: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 3)))
+    unit_cost: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 4)))
+    purchased_on: date = Field(default_factory=date.today, sa_column=Column(Date))
+    vendor_invoice_path: Optional[str] = Field(default=None, max_length=500)
+    notes: Optional[str] = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_trade_purchase_trade", "trade_id"),
+        Index("idx_trade_purchase_line", "line_id"),
     )
 
 
@@ -901,5 +942,132 @@ class HabitLog(SQLModel, table=True):
     __table_args__ = (
         Index("idx_habit_log_user_date", "user_id", "log_date"),
         Index("idx_habit_log_habit_date", "habit_id", "log_date", unique=True),
+    )
+
+
+class ProjectionLine(SQLModel, table=True):
+    """A planned (not-yet-committed) order line for the cash-requirement
+    projection tool. Lets the owner model a batch of orders — cost, sale,
+    dye/block, bilty and timing — to see the day-wise cash they'd need."""
+    __tablename__ = "projection_lines"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    item_name: str = Field(max_length=200)
+    quantity: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 3)))
+    purchase_rate: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 4)))
+    sale_rate: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 4)))
+    dye_block_cost: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 2)))
+    bilty: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 2)))
+    # Calendar date this order is placed (day 0 for this line). Null = "today".
+    order_date: Optional[date] = Field(default=None, sa_column=Column(Date, nullable=True))
+    # Timing (days) — order → delivery, then delivery → cash collected.
+    lead_days: int = Field(default=15)
+    collection_lag_days: int = Field(default=30)
+    # Vendor payment split (percentages of the purchase cost):
+    #   advance  -> paid on the order date
+    #   on_delivery -> paid when goods arrive (order date + lead days)
+    #   credit   -> paid credit_days AFTER delivery
+    # They should total 100; the projection normalises if they don't.
+    pct_advance: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(6, 2)))
+    pct_on_delivery: Decimal = Field(default=Decimal("100"), sa_column=Column(DECIMAL(6, 2)))
+    pct_credit: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(6, 2)))
+    credit_days: int = Field(default=30)
+    # Deprecated (superseded by the percentage split); kept for back-compat.
+    pay_on_delivery: bool = Field(default=True)
+    include: bool = Field(default=True)
+    sort_order: int = Field(default=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_projection_line_user", "user_id"),
+    )
+
+
+# ─────────────────────────── Personal Accounts (Money Manager) ───────────────────────────
+
+
+class MoneyAccountType(str, Enum):
+    """Classification for a personal account imported from Money Manager.
+    Purely for grouping / net-worth composition; the user can re-type freely."""
+    cash = "cash"
+    bank = "bank"
+    wallet = "wallet"
+    person = "person"        # a person you lend to / borrow from
+    business = "business"    # a venture (Ibrahim Traders, Cambrify, Adify …)
+    investment = "investment"
+    asset = "asset"          # plot, macbook, car …
+    expense = "expense"      # expense-tracking pseudo account (Home exp, Trip exp …)
+    other = "other"
+
+
+class MoneyTxnKind(str, Enum):
+    transfer = "transfer"
+    income = "income"
+    expense = "expense"
+    balance = "balance"      # opening / initial-balance setting entry
+
+
+class MoneyAccount(SQLModel, table=True):
+    """A personal account mirrored from the Money Manager cashbook export
+    (cash, banks, wallets, people you lend to, ventures, assets …).
+
+    Kept entirely separate from the business (Trade) chart of accounts — this
+    is the owner's PERSONAL book. A cross-link to the trade module (personal
+    'IBRAHIM TRADERS' ↔ business CEO funding) is intentionally deferred."""
+    __tablename__ = "money_accounts"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    name: str = Field(max_length=200, index=True)
+    type: MoneyAccountType = Field(default=MoneyAccountType.other, sa_column=Column(String(20)))
+    is_active: bool = Field(default=True)
+    # Whether this account counts toward net worth / totals. Balances are always
+    # computed; excluded accounts simply don't add into the headline figures.
+    include_in_networth: bool = Field(default=True)
+    # The Money Manager group this account belongs to (for exact-match grouping).
+    # Null = fall back to type-based grouping.
+    group_name: Optional[str] = Field(default=None, sa_column=Column(String(80), nullable=True))
+    sort_order: int = Field(default=0)
+    notes: Optional[str] = Field(default=None, sa_column=Column(String(500), nullable=True))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_money_account_user", "user_id"),
+    )
+
+
+class MoneyTxn(SQLModel, table=True):
+    """One row of the Money Manager cashbook (per-account view). Transfers appear
+    as two rows — one Transfer-Out on the source account and one Transfer-In on
+    the destination — so each row affects exactly its own `account_id`, and an
+    account balance is simply sum(in) − sum(out) over its rows.
+
+    `source_hash` makes imports idempotent / append-only: a row is inserted only
+    if its hash isn't already present for the user."""
+    __tablename__ = "money_txns"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    occurred_at: datetime = Field(index=True)
+    account_id: int = Field(foreign_key="money_accounts.id", index=True)
+    counter_account_id: Optional[int] = Field(default=None, foreign_key="money_accounts.id")
+    category: Optional[str] = Field(default=None, sa_column=Column(String(200), nullable=True))
+    subcategory: Optional[str] = Field(default=None, sa_column=Column(String(200), nullable=True))
+    note: Optional[str] = Field(default=None, sa_column=Column(String(500), nullable=True))
+    description: Optional[str] = Field(default=None, sa_column=Column(String(500), nullable=True))
+    amount: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(16, 2)))
+    direction: str = Field(sa_column=Column(String(4)))          # "in" | "out"
+    kind: MoneyTxnKind = Field(default=MoneyTxnKind.transfer, sa_column=Column(String(12)))
+    currency: str = Field(default="PKR", sa_column=Column(String(8)))
+    source_hash: str = Field(sa_column=Column(String(64), index=True))
+    import_batch: Optional[str] = Field(default=None, sa_column=Column(String(40), nullable=True))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_money_txn_user_hash", "user_id", "source_hash"),
+        Index("idx_money_txn_account", "account_id"),
     )
 

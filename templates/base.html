@@ -551,12 +551,13 @@
             // inside an enhanced-select widget are handled by the widget's
             // own listener (which also calls stopPropagation), so this guard
             // only ever fires for plain inputs.
-            var navKeys = ['Enter','ArrowDown','ArrowUp','ArrowLeft','ArrowRight','Tab'];
+            // Field navigation is Left/Right (+ Enter/Tab) only — Up/Down are
+            // left alone so they work for dropdowns, number steppers and text
+            // cursor movement without hijacking focus to the next field.
+            var navKeys = ['Enter','ArrowLeft','ArrowRight','Tab'];
             if (navKeys.includes(key) && _isRequiredEmpty(t)) {
-                // Tab and ArrowDown/Up should NOT advance away — but allow
-                // typing characters to land in the field normally.
-                if (key !== 'Tab') e.preventDefault();
-                else e.preventDefault();
+                // Can't leave a required-empty field, but typing still lands.
+                e.preventDefault();
                 return;
             }
             if (key === 'Enter') {
@@ -570,11 +571,8 @@
                 }
                 return;
             }
-            if (key === 'ArrowDown' || key === 'ArrowUp') {
-                if (tag === 'select') return;
-                if (tag === 'input' && (type === 'number' || type === 'date' || type === 'datetime-local' || type === 'time')) return;
-                e.preventDefault(); _advanceField(t, key === 'ArrowDown' ? 1 : -1); return;
-            }
+            // Up/Down no longer move between fields — they belong to dropdowns,
+            // steppers, and cursor movement.
             if (key === 'ArrowRight') {
                 if (tag === 'input' && ['text','email','password','search','tel','url'].includes(type)) {
                     if (!_caretAtEnd(t)) return;

@@ -69,3 +69,4 @@ Trade-Form-And-Detail-Guide.md
 # Scratch / dev logs
 start.log
 *.tmp
+.mm_sync_state.json

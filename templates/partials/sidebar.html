@@ -29,6 +29,27 @@
         {{ item('/habits', 'Habits', 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z', '/habits') }}
         {{ item('/investments', 'Investments', 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', '/investments') }}
 
+        {% macro child(href, label, exact) -%}
+        {% set act = (p == href) if exact else p.startswith(href) %}
+        <a href="{{ href }}" class="side-child {% if act %}active{% endif %}">
+            <span class="side-child-dot"></span>
+            <span class="side-text">{{ label }}</span>
+        </a>
+        {%- endmacro %}
+
+        <div class="side-section">
+            <button class="side-parent {% if p.startswith('/accounts') %}active expanded{% endif %}" onclick="toggleSideSection(this)">
+                <svg class="side-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <span class="side-text">Accounts</span>
+                <svg class="side-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="side-children">
+                {{ child('/accounts', 'Net Worth', true) }}
+                {{ child('/accounts/reports', 'Reports', false) }}
+                {{ child('/accounts/import', 'Import', false) }}
+            </div>
+        </div>
+
         <div class="side-section">
             <button class="side-parent {% if p.startswith('/trade') %}active expanded{% endif %}" onclick="toggleSideSection(this)">
                 <svg class="side-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -36,13 +57,6 @@
                 <svg class="side-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
             </button>
             <div class="side-children">
-                {% macro child(href, label, exact) -%}
-                {% set act = (p == href) if exact else p.startswith(href) %}
-                <a href="{{ href }}" class="side-child {% if act %}active{% endif %}">
-                    <span class="side-child-dot"></span>
-                    <span class="side-text">{{ label }}</span>
-                </a>
-                {%- endmacro %}
                 {{ child('/trade', 'Dashboard', true) }}
                 {{ child('/trade/quotations', 'Quotations', false) }}
                 {{ child('/trade/trades', 'Trades', false) }}
@@ -52,6 +66,7 @@
                 {{ child('/trade/coa', 'Chart of A/Cs', false) }}
                 {{ child('/trade/vouchers', 'Vouchers', false) }}
                 {{ child('/trade/reports', 'Reports', false) }}
+                {{ child('/trade/projection', 'Projection', false) }}
                 {{ child('/trade/testing', 'Testing', false) }}
             </div>
         </div>

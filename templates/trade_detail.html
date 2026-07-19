@@ -23,6 +23,7 @@
         <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/receive" hx-target="#modal-container">+ Receive Partial</button>
         <button class="btn-primary" hx-get="/trade/trades/{{ trade.id }}/deliver" hx-target="#modal-container">Mark Complete</button>
         {% endif %}
+        <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/purchase/new" hx-target="#modal-container">+ Record Purchase</button>
         <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/cost/new" hx-target="#modal-container">+ Record Cost</button>
         {% if customer_outstanding > 0 %}
         <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/payments/new?direction=inbound" hx-target="#modal-container">Record Customer Payment</button>
@@ -61,7 +62,7 @@
     </div>
     <div class="stat-card">
       <div class="stat-label">Customer Terms</div>
-      <div class="text-lg font-bold text-gray-900 mt-1">{{ trade.customer_terms_days }} days</div>
+      <div class="text-sm font-bold text-gray-900 mt-1">{{ cust_terms_label }}</div>
       {% if trade.customer_due_date %}
       <div class="text-xs mt-1 {% if trade.customer_due_date < today and customer_outstanding > 0 %}text-orange-700 font-semibold{% else %}text-gray-500{% endif %}">
         Due: {{ trade.customer_due_date }}
@@ -70,7 +71,7 @@
     </div>
     <div class="stat-card">
       <div class="stat-label">Vendor Terms</div>
-      <div class="text-lg font-bold text-gray-900 mt-1">{{ trade.vendor_terms_days }} days</div>
+      <div class="text-sm font-bold text-gray-900 mt-1">{{ vend_terms_label }}</div>
       {% if trade.vendor_due_date %}
       <div class="text-xs mt-1 {% if trade.vendor_due_date < today and vendor_outstanding > 0 %}text-orange-700 font-semibold{% else %}text-gray-500{% endif %}">
         Due: {{ trade.vendor_due_date }}

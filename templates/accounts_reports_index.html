@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Account Reports{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Account Reports</h1>
+      <p class="page-subtitle">Ledgers, balances and money-in/out for your personal accounts.</p>
+    </div>
+    <a href="/accounts" class="btn-secondary">← Net Worth</a>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {% macro card(href, title, desc, emoji) %}
+    <a href="{{ href }}" class="block bg-white border border-gray-200 rounded-lg p-5 hover:border-indigo-300 hover:shadow-sm transition">
+      <div class="flex items-start gap-3">
+        <div class="text-2xl">{{ emoji }}</div>
+        <div>
+          <div class="font-bold text-gray-900">{{ title }}</div>
+          <div class="text-sm text-gray-500 mt-0.5">{{ desc }}</div>
+        </div>
+      </div>
+    </a>
+    {% endmacro %}
+
+    {{ card('/accounts/reports/statements', 'Account Statements (Ledgers)', 'Every account with its balance and transaction count. Click through to a full running-balance ledger.', '📒') }}
+    {{ card('/accounts/reports/trial-balance', 'Trial Balance', 'All accounts and balances grouped by type, totalling to your net worth.', '⚖️') }}
+    {{ card('/accounts/reports/income-expense', 'Income & Expense', 'Real income vs spending by category over a period (transfers excluded).', '💸') }}
+    {{ card('/accounts/reports/cashflow', 'Monthly Cash Flow', 'Money earned vs spent each month, with the net.', '📈') }}
+  </div>
+
+  <p class="text-xs text-gray-400">Loaded: {{ ov.account_count }} accounts · {{ '{:,}'.format(ov.txn_count) }} transactions{% if ov.last_txn %} · latest {{ ov.last_txn.strftime('%d %b %Y') }}{% endif %}.</p>
+</div>
+{% endblock %}

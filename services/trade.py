@@ -30,6 +30,7 @@ from models import (
     TradeLine,
     TradeLineReceipt,
     TradeLineSpec,
+    TradePurchase,
     TradePayment,
     TradeStatus,
 )
@@ -314,7 +315,11 @@ class TradeService:
         trade_date: Optional[date] = None,
         notes: Optional[str] = None,
         lines: Optional[list[dict]] = None,
+        **split,
     ) -> Trade:
+        split_fields = {k: v for k, v in split.items() if k in (
+            "cust_advance_pct", "cust_delivery_pct", "cust_credit_pct",
+            "vend_advance_pct", "vend_delivery_pct", "vend_credit_pct")}
         trade = Trade(
             user_id=user_id,
             reference=_next_reference(session, user_id),
@@ -325,6 +330,7 @@ class TradeService:
             vendor_terms_days=vendor_terms_days,
             notes=notes,
             status=TradeStatus.OPEN,
+            **split_fields,
         )
         session.add(trade)
         session.flush()
@@ -339,6 +345,7 @@ class TradeService:
     @staticmethod
     def _add_line_inner(session: Session, trade: Trade, ln: dict) -> TradeLine:
         qty = Decimal(str(ln.get("quantity") or "1"))
+        unit_cost = Decimal(str(ln.get("unit_cost") or "0"))
         line = TradeLine(
             trade_id=trade.id,
             item_id=ln.get("item_id"),
@@ -346,8 +353,11 @@ class TradeService:
             ordered_quantity=qty,
             quantity=qty,
             unit=ln.get("unit") or "pcs",
-            unit_cost=Decimal(str(ln.get("unit_cost") or "0")),
+            unit_cost=unit_cost,
             unit_price=Decimal(str(ln.get("unit_price") or "0")),
+            # A blank/zero buy rate means the cost is pending — the owner will
+            # fill it in later via Record Purchase (weighted-average costing).
+            cost_pending=(unit_cost == 0),
             line_notes=ln.get("line_notes"),
         )
         session.add(line)
@@ -531,18 +541,20 @@ class TradeService:
         cost = Decimal(trade.total_cost)
         profit = sale - cost
         if not existing_closing and profit != 0:
+            _items = TradeService.trade_items_descriptor(trade)
+            _who = customer.name if customer else "trade"
             if profit > 0:
                 closing_lines = [
                     {"account_id": pl_acct.id, "debit": profit, "credit": 0,
                      "description": f"Close P&L A/C to Capital — profit ({trade.reference})"},
                     {"account_id": capital_acct.id, "debit": 0, "credit": profit,
-                     "description": f"Trade profit credited to Capital A/C ({trade.reference})"},
+                     "description": f"Profit → Capital: {_who} · {_items} ({trade.reference})"},
                 ]
             else:  # profit < 0  →  loss
                 loss = -profit
                 closing_lines = [
                     {"account_id": capital_acct.id, "debit": loss, "credit": 0,
-                     "description": f"Trade loss absorbed by Capital A/C ({trade.reference})"},
+                     "description": f"Loss absorbed by Capital: {_who} · {_items} ({trade.reference})"},
                     {"account_id": pl_acct.id, "debit": 0, "credit": loss,
                      "description": f"Close P&L A/C to Capital — loss ({trade.reference})"},
                 ]
@@ -552,6 +564,108 @@ class TradeService:
                 description=f"Profit closing — {trade.reference}",
                 lines=closing_lines, trade_id=trade.id,
             )
+
+    @staticmethod
+    def payment_schedule(trade: Trade, side: str, total=None, delivery_date=None) -> list:
+        """Split a side's payment into dated stages from its advance/delivery/
+        credit percentages. Returns [{stage, date, amount}] (percentages are
+        normalised to 100; a zero split falls back to 100% on credit terms).
+
+          side='customer' → total_sale, customer_terms_days
+          side='vendor'   → total_cost, vendor_terms_days
+        Anchors: advance → trade_date, delivery → delivered_at (or the passed
+        delivery_date estimate), credit → that delivery + terms_days.
+        """
+        if side == "customer":
+            adv = Decimal(trade.cust_advance_pct or 0)
+            dely = Decimal(trade.cust_delivery_pct or 0)
+            cred = Decimal(trade.cust_credit_pct or 0)
+            terms = int(trade.customer_terms_days or 0)
+            base = Decimal(trade.total_sale) if total is None else Decimal(str(total))
+        else:
+            adv = Decimal(trade.vend_advance_pct or 0)
+            dely = Decimal(trade.vend_delivery_pct or 0)
+            cred = Decimal(trade.vend_credit_pct or 0)
+            terms = int(trade.vendor_terms_days or 0)
+            base = Decimal(trade.total_cost) if total is None else Decimal(str(total))
+        tot = adv + dely + cred
+        if tot <= 0:
+            adv, dely, cred, tot = ZERO, ZERO, Decimal("100"), Decimal("100")
+        dv = delivery_date or trade.delivered_at
+        stages = []
+        if adv > 0:
+            stages.append({"stage": "advance", "date": trade.trade_date,
+                           "amount": (base * adv / tot)})
+        if dely > 0 and dv:
+            stages.append({"stage": "delivery", "date": dv,
+                           "amount": (base * dely / tot)})
+        if cred > 0:
+            cd = (dv + timedelta(days=terms)) if dv else None
+            stages.append({"stage": "credit", "date": cd,
+                           "amount": (base * cred / tot)})
+        return stages
+
+    @staticmethod
+    def terms_label(trade: Trade, side: str) -> str:
+        """Human-readable terms, e.g. '30% advance · 50% on delivery · 20% in 25 days'."""
+        if side == "customer":
+            adv, dely, cred, terms = (trade.cust_advance_pct, trade.cust_delivery_pct,
+                                      trade.cust_credit_pct, trade.customer_terms_days)
+        else:
+            adv, dely, cred, terms = (trade.vend_advance_pct, trade.vend_delivery_pct,
+                                      trade.vend_credit_pct, trade.vendor_terms_days)
+        adv, dely, cred = Decimal(adv or 0), Decimal(dely or 0), Decimal(cred or 0)
+        tot = adv + dely + cred
+        if tot <= 0:
+            adv, dely, cred, tot = ZERO, ZERO, Decimal("100"), Decimal("100")
+        adv, dely, cred = adv / tot * 100, dely / tot * 100, cred / tot * 100
+        d = int(terms or 0)
+        parts = []
+        if adv > 0:
+            parts.append(f"{float(adv):g}% advance")
+        if dely > 0:
+            parts.append(f"{float(dely):g}% on delivery")
+        if cred > 0:
+            parts.append(f"{float(cred):g}% " + (f"in {d} days" if d else "on delivery"))
+        return " · ".join(parts) if parts else f"Net {d} days"
+
+    @staticmethod
+    def _spec_val(ln, label: str) -> str:
+        for sp in (getattr(ln, "specs", None) or []):
+            if (sp.label or "").strip().lower() == label.lower():
+                return (sp.value or "").strip()
+        return ""
+
+    @staticmethod
+    def items_descriptor(line_qtys) -> str:
+        """Concise 'Item qty unit [Brand · Size]' summary for a set of
+        (line, qty) pairs — used to make ledger descriptions self-explanatory."""
+        parts = []
+        for ln, q in line_qtys:
+            if q is None or Decimal(str(q)) <= 0:
+                continue
+            brand = TradeService._spec_val(ln, "brand")
+            size = TradeService._spec_val(ln, "size")
+            tags = " · ".join(x for x in (brand, size) if x)
+            seg = f"{ln.item_name} {float(Decimal(str(q))):g} {ln.unit}"
+            if tags:
+                seg += f" [{tags}]"
+            parts.append(seg)
+        return "; ".join(parts)
+
+    @staticmethod
+    def trade_items_descriptor(trade: Trade, event_date: Optional[date] = None) -> str:
+        """Descriptor for a whole trade, or just goods delivered on `event_date`."""
+        pairs = []
+        for ln in trade.lines:
+            if event_date is not None:
+                q = sum((Decimal(r.received_qty) for r in (ln.receipts or [])
+                         if r.received_on == event_date), ZERO)
+            else:
+                q = Decimal(ln.quantity)
+            if q > 0:
+                pairs.append((ln, q))
+        return TradeService.items_descriptor(pairs)
 
     @staticmethod
     def _post_event_journals(
@@ -696,18 +810,20 @@ class TradeService:
         # CLOSING entry: zero this event's P&L into Capital
         event_profit = event_sale - event_cost
         if event_profit != 0:
+            _items = TradeService.items_descriptor(line_objs)
+            _who = customer.name if customer else "trade"
             if event_profit > 0:
                 closing_lines = [
                     {"account_id": pl_acct.id, "debit": event_profit, "credit": 0,
                      "description": f"Close P&L A/C to Capital — profit ({trade.reference}{event_tag})"},
                     {"account_id": capital_acct.id, "debit": 0, "credit": event_profit,
-                     "description": f"Trade profit credited to Capital A/C ({trade.reference}{event_tag})"},
+                     "description": f"Profit → Capital: {_who} · {_items} ({trade.reference}{event_tag})"},
                 ]
             else:
                 loss = -event_profit
                 closing_lines = [
                     {"account_id": capital_acct.id, "debit": loss, "credit": 0,
-                     "description": f"Trade loss absorbed by Capital A/C ({trade.reference}{event_tag})"},
+                     "description": f"Loss absorbed by Capital: {_who} · {_items} ({trade.reference}{event_tag})"},
                     {"account_id": pl_acct.id, "debit": 0, "credit": loss,
                      "description": f"Close P&L A/C to Capital — loss ({trade.reference}{event_tag})"},
                 ]
@@ -931,6 +1047,55 @@ class TradeService:
         trade.total_sale = sale.quantize(Decimal("0.01"))
 
     @staticmethod
+    def _repost_cost(session: Session, trade: Trade) -> None:
+        """Re-post every delivery-event journal after a line cost (or qty) change
+        so the ledger's COGS/vendor-A-P reflects the current line costs. Mirrors
+        the receipt/deliver posting exactly: one event per receipt date, plus the
+        residual (undelivered qty) on delivered_at. The SALE side is unchanged;
+        only the cost amounts move. No-op for trades with no delivery events yet
+        (the cost simply stays pending until goods flow)."""
+        session.refresh(trade)
+        TradeService._recompute_totals(trade)
+        session.add(trade)
+        session.commit()
+        session.refresh(trade)
+
+        deliv = trade.delivered_at
+        receipt_dates = sorted({r.received_on for ln in trade.lines
+                                for r in (ln.receipts or [])})
+        for d in receipt_dates:
+            if deliv and d == deliv:
+                continue  # delivered_at handled as the residual below
+            totals: dict[int, Decimal] = {}
+            for ln in trade.lines:
+                q = sum((Decimal(r.received_qty) for r in (ln.receipts or [])
+                         if r.received_on == d), ZERO)
+                if q > 0:
+                    totals[ln.id] = q
+            TradeService._purge_event_journals(session, trade, d)
+            if totals:
+                TradeService._post_event_journals(session, trade, d, totals)
+
+        if deliv:
+            # everything not posted on a prior receipt date = full qty − receipts
+            # strictly before delivered_at (receipts ON delivered_at fold in here)
+            TradeService._purge_event_journals(session, trade, deliv)
+            residual: dict[int, Decimal] = {}
+            for ln in trade.lines:
+                before = sum((Decimal(r.received_qty) for r in (ln.receipts or [])
+                              if r.received_on < deliv), ZERO)
+                rem = Decimal(ln.quantity) - before
+                if rem > 0:
+                    residual[ln.id] = rem
+            if residual:
+                TradeService._post_event_journals(session, trade, deliv, residual)
+
+        TradeService._refresh_status(trade, session)
+        trade.updated_at = datetime.utcnow()
+        session.add(trade)
+        session.commit()
+
+    @staticmethod
     def _customer_credits(session: Session, trade: Trade) -> Decimal:
         """Credits on the customer's ledger that settle the invoice like cash:
         paid-by-customer costs (bilty, Record Cost) AND residual write-offs."""
@@ -1054,6 +1219,91 @@ class TradeService:
         session.add(trade)
         session.commit()
         return True, "written off"
+
+
+# ─────────────────────────── Purchases (per-line cost) ───────────────────────────
+
+
+class PurchaseService:
+    """Records purchases of goods for a trade line. A line's cost is the
+    weighted-average rate across its purchases, so the same product bought at
+    several rates lives on ONE line. Recomputing the cost re-posts the trade's
+    ledger so COGS reflects what was actually paid."""
+
+    @staticmethod
+    def list_for_trade(session: Session, trade_id: int) -> list[TradePurchase]:
+        return list(session.exec(
+            select(TradePurchase).where(TradePurchase.trade_id == trade_id)
+            .order_by(TradePurchase.purchased_on, TradePurchase.id)
+        ).all())
+
+    @staticmethod
+    def list_for_line(session: Session, line_id: int) -> list[TradePurchase]:
+        return list(session.exec(
+            select(TradePurchase).where(TradePurchase.line_id == line_id)
+            .order_by(TradePurchase.purchased_on, TradePurchase.id)
+        ).all())
+
+    @staticmethod
+    def line_purchased_qty(session: Session, line_id: int) -> Decimal:
+        rows = PurchaseService.list_for_line(session, line_id)
+        return sum((Decimal(p.quantity) for p in rows), ZERO)
+
+    @staticmethod
+    def recompute_line_cost(session: Session, line: TradeLine) -> None:
+        """Set a line's unit_cost to the weighted-average purchase rate. Leaves
+        unit_cost untouched if the line has no purchases (legacy fixed-cost)."""
+        rows = PurchaseService.list_for_line(session, line.id)
+        tot_qty = sum((Decimal(p.quantity) for p in rows), ZERO)
+        tot_cost = sum((Decimal(p.quantity) * Decimal(p.unit_cost) for p in rows), ZERO)
+        if tot_qty > 0:
+            # keep 4dp so qty × rate reconstructs the exact total purchase cost
+            # (2dp rounding of the weighted average would drift the line total)
+            line.unit_cost = (tot_cost / tot_qty).quantize(Decimal("0.0001"))
+            session.add(line)
+
+    @staticmethod
+    def record(session: Session, user_id: int, trade_id: int, line_id: int,
+               quantity: Decimal, unit_cost: Decimal, purchased_on: Optional[date] = None,
+               vendor_invoice_path: Optional[str] = None,
+               notes: Optional[str] = None) -> Optional[TradePurchase]:
+        trade = TradeService.get(session, user_id, trade_id)
+        if not trade:
+            return None
+        line = session.get(TradeLine, line_id)
+        if not line or line.trade_id != trade_id:
+            return None
+        p = TradePurchase(
+            trade_id=trade_id, line_id=line_id,
+            quantity=Decimal(str(quantity)), unit_cost=Decimal(str(unit_cost)),
+            purchased_on=purchased_on or date.today(),
+            vendor_invoice_path=vendor_invoice_path, notes=notes,
+        )
+        session.add(p)
+        session.commit()
+        session.refresh(line)
+        PurchaseService.recompute_line_cost(session, line)
+        session.commit()
+        TradeService._repost_cost(session, trade)
+        session.refresh(p)
+        return p
+
+    @staticmethod
+    def delete(session: Session, user_id: int, purchase_id: int) -> bool:
+        p = session.get(TradePurchase, purchase_id)
+        if not p:
+            return False
+        trade = TradeService.get(session, user_id, p.trade_id)
+        line = session.get(TradeLine, p.line_id)
+        session.delete(p)
+        session.commit()
+        if line:
+            session.refresh(line)
+            PurchaseService.recompute_line_cost(session, line)
+            session.commit()
+        if trade:
+            TradeService._repost_cost(session, trade)
+        return True
 
 
 # ─────────────────────────── Receipts ───────────────────────────
@@ -2059,20 +2309,55 @@ class TradeReportService:
                     for sp in (ln.specs or [])
                     if (sp.label or sp.value)
                 ]
-                pending_value = (pending * Decimal(ln.unit_cost)).quantize(Decimal("0.01"))
-                line_rows.append({
-                    "item_name": ln.item_name,
-                    "specs": " · ".join(specs_parts),
-                    "unit": ln.unit or "pcs",
-                    "ordered_qty": ordered.quantize(Decimal("0.001")),
-                    "received_qty": Decimal(received).quantize(Decimal("0.001")),
-                    "pending_qty": pending.quantize(Decimal("0.001")),
-                    "unit_cost": Decimal(ln.unit_cost).quantize(Decimal("0.01")),
-                    "pending_value": pending_value,
-                })
-                trade_pending_value += pending_value
-                trade_pending_qty += pending
-                line_count += 1
+                specs_map = {
+                    (sp.label or "").strip().lower(): (sp.value or "").strip()
+                    for sp in (ln.specs or []) if (sp.label or "").strip()
+                }
+                # This statement goes to the VENDOR, so it must reflect the actual
+                # rates AGREED per batch — not our internal weighted-average cost.
+                # If the line was bought across several purchases at different
+                # rates, break the pending out per batch (received filled FIFO in
+                # purchase order). Batches with a rate of 0 (unpriced) fall back
+                # to the line cost so the value is never understated.
+                purchases = PurchaseService.list_for_line(session, ln.id)
+                batches = []   # (batch_ordered, batch_received, batch_pending, rate)
+                if purchases:
+                    rem = Decimal(received)
+                    covered = ZERO
+                    for pu in purchases:
+                        bo = Decimal(pu.quantity)
+                        covered += bo
+                        br = min(bo, rem) if rem > 0 else ZERO
+                        rem -= br
+                        bp = bo - br
+                        rate = Decimal(pu.unit_cost) if Decimal(pu.unit_cost) > 0 else Decimal(ln.unit_cost)
+                        if bp > 0:
+                            batches.append((bo, br, bp, rate))
+                    uncovered = ordered - covered
+                    if uncovered > 0:
+                        br = min(uncovered, rem) if rem > 0 else ZERO
+                        bp = uncovered - br
+                        if bp > 0:
+                            batches.append((uncovered, br, bp, Decimal(ln.unit_cost)))
+                else:
+                    batches.append((ordered, Decimal(received), pending, Decimal(ln.unit_cost)))
+
+                for bo, br, bp, rate in batches:
+                    pending_value = (bp * rate).quantize(Decimal("0.01"))
+                    line_rows.append({
+                        "item_name": ln.item_name,
+                        "specs": " · ".join(specs_parts),
+                        "specs_map": specs_map,
+                        "unit": ln.unit or "pcs",
+                        "ordered_qty": bo.quantize(Decimal("0.001")),
+                        "received_qty": br.quantize(Decimal("0.001")),
+                        "pending_qty": bp.quantize(Decimal("0.001")),
+                        "unit_cost": rate.quantize(Decimal("0.01")),
+                        "pending_value": pending_value,
+                    })
+                    trade_pending_value += pending_value
+                    trade_pending_qty += bp
+                    line_count += 1
 
             if not line_rows:
                 continue

@@ -16,6 +16,44 @@ from io import BytesIO
 from typing import Optional
 
 from models import Party, Trade, TradeLine, TradePayment
+
+
+def _split_pcts(trade: Trade, side: str):
+    """Normalised (adv, dely, cred, days) so percentages always total 100."""
+    if side == "customer":
+        adv, dely, cred, days = (trade.cust_advance_pct, trade.cust_delivery_pct,
+                                 trade.cust_credit_pct, trade.customer_terms_days)
+    else:
+        adv, dely, cred, days = (trade.vend_advance_pct, trade.vend_delivery_pct,
+                                 trade.vend_credit_pct, trade.vendor_terms_days)
+    adv, dely, cred = Decimal(adv or 0), Decimal(dely or 0), Decimal(cred or 0)
+    tot = adv + dely + cred
+    if tot <= 0:
+        adv, dely, cred, tot = Decimal(0), Decimal(0), Decimal(100), Decimal(100)
+    return (adv / tot * 100, dely / tot * 100, cred / tot * 100, int(days or 0))
+
+
+def _terms_label(trade: Trade, side: str) -> str:
+    """Readable split terms for docs, e.g. '30% advance · 50% on delivery ·
+    20% in 25 days'. Normalised to 100%."""
+    adv, dely, cred, days = _split_pcts(trade, side)
+    parts = []
+    if adv > 0:
+        parts.append(f"{float(adv):g}% advance")
+    if dely > 0:
+        parts.append(f"{float(dely):g}% on delivery")
+    if cred > 0:
+        parts.append(f"{float(cred):g}% " + (f"in {days} days" if days else "on delivery"))
+    return " · ".join(parts) if parts else f"Net {days} days"
+
+
+def _terms_short(trade: Trade, side: str) -> str:
+    """Compact terms for the KPI cell so it never overflows, e.g. 'Net 25 days'
+    or '50/50/0%'."""
+    adv, dely, cred, days = _split_pcts(trade, side)
+    if adv == 0 and dely == 0:
+        return f"Net {days} days" if days else "On delivery"
+    return f"{float(adv):g}/{float(dely):g}/{float(cred):g}%"
 from services.pdf_helper import (
     render_report_pdf, ReportSpec, KpiSpec, TableSpec,
     SectionTitle, ParagraphBlock, CalloutCard,
@@ -159,13 +197,13 @@ def build_doc_pdf(ctx: DocContext) -> bytes:
         sections.append(CalloutCard(
             label="Total Order Value",
             value=_pkr(ctx.trade.total_cost),
-            suffix=f"Payment terms: {ctx.trade.vendor_terms_days} days",
+            suffix=f"Payment terms: {_terms_label(ctx.trade, 'vendor')}",
         ))
     elif kind == "order_confirm":
         sections.append(CalloutCard(
             label="Total",
             value=_pkr(ctx.trade.total_sale),
-            suffix=f"Payment terms: {ctx.trade.customer_terms_days} days",
+            suffix=f"Payment terms: {_terms_label(ctx.trade, 'customer')}",
         ))
     elif kind == "delivery_note":
         sections.append(CalloutCard(
@@ -190,7 +228,7 @@ def build_doc_pdf(ctx: DocContext) -> bytes:
         if _due:
             suffix_parts.append(f"Due by {_due.strftime('%b %d, %Y')}")
         if ctx.trade.customer_terms_days:
-            suffix_parts.append(f"{ctx.trade.customer_terms_days}-day terms")
+            suffix_parts.append(_terms_label(ctx.trade, 'customer'))
         sections.append(CalloutCard(
             label="Amount Due",
             value=_pkr(_subtotal_for(ctx)),
@@ -237,10 +275,10 @@ def _default_kpis(ctx: DocContext) -> list:
     ]
     if kind == "vendor_po":
         kpis.append(KpiSpec("Order Value", _pkr(t.total_cost)))
-        kpis.append(KpiSpec("Pay Terms",   f"{t.vendor_terms_days} days"))
+        kpis.append(KpiSpec("Pay Terms",   _terms_short(t, 'vendor')))
     elif kind == "order_confirm":
         kpis.append(KpiSpec("Total",     _pkr(t.total_sale)))
-        kpis.append(KpiSpec("Pay Terms", f"{t.customer_terms_days} days"))
+        kpis.append(KpiSpec("Pay Terms", _terms_short(t, 'customer')))
     elif kind == "delivery_note":
         kpis.append(KpiSpec("Total",     _pkr(t.total_sale)))
         kpis.append(KpiSpec("Delivered",
@@ -265,7 +303,7 @@ def _default_kpis(ctx: DocContext) -> list:
         kpis.append(KpiSpec(
             "Due Date",
             _due.strftime("%b %d, %Y") if _due else "—",
-            sub=(f"{t.customer_terms_days}-day terms" if t.customer_terms_days else ""),
+            sub=_terms_label(t, 'customer'),
         ))
     return kpis
 
@@ -377,7 +415,7 @@ def _closing_for(kind: str, ctx: DocContext) -> list:
                 f"This confirms the order placed by <b>{ctx.purchaser.name}</b> "
                 f"under reference <b>{_ref_for(kind, ctx.trade)}</b>. "
                 f"Goods will be delivered as specified above. "
-                f"Payment terms: <b>{ctx.trade.customer_terms_days} days</b> from invoice."
+                f"Payment terms: <b>{_terms_label(ctx.trade, 'customer')}</b>."
             ),
             SectionTitle("Quantity Tolerance"),
             ParagraphBlock(ORDER_QTY_TOLERANCE_NOTE),

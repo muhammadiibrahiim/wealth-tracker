@@ -63,6 +63,7 @@ class TableSpec:
 class SectionTitle:
     text: str
     bold: bool = True
+    keep_with_next: bool = False   # don't orphan this heading from the block below it
 
 
 @dataclass
@@ -175,6 +176,9 @@ def _build_story(spec: ReportSpec, *, content_w):
         'Section', fontName='Helvetica-Bold', fontSize=11, leading=13,
         textColor=TEXT_STRONG, spaceBefore=10, spaceAfter=6,
     )
+    section_style_keep = ParagraphStyle(
+        'SectionKeep', parent=section_style, keepWithNext=1,
+    )
     body_style = ParagraphStyle(
         'Body', fontName='Helvetica', fontSize=9.5, leading=13,
         textColor=TEXT, spaceAfter=8,
@@ -193,7 +197,7 @@ def _build_story(spec: ReportSpec, *, content_w):
         if isinstance(entry, SectionTitle):
             story.append(Paragraph(
                 f"<b>{entry.text}</b>" if entry.bold else entry.text,
-                section_style,
+                section_style_keep if entry.keep_with_next else section_style,
             ))
         elif isinstance(entry, ParagraphBlock):
             story.append(Paragraph(entry.html, body_style))

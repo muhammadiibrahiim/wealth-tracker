@@ -1,0 +1,44 @@
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200" style="background:#fafaf9;">
+      <h2>Day-by-Day Cash Calendar</h2>
+      <p class="text-xs text-gray-500 mt-1">Only dates with money moving are shown. Each row lists the payments you'll make and collect that day.</p>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="min-w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Date</th>
+          <th class="text-left">What happens</th>
+          <th class="text-right">Cash In</th>
+          <th class="text-right">Cash Out</th>
+          <th class="text-right">Net</th>
+          <th class="text-right">Running (from 0)</th>
+          <th class="text-right">Extra Needed</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in report.rows %}
+        <tr {% if r.running < 0 %}style="background:#fff7ed;"{% endif %} class="align-top">
+          <td class="text-left">
+            <div class="font-medium text-gray-800">{{ r.date.strftime('%a, %d %b %Y') }}</div>
+            <div class="text-xs text-gray-400">{% if r.day == 0 %}today{% elif r.day > 0 %}+{{ r.day }} days{% else %}{{ r.day }} days{% endif %}</div>
+          </td>
+          <td class="text-left">
+            {% for e in r.events %}
+            <div class="text-xs" style="color:{% if e.dir == 'in' %}#15803d{% else %}#b91c1c{% endif %};">
+              {% if e.dir == 'in' %}▸ Receive{% else %}▸ Pay{% endif %} — {{ e.text|replace('Pay ','')|replace('Collect ','') }}
+              <span class="text-gray-400">({{ currency }} {{ '{:,.0f}'.format(e.amount) }})</span>
+            </div>
+            {% endfor %}
+          </td>
+          <td class="text-right tabular-nums" style="color:{% if r.cash_in %}#15803d{% else %}#9ca3af{% endif %};">{% if r.cash_in %}+ {{ currency }} {{ '{:,.0f}'.format(r.cash_in) }}{% else %}—{% endif %}</td>
+          <td class="text-right tabular-nums" style="color:{% if r.cash_out %}#b91c1c{% else %}#9ca3af{% endif %};">{% if r.cash_out %}− {{ currency }} {{ '{:,.0f}'.format(r.cash_out) }}{% else %}—{% endif %}</td>
+          <td class="text-right tabular-nums" style="color:{% if r.net < 0 %}#c2410c{% else %}#15803d{% endif %};">{{ '{:,.0f}'.format(r.net) }}</td>
+          <td class="text-right tabular-nums font-semibold" style="color:{% if r.running < 0 %}#c2410c{% else %}#111827{% endif %};">{{ currency }} {{ '{:,.0f}'.format(r.running) }}</td>
+          <td class="text-right tabular-nums font-bold" style="color:{% if r.extra_needed > 0 %}#c2410c{% else %}#9ca3af{% endif %};">{% if r.extra_needed > 0 %}{{ currency }} {{ '{:,.0f}'.format(r.extra_needed) }}{% else %}—{% endif %}</td>
+        </tr>
+        {% else %}<tr><td colspan="7" class="px-6 py-10 text-center text-sm text-gray-400">Add products above — the calendar recalculates as you type.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>

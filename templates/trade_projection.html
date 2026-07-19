@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Order Projection{% endblock %}
+{% block content %}
+
+<style>
+  /* let numbers use the full field width — drop the spinner arrows */
+  #proj-table input[type="number"]::-webkit-inner-spin-button,
+  #proj-table input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  #proj-table input[type="number"] { -moz-appearance: textfield; }
+  #proj-table input { border: 1px solid #d1d5db; border-radius: 6px; }
+  /* little "i" info icon */
+  .tip-i { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px;
+           border-radius:50%; border:1px solid #9ca3af; color:#6b7280; font-size:9px; font-style:italic;
+           font-weight:700; line-height:1; cursor:help; margin-left:4px; vertical-align:middle;
+           font-family:Georgia,'Times New Roman',serif; }
+  .tip-i:hover { background:#374151; color:#fff; border-color:#374151; }
+  #proj-tip { position:fixed; z-index:9999; max-width:270px; background:#111827; color:#f9fafb;
+              font-size:12px; line-height:1.45; padding:8px 10px; border-radius:6px;
+              box-shadow:0 6px 18px rgba(0,0,0,.28); pointer-events:none; display:none; white-space:normal; }
+</style>
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Order Projection — Cash Planner</h1>
+      <p class="page-subtitle">Plan a batch of orders and see the day-by-day cash you'd need to pull it off. Edit any cell — the plan recalculates by itself, no need to save. Starts from zero cash and shows the peak amount you must have on hand.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button" class="btn-primary" hx-get="/trade/trades/new?from=projection" hx-target="#modal-container"
+              title="Open a New Trade with these products pre-filled">+ Create Trade</button>
+      <button type="button" class="btn-secondary" hx-post="/trade/projection/import-sheet" hx-swap="none"
+              title="Re-import the products from the 'fleure boxes' Numbers sheet">⟳ Sync from sheet</button>
+      <a href="/trade/reports" class="btn-secondary">← Reports</a>
+    </div>
+  </div>
+
+  <!-- Headline metrics -->
+  <div id="proj-tiles" class="grid grid-cols-2 md:grid-cols-5 gap-4">
+    {% include 'trade_projection_tiles.html' %}
+  </div>
+
+  <!-- Editable order lines -->
+  <form id="proj-form" hx-post="/trade/projection" hx-target="#proj-tiles" hx-swap="innerHTML"
+        hx-trigger="input changed delay:600ms, change delay:150ms"
+        class="bg-white border border-gray-200 rounded-lg p-5">
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-3">
+        <h2 class="text-base font-bold text-gray-900">Planned Orders</h2>
+        <span class="htmx-indicator text-xs text-indigo-500">saving…</span>
+        <span id="proj-saved" class="text-xs text-green-600" style="display:none;">✓ updated</span>
+      </div>
+      <button type="button" class="text-indigo-600 hover:text-indigo-900 text-sm font-medium" onclick="addProjRow()">+ Add product</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="min-w-full text-sm" id="proj-table">
+        <thead>
+          <tr class="text-left" style="color:#6b7280; font-size:11px; text-transform:uppercase;">
+            <th class="py-1 pr-2">On?<span class="tip-i" data-tip="Include this product in the projection. Uncheck to leave it out of the numbers without deleting the row.">i</span></th>
+            <th class="py-1 pr-2">Product<span class="tip-i" data-tip="Product name. Matches the item on your fleure boxes sheet — used to sync.">i</span></th>
+            <th class="py-1 pr-2">Order date<span class="tip-i" data-tip="The day you place this order — its own day 0. Different orders can be on different dates; the calendar below merges them all.">i</span></th>
+            <th class="py-1 pr-2 text-right">Qty<span class="tip-i" data-tip="Pieces you plan to order.">i</span></th>
+            <th class="py-1 pr-2 text-right">Buy rate<span class="tip-i" data-tip="What you pay the manufacturer, per piece.">i</span></th>
+            <th class="py-1 pr-2 text-right">Sale rate<span class="tip-i" data-tip="What your customer pays you, per piece.">i</span></th>
+            <th class="py-1 pr-2 text-right">Dye/Block<span class="tip-i" data-tip="One-time dye / printing-block cost for this product. Paid on the order date.">i</span></th>
+            <th class="py-1 pr-2 text-right">Bilty<span class="tip-i" data-tip="Freight cost to move the goods. Paid when the goods arrive (at the delivery date).">i</span></th>
+            <th class="py-1 pr-2 text-right" style="background:#f1f5f9;">Cost/pc<span class="tip-i" data-tip="Overhead per piece = (Dye/Block + Bilty) ÷ Qty. The dye and freight cost spread across each piece. Calculated — you can't edit it.">i</span></th>
+            <th class="py-1 pr-2 text-right" style="background:#f0fdf4;">Net/pc<span class="tip-i" data-tip="Net profit per piece = Sale rate − Buy rate − (Dye/Block + Bilty) ÷ Qty. Calculated — you can't edit it.">i</span></th>
+            <th class="py-1 pr-2 text-right">Lead d<span class="tip-i" data-tip="Lead days — from placing the order until you receive the goods.">i</span></th>
+            <th class="py-1 pr-2 text-right">Collect d<span class="tip-i" data-tip="Collection days — from delivering to the customer until they actually pay you.">i</span></th>
+            <th class="py-1 pr-2 text-right" style="color:#c2410c;">Adv %<span class="tip-i" data-tip="Share of the vendor payment paid IN ADVANCE, on the order date.">i</span></th>
+            <th class="py-1 pr-2 text-right" style="color:#c2410c;">Deliv %<span class="tip-i" data-tip="Share of the vendor payment paid ON DELIVERY (order date + lead days).">i</span></th>
+            <th class="py-1 pr-2 text-right" style="color:#c2410c;">Credit %<span class="tip-i" data-tip="Share of the vendor payment paid ON CREDIT, some days after delivery. Adv + Deliv + Credit should total 100 (auto-normalised if not).">i</span></th>
+            <th class="py-1 pr-2 text-right">Credit d<span class="tip-i" data-tip="Days after delivery you pay the credit portion of the vendor payment.">i</span></th>
+            <th class="py-1"></th>
+          </tr>
+        </thead>
+        <tbody id="proj-rows"></tbody>
+      </table>
+    </div>
+  </form>
+
+  <!-- Day-wise cash flow -->
+  <div id="proj-daytable">
+    {% include 'trade_projection_daytable.html' %}
+  </div>
+  <p class="text-sm text-gray-500">The <b>Running</b> column is your cash if you started with nothing. Where it goes red you're short; <b>Peak Cash Needed</b> is the most you'd have to put in, and <b>Cash Recovered By</b> is when collections bring you back to positive. Ignores any funding you already have — this is the standalone cash the batch demands.</p>
+</div>
+
+<script>
+  const PROJ_LINES = [
+    {% for ln in report.lines %}
+    { id: {{ ln.id }}, name: {{ ln.item_name|tojson }}, qty: "{{ ln.quantity }}", buy: "{{ ln.purchase_rate }}", sale: "{{ ln.sale_rate }}",
+      dye: "{{ ln.dye_block_cost }}", bilty: "{{ ln.bilty }}", odate: "{{ ln.order_date.isoformat() if ln.order_date else '' }}",
+      lead: {{ ln.lead_days }}, collect: {{ ln.collection_lag_days }},
+      adv: "{{ ln.pct_advance }}", dely: "{{ ln.pct_on_delivery }}", cred: "{{ ln.pct_credit }}", creditd: {{ ln.credit_days }},
+      inc: {{ 'true' if ln.include else 'false' }} }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
+  const TODAY_ISO = "{{ today.isoformat() }}";
+  let projIdx = 0;
+  function addProjRow(d) {
+    const i = projIdx++;
+    const tr = document.createElement('tr');
+    tr.className = 'border-t border-gray-100';
+    const v = d || { id:'', name:'', qty:'0', buy:'0', sale:'0', dye:'0', bilty:'0', odate:TODAY_ISO,
+                     lead:15, collect:30, adv:'0', dely:'100', cred:'0', creditd:30, inc:true };
+    const nz = (x) => (parseFloat(x)||0);
+    tr.innerHTML = `
+      <td class="py-1 pr-2 text-center"><input type="checkbox" name="pline_${i}_include" ${v.inc?'checked':''}></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_item_name" value="${(v.name||'').replace(/"/g,'&quot;')}" placeholder="Product" class="px-2 py-1.5 text-sm" style="min-width:150px;">
+          <input id="pline-id-${i}" type="hidden" name="pline_${i}_id" value="${v.id||''}"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_order_date" value="${v.odate||TODAY_ISO}" type="date" class="px-2 py-1.5 text-sm" style="width:140px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_quantity" oninput="projCalc(${i})" value="${nz(v.qty)}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:100px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_purchase_rate" oninput="projCalc(${i})" value="${nz(v.buy)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right" style="width:90px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_sale_rate" oninput="projCalc(${i})" value="${nz(v.sale)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right" style="width:90px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_dye_block_cost" oninput="projCalc(${i})" value="${nz(v.dye)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right" style="width:100px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_bilty" oninput="projCalc(${i})" value="${nz(v.bilty)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right" style="width:95px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2 text-right tabular-nums" style="background:#f1f5f9;"><span id="cost_pc_${i}" class="font-medium text-gray-700" title="Locked — calculated">—</span></td>
+      <td class="py-1 pr-2 text-right tabular-nums" style="background:#f0fdf4;"><span id="net_pc_${i}" class="font-semibold" title="Locked — calculated">—</span></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_lead_days" value="${v.lead}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:70px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_collection_lag_days" value="${v.collect}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:70px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_pct_advance" value="${nz(v.adv)}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:65px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_pct_on_delivery" value="${nz(v.dely)}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:65px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_pct_credit" value="${nz(v.cred)}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:65px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_credit_days" value="${v.creditd}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:70px; box-sizing:border-box;"></td>
+      <td class="py-1 text-right"><button type="button" class="text-gray-400 hover:text-red-600 text-xs" onclick="delProjRow(this)">✕</button></td>
+    `;
+    document.getElementById('proj-rows').appendChild(tr);
+    if (window.htmx) htmx.process(tr);
+    projCalc(i);
+  }
+  function delProjRow(btn) {
+    const row = btn.closest('tr');
+    const idInput = row.querySelector('input[name$="_id"]');
+    const id = idInput ? idInput.value : '';
+    if (!confirm('Delete this product from the plan?')) return;
+    row.remove();
+    if (id) {
+      fetch('/trade/projection/lines/' + id + '/delete', {method:'POST'})
+        .then(() => htmx.trigger('#proj-form', 'change'));
+    } else {
+      htmx.trigger('#proj-form', 'change');
+    }
+  }
+  // Locked per-piece figures. Cost/pc = (dye + bilty)/qty (overhead spread per
+  // piece); Net/pc = sale − buy − that overhead. Recomputed live on every edit.
+  function projCalc(i) {
+    const g = (f) => parseFloat((document.querySelector('[name="pline_'+i+'_'+f+'"]')||{}).value) || 0;
+    const qty = g('quantity'), buy = g('purchase_rate'), sale = g('sale_rate'),
+          dye = g('dye_block_cost'), bilty = g('bilty');
+    const overhead = qty > 0 ? (dye + bilty) / qty : 0;
+    const net = sale - buy - overhead;
+    const costEl = document.getElementById('cost_pc_' + i);
+    const netEl = document.getElementById('net_pc_' + i);
+    if (costEl) costEl.textContent = qty > 0 ? overhead.toFixed(2) : '—';
+    if (netEl) {
+      netEl.textContent = qty > 0 ? net.toFixed(2) : '—';
+      netEl.style.color = net >= 0 ? '#15803d' : '#b91c1c';
+    }
+  }
+  PROJ_LINES.forEach(addProjRow);
+  if (!PROJ_LINES.length) addProjRow();
+  // initial fill for every row
+  document.querySelectorAll('#proj-rows tr').forEach(function(tr){
+    const el = tr.querySelector('[name^="pline_"][name$="_quantity"]');
+    if (el) { const m = el.name.match(/pline_(\d+)_/); if (m) projCalc(m[1]); }
+  });
+
+  // lightweight tooltip for the little "i" icons — appended to <body> so the
+  // scrolling table never clips it. Works for header + tile icons via delegation.
+  (function(){
+    let tip = document.getElementById('proj-tip');
+    if (!tip) { tip = document.createElement('div'); tip.id = 'proj-tip'; document.body.appendChild(tip); }
+    document.addEventListener('mouseover', function(e){
+      const el = e.target.closest('[data-tip]'); if (!el) return;
+      tip.textContent = el.getAttribute('data-tip');
+      tip.style.display = 'block';
+      const r = el.getBoundingClientRect();
+      const tr = tip.getBoundingClientRect();
+      let top = r.top - tr.height - 8;
+      if (top < 4) top = r.bottom + 8;
+      let left = r.left + r.width/2 - tr.width/2;
+      left = Math.max(6, Math.min(left, window.innerWidth - tr.width - 6));
+      tip.style.top = top + 'px'; tip.style.left = left + 'px';
+    });
+    document.addEventListener('mouseout', function(e){
+      if (e.target.closest('[data-tip]')) tip.style.display = 'none';
+    });
+  })();
+
+  // brief "updated" flash after each live save
+  document.body.addEventListener('htmx:afterRequest', function(e){
+    if (e.target && e.target.id === 'proj-form') {
+      const s = document.getElementById('proj-saved');
+      if (s) { s.style.display='inline'; setTimeout(()=>{ s.style.display='none'; }, 1200); }
+    }
+  });
+</script>
+
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Account Statements{% endblock %}
+{% block content %}
+{% set cur = currency %}
+<div class="space-y-6" style="max-width:900px;">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Account Statements</h1>
+      <p class="page-subtitle">Every account with its balance and transaction count. Open one for its full running-balance ledger.</p>
+    </div>
+    <a href="/accounts/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left" style="color:#6b7280; font-size:11px; text-transform:uppercase;">
+          <th class="px-5 py-2">Account</th>
+          <th class="px-5 py-2">Type</th>
+          <th class="px-5 py-2 text-right">Txns</th>
+          <th class="px-5 py-2 text-right">Balance</th>
+          <th class="px-5 py-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr class="border-t border-gray-100 hover:bg-gray-50">
+          <td class="px-5 py-2 font-medium text-gray-800">{{ r.acct.name }}</td>
+          <td class="px-5 py-2 text-gray-400 text-xs uppercase">{{ r.acct.type.value }}</td>
+          <td class="px-5 py-2 text-right tabular-nums text-gray-500">{{ r.count }}</td>
+          <td class="px-5 py-2 text-right tabular-nums font-semibold" style="color:{% if r.balance>=0 %}#111827{% else %}#b91c1c{% endif %};">{{ cur }} {{ '{:,.0f}'.format(r.balance) }}</td>
+          <td class="px-5 py-2 text-right"><a href="/accounts/{{ r.acct.id }}" class="text-indigo-600 hover:underline text-xs">Open ledger →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

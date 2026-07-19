@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Accounts — Net Worth{% endblock %}
+{% block content %}
+{% set cur = currency %}
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">My Accounts — Net Worth</h1>
+      <p class="page-subtitle">Your personal book of accounts, synced from Money Manager. Cash, banks, wallets, people you lend to, ventures and assets — all in one place.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button" class="btn-primary" hx-post="/accounts/sync-latest" hx-swap="none"
+              title="Import the newest CASHBOOK export from your Downloads">⟳ Sync latest</button>
+      <a href="/accounts/import" class="btn-secondary">Import…</a>
+    </div>
+  </div>
+
+  {% if sync and not sync.error and sync.inserted %}
+  <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-800">
+    ✓ Auto-synced <b>{{ sync.file }}</b> — added <b>{{ '{:,}'.format(sync.inserted) }}</b> new transaction(s){% if sync.new_accounts %}, {{ sync.new_accounts }} new account(s){% endif %}.
+  </div>
+  {% elif sync and sync.error %}
+  <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">✕ {{ sync.error }}</div>
+  {% endif %}
+
+  {% if not has_data %}
+  <div class="bg-white border border-gray-200 rounded-lg p-10 text-center">
+    <div class="text-5xl mb-3">🗂️</div>
+    <h2 class="text-lg font-bold text-gray-900">No accounts yet</h2>
+    <p class="text-sm text-gray-500 mt-1 mb-4">Import your Money Manager cashbook export to see your accounts and net worth.</p>
+    <a href="/accounts/import" class="btn-primary">Import your cashbook</a>
+  </div>
+  {% else %}
+  {% include 'accounts_dashboard_body.html' %}
+  {% endif %}
+</div>
+{% endblock %}

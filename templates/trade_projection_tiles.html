@@ -1,0 +1,24 @@
+    <div class="stat-card" style="border-color:#ea580c;">
+      <div class="stat-label">Peak Cash Needed<span class="tip-i" data-tip="The most cash you'd need on hand at any single point, starting from zero. STANDALONE for this planned batch only — it does NOT include cash already tied up in your ongoing open trades, nor any funding you already have.">i</span></div>
+      <div class="stat-value" style="color:#c2410c;"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.peak_funding) }}</div>
+      <div class="stat-foot text-gray-500">{% if report.peak_day is not none %}by day {{ report.peak_day }}{% else %}—{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total To Invest<span class="tip-i" data-tip="Sum of buy + dye/block + bilty across all included products. The full money that flows out over the batch (before any collections come back).">i</span></div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.total_investment) }}</div>
+      <div class="stat-foot text-gray-500">buy + dye + bilty</div>
+    </div>
+    <div class="stat-card" style="border-color:#16a34a;">
+      <div class="stat-label">Net Profit<span class="tip-i" data-tip="Total sales minus total costs (buy + dye/block + bilty) across the whole batch.">i</span></div>
+      <div class="stat-value" style="color:#15803d;"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.net_profit) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">ROI<span class="tip-i" data-tip="Net profit ÷ total invested, for this batch. How much each rupee put in comes back as profit.">i</span></div>
+      <div class="stat-value" style="color:#15803d;">{{ report.roi_pct }}%</div>
+      <div class="stat-foot text-gray-500">on money invested</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Cash Recovered By<span class="tip-i" data-tip="The day your running balance climbs back to zero as customer collections arrive — i.e. when the batch has paid for itself.">i</span></div>
+      <div class="stat-value">{% if report.recovery_day is not none %}day {{ report.recovery_day }}{% else %}—{% endif %}</div>
+      <div class="stat-foot text-gray-500">back to positive</div>
+    </div>

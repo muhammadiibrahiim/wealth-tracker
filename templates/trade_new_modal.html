@@ -8,66 +8,132 @@
       <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
     </div>
 
+    {% if prefill %}
+    <div class="accent-card mb-4" style="border-left-color:#4f46e5; background:#eef2ff;">
+      <p class="text-sm" style="color:#3730a3;">Pre-filled from your <b>Projection</b> — {{ prefill.lines|length }} product(s) with buy/sale rates and vendor terms. <b>Pick a vendor and customer</b>, tweak anything, then Create Trade.</p>
+    </div>
+    {% endif %}
+
     {% if not vendors or not customers %}
     <div class="accent-card mb-4" style="border-left-color: #ca8a04; background: #fef9c3;">
       <p class="text-sm text-yellow-900">You need at least one vendor and one customer first. <a href="/trade/parties" class="underline font-medium">Manage parties →</a></p>
     </div>
     {% endif %}
 
-    <form hx-post="/trade/trades" hx-target="#modal-container" class="space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label class="field-label field-label-required">Vendor</label>
-          <select name="vendor_id" required class="w-full px-3 py-2.5">
-            <option value="">— Select vendor —</option>
-            {% for v in vendors %}<option value="{{ v.id }}" data-terms="{{ v.default_vendor_terms_days }}">{{ v.name }}</option>{% endfor %}
-          </select>
-        </div>
-        <div>
-          <label class="field-label field-label-required">Purchaser (Customer)</label>
-          <select name="purchaser_id" required class="w-full px-3 py-2.5">
-            <option value="">— Select customer —</option>
-            {% for c in customers %}<option value="{{ c.id }}" data-terms="{{ c.default_customer_terms_days }}">{{ c.name }}</option>{% endfor %}
-          </select>
-        </div>
-        <div>
-          <label class="field-label field-label-required">Trade Date</label>
-          <input type="date" name="trade_date" value="{{ today }}" required class="w-full px-3 py-2.5">
-        </div>
-        <div class="grid grid-cols-2 gap-3">
+    <form hx-post="/trade/trades" hx-target="#modal-container" class="space-y-4" id="trade-form">
+      <!-- resolved party references (filled by JS) -->
+      <input type="hidden" name="vendor_id" id="f_vendor_id">
+      <input type="hidden" name="vendor_new_name" id="f_vendor_new_name">
+      <input type="hidden" name="purchaser_id" id="f_purchaser_id">
+      <input type="hidden" name="customer_new_name" id="f_customer_new_name">
+
+      <!-- ── STEP 1: trade ─────────────────────────────────────────── -->
+      <div id="step-trade" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label class="field-label">Customer Terms (days)</label>
-            <input type="number" min="0" name="customer_terms_days" value="30" id="customer_terms_input" required class="w-full px-3 py-2.5">
+            <label class="field-label field-label-required">Vendor</label>
+            <div style="position:relative;">
+              <input type="text" id="vendor_input" autocomplete="off" placeholder="Type or select vendor" class="w-full px-3 py-2.5" style="padding-right:34px;">
+              <span id="vendor_caret" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6b7280; font-size:11px; padding:5px; user-select:none;">▼</span>
+              <div id="vendor_dropdown" style="display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:230px; overflow-y:auto;"></div>
+            </div>
+            <div id="vendor_new_hint" class="hidden text-xs mt-1 font-medium" style="color:#b45309;">➕ New vendor — you'll add its details next</div>
           </div>
           <div>
-            <label class="field-label">Vendor Terms (days)</label>
-            <input type="number" min="0" name="vendor_terms_days" value="7" id="vendor_terms_input" required class="w-full px-3 py-2.5">
+            <label class="field-label field-label-required">Purchaser (Customer)</label>
+            <div style="position:relative;">
+              <input type="text" id="customer_input" autocomplete="off" placeholder="Type or select customer" class="w-full px-3 py-2.5" style="padding-right:34px;">
+              <span id="customer_caret" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6b7280; font-size:11px; padding:5px; user-select:none;">▼</span>
+              <div id="customer_dropdown" style="display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:230px; overflow-y:auto;"></div>
+            </div>
+            <div id="customer_new_hint" class="hidden text-xs mt-1 font-medium" style="color:#b45309;">➕ New customer — you'll add its details next</div>
+          </div>
+          <div>
+            <label class="field-label field-label-required">Trade Date</label>
+            <input type="date" name="trade_date" value="{{ today }}" required class="w-full px-3 py-2.5">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="field-label">Customer credit days</label>
+              <input type="number" min="0" name="customer_terms_days" value="30" id="customer_terms_input" required class="w-full px-3 py-2.5">
+              <div id="cust_terms_hint" class="text-xs text-gray-400 mt-0.5">days after delivery the Credit % is due</div>
+            </div>
+            <div>
+              <label class="field-label">Vendor credit days</label>
+              <input type="number" min="0" name="vendor_terms_days" value="7" id="vendor_terms_input" required class="w-full px-3 py-2.5">
+              <div id="vend_terms_hint" class="text-xs text-gray-400 mt-0.5">days after delivery the Credit % is due</div>
+            </div>
+          </div>
+
+          <div class="mt-3 border border-gray-200 rounded-lg p-3" style="background:#fafaf9;">
+            <div class="text-xs text-gray-500 mb-2">Payment split — how each side pays. <b>Advance</b> on the trade date, <b>On delivery</b> when goods move, <b>Credit</b> the "credit days" above after delivery. Each row should total 100%.</div>
+            <div class="grid grid-cols-12 gap-2 items-end mb-1.5">
+              <div class="col-span-3 text-xs font-semibold text-gray-700 pb-1.5">Customer pays you</div>
+              <div class="col-span-3"><label class="field-label" style="font-size:10px;">Advance %</label><input type="number" min="0" step="1" name="cust_advance_pct" value="0" class="w-full px-2 py-1.5 text-sm split-pct" data-side="cust"></div>
+              <div class="col-span-3"><label class="field-label" style="font-size:10px;">On delivery %</label><input type="number" min="0" step="1" name="cust_delivery_pct" value="0" class="w-full px-2 py-1.5 text-sm split-pct" data-side="cust"></div>
+              <div class="col-span-3"><label class="field-label" style="font-size:10px;">Credit %</label><input type="number" min="0" step="1" name="cust_credit_pct" value="100" class="w-full px-2 py-1.5 text-sm split-pct" data-side="cust"></div>
+            </div>
+            <div class="grid grid-cols-12 gap-2 items-end">
+              <div class="col-span-3 text-xs font-semibold text-gray-700 pb-1.5">You pay vendor</div>
+              <div class="col-span-3"><input type="number" min="0" step="1" name="vend_advance_pct" value="0" class="w-full px-2 py-1.5 text-sm split-pct" data-side="vend"></div>
+              <div class="col-span-3"><input type="number" min="0" step="1" name="vend_delivery_pct" value="0" class="w-full px-2 py-1.5 text-sm split-pct" data-side="vend"></div>
+              <div class="col-span-3"><input type="number" min="0" step="1" name="vend_credit_pct" value="100" class="w-full px-2 py-1.5 text-sm split-pct" data-side="vend"></div>
+            </div>
+            <div id="split-warn" class="text-xs text-amber-600 mt-1.5 hidden"></div>
           </div>
         </div>
-      </div>
 
-      <div class="border-t border-gray-200 pt-4">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-base font-bold text-gray-900">Line Items</h3>
-          <button type="button" class="text-indigo-600 hover:text-indigo-900 text-sm font-medium" onclick="addTradeLine()">+ Add line</button>
+        <div class="border-t border-gray-200 pt-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-base font-bold text-gray-900">Line Items</h3>
+            <button type="button" class="text-indigo-600 hover:text-indigo-900 text-sm font-medium" onclick="addTradeLine()">+ Add line</button>
+          </div>
+          <div id="trade-lines"></div>
         </div>
-        <div id="trade-lines"></div>
+
+        <div>
+          <label class="field-label">Notes</label>
+          <textarea name="notes" rows="2" class="w-full px-3 py-2.5" placeholder="Optional"></textarea>
+        </div>
+
+        <div id="trade-form-error" class="hidden accent-card" style="border-left-color: #dc2626; background: #fef2f2;">
+          <p class="text-sm font-medium" style="color: #991b1b;">
+            <span id="trade-form-error-msg">Something went wrong.</span>
+          </p>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
+          <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Cancel</button>
+          <button type="button" id="trade-submit-btn" class="btn-primary">Create Trade</button>
+        </div>
       </div>
 
-      <div>
-        <label class="field-label">Notes</label>
-        <textarea name="notes" rows="2" class="w-full px-3 py-2.5" placeholder="Optional"></textarea>
-      </div>
-
-      <div id="trade-form-error" class="hidden accent-card" style="border-left-color: #dc2626; background: #fef2f2;">
-        <p class="text-sm font-medium" style="color: #991b1b;">
-          <span id="trade-form-error-msg">Something went wrong.</span>
-        </p>
-      </div>
-
-      <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
-        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Cancel</button>
-        <button type="submit" id="trade-submit-btn" class="btn-primary">Create Trade</button>
+      <!-- ── STEP 2: new party details (shown only if a new name was typed) ── -->
+      <div id="step-party" class="hidden space-y-4">
+        <div>
+          <h3 class="text-base font-bold text-gray-900">New Party Details</h3>
+          <p class="modal-subtitle">These parties don't exist yet — add their details, then the trade is created.</p>
+        </div>
+        <div id="np-vendor" class="hidden accent-card space-y-3" style="border-left-color:#b45309; background:#fffbeb;">
+          <div class="font-bold text-gray-900">Vendor: <span id="np-vendor-name" class="text-amber-800"></span></div>
+          <div class="grid grid-cols-2 gap-3">
+            <input name="vendor_new_contact" placeholder="Contact person" class="px-3 py-2.5">
+            <input name="vendor_new_phone" placeholder="Phone" class="px-3 py-2.5">
+            <input name="vendor_new_city" placeholder="City" class="px-3 py-2.5">
+          </div>
+        </div>
+        <div id="np-customer" class="hidden accent-card space-y-3" style="border-left-color:#b45309; background:#fffbeb;">
+          <div class="font-bold text-gray-900">Customer: <span id="np-customer-name" class="text-amber-800"></span></div>
+          <div class="grid grid-cols-2 gap-3">
+            <input name="customer_new_contact" placeholder="Contact person" class="px-3 py-2.5">
+            <input name="customer_new_phone" placeholder="Phone" class="px-3 py-2.5">
+            <input name="customer_new_city" placeholder="City" class="px-3 py-2.5">
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
+          <button type="button" class="btn-secondary" id="np-back">← Back</button>
+          <button type="submit" class="btn-primary">Save party &amp; create trade</button>
+        </div>
       </div>
     </form>
   </div>
@@ -143,6 +209,57 @@
     {% endfor %}
   ];
 
+  // Per-line item picker — works exactly like the vendor combo: type to search
+  // the catalog, and if the name isn't there, offer "➕ Create …" (auto-added to
+  // the catalog on submit). Picking an existing item prefills unit/price/specs.
+  function setupItemCombo(wrap, idx) {
+    const input = wrap.querySelector('.item-combo-input');
+    const dd = wrap.querySelector('.item-combo-dd');
+    const caret = wrap.querySelector('.item-combo-caret');
+    const hidId = wrap.querySelector(`[name=line_${idx}_item_id]`);
+    let opts = [], active = -1;
+    function prefill(item) {
+      wrap.querySelector(`[name=line_${idx}_unit]`).value = item.unit || 'pcs';
+      wrap.querySelector(`[name=line_${idx}_unit_cost]`).value = item.default_cost;
+      wrap.querySelector(`[name=line_${idx}_unit_price]`).value = item.default_price;
+      const sc = wrap.querySelector('.specs-container'); sc.innerHTML = '';
+      (item.spec_labels || []).forEach(label => addSpecRow(wrap, idx, label, ''));
+    }
+    function choose(el) {
+      if (el.dataset.new) { hidId.value = ''; }               // new name → auto-create on submit
+      else { const it = ITEM_CATALOG.find(x => String(x.id) === el.dataset.id);
+             if (it) { input.value = it.name; hidId.value = it.id; prefill(it); } }
+      dd.style.display = 'none'; active = -1;
+    }
+    function highlight(i){ opts.forEach((o,j)=>o.style.background=j===i?'#eef2ff':''); if(opts[i])opts[i].scrollIntoView({block:'nearest'}); active=i; }
+    function render() {
+      const q = input.value.trim().toLowerCase();
+      const matches = ITEM_CATALOG.filter(it => it.name.toLowerCase().includes(q));
+      let html = matches.map(it => `<div class="item-opt" style="${OPT_STYLE}" data-id="${it.id}">${esc(it.name)}</div>`).join('');
+      const exact = ITEM_CATALOG.some(it => it.name.toLowerCase() === q);
+      if (q && !exact) html += `<div class="item-opt" style="${OPT_STYLE}color:#b45309;font-weight:500;border-top:1px solid #f0f0f0;" data-new="1">➕ Create "${esc(input.value.trim())}"</div>`;
+      if (!html) html = `<div style="padding:9px 12px;font-size:13px;color:#9ca3af;">No items yet — type a name to create one.</div>`;
+      dd.innerHTML = html;
+      opts = Array.from(dd.querySelectorAll('.item-opt')); active = -1;
+      opts.forEach((el,i)=>{
+        el.addEventListener('mouseenter', ()=>highlight(i));
+        el.addEventListener('mousedown', e=>{ e.preventDefault(); choose(el); });
+      });
+    }
+    function open(){ render(); dd.style.display='block'; }
+    input.addEventListener('focus', open);
+    input.addEventListener('click', open);
+    input.addEventListener('input', ()=>{ hidId.value=''; open(); });   // typing = a new name until picked
+    input.addEventListener('blur', ()=>setTimeout(()=>{ dd.style.display='none'; }, 160));
+    input.addEventListener('keydown', e=>{
+      if(e.key==='ArrowDown'){ e.preventDefault(); e.stopPropagation(); if(dd.style.display!=='block')open(); highlight(Math.min(active+1,opts.length-1)); }
+      else if(e.key==='ArrowUp'){ e.preventDefault(); e.stopPropagation(); highlight(Math.max(active-1,0)); }
+      else if(e.key==='Enter'){ if(dd.style.display==='block'&&active>=0&&opts[active]){ e.preventDefault(); e.stopPropagation(); choose(opts[active]); } }
+      else if(e.key==='Escape'){ dd.style.display='none'; }
+    });
+    if(caret) caret.addEventListener('mousedown', e=>{ e.preventDefault(); if(dd.style.display==='block')dd.style.display='none'; else { input.focus(); open(); } });
+  }
+
   let lineCounter = 0;
   function addTradeLine() {
     const idx = lineCounter++;
@@ -151,17 +268,15 @@
     wrap.style.background = '#fafaf9';
     wrap.innerHTML = `
       <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-        <div class="md:col-span-4">
-          <label class="field-label">From Catalog</label>
-          <select class="item-picker w-full px-2 py-2 text-sm">
-            <option value="">— Pick item —</option>
-            ${ITEM_CATALOG.map(i => `<option value="${i.id}">${i.name}</option>`).join('')}
-          </select>
-        </div>
-        <div class="md:col-span-4">
-          <label class="field-label field-label-required">Item Name</label>
-          <input name="line_${idx}_item_name" required class="w-full px-2 py-2 text-sm" placeholder="e.g. Flyer">
+        <div class="md:col-span-8">
+          <label class="field-label field-label-required">Item</label>
+          <div style="position:relative;">
+            <input name="line_${idx}_item_name" class="item-combo-input w-full px-2 py-2 text-sm" autocomplete="off" placeholder="Type or pick an item…" style="padding-right:26px;">
+            <span class="item-combo-caret" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6b7280; font-size:11px; padding:5px; user-select:none;">▼</span>
+            <div class="item-combo-dd" style="display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:2px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,.12); max-height:220px; overflow:auto;"></div>
+          </div>
           <input type="hidden" name="line_${idx}_item_id" value="">
+          <div class="text-xs text-gray-400 mt-1">Pick an item, or type a new name and choose “Create”.</div>
         </div>
         <div class="md:col-span-2">
           <label class="field-label">Qty</label>
@@ -199,22 +314,44 @@
 
     wrap.querySelector('[data-action=remove-line]').addEventListener('click', () => wrap.remove());
     wrap.querySelector('[data-action=add-spec]').addEventListener('click', () => addSpecRow(wrap, idx));
-    wrap.querySelector('.item-picker').addEventListener('change', (e) => {
-      const id = parseInt(e.target.value || '0', 10);
-      const item = ITEM_CATALOG.find(i => i.id === id);
-      if (!item) return;
-      wrap.querySelector(`[name=line_${idx}_item_name]`).value = item.name;
-      wrap.querySelector(`[name=line_${idx}_item_id]`).value = item.id;
-      wrap.querySelector(`[name=line_${idx}_unit]`).value = item.unit;
-      wrap.querySelector(`[name=line_${idx}_unit_cost]`).value = item.default_cost;
-      wrap.querySelector(`[name=line_${idx}_unit_price]`).value = item.default_price;
-      const sc = wrap.querySelector('.specs-container');
-      sc.innerHTML = '';
-      item.spec_labels.forEach(label => addSpecRow(wrap, idx, label, ''));
-    });
+    setupItemCombo(wrap, idx);
     addSpecRow(wrap, idx);
     return wrap;
   }
+  // Previously-used spec values, keyed by lower-cased label.
+  const SPEC_VALUES = {{ spec_values|tojson }};
+  function attachSpecAutocomplete(valueInput, labelInput) {
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:relative; flex:1 1 0%;';
+    valueInput.parentNode.insertBefore(wrapper, valueInput);
+    wrapper.appendChild(valueInput);
+    valueInput.classList.remove('flex-1');
+    valueInput.style.width = '100%';
+    const dd = document.createElement('div');
+    dd.style.cssText = 'display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:3px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:200px; overflow-y:auto;';
+    wrapper.appendChild(dd);
+    function render() {
+      const label = (labelInput.value || '').trim().toLowerCase();
+      const vals = SPEC_VALUES[label] || [];
+      const q = valueInput.value.trim().toLowerCase();
+      const matches = vals.filter(v => v.toLowerCase().includes(q));
+      if (!matches.length) { dd.style.display = 'none'; return; }
+      dd.innerHTML = matches.map(v =>
+        `<div class="spec-opt" style="padding:8px 11px;cursor:pointer;font-size:13px;color:#111827;" data-v="${esc(v)}">${esc(v)}</div>`
+      ).join('');
+      dd.querySelectorAll('.spec-opt').forEach(el => {
+        el.addEventListener('mouseenter', () => el.style.background = '#f3f4f6');
+        el.addEventListener('mouseleave', () => el.style.background = '');
+        el.addEventListener('mousedown', e => { e.preventDefault(); valueInput.value = el.dataset.v; dd.style.display = 'none'; });
+      });
+      dd.style.display = 'block';
+    }
+    valueInput.addEventListener('focus', render);
+    valueInput.addEventListener('click', render);
+    valueInput.addEventListener('input', render);
+    valueInput.addEventListener('blur', () => setTimeout(() => { dd.style.display = 'none'; }, 160));
+  }
+
   function addSpecRow(wrap, idx, label = '', value = '') {
     const sc = wrap.querySelector('.specs-container');
     const row = document.createElement('div');
@@ -226,14 +363,177 @@
     `;
     row.querySelector('button').addEventListener('click', () => row.remove());
     sc.appendChild(row);
+    const inputs = row.querySelectorAll('input');
+    attachSpecAutocomplete(inputs[1], inputs[0]);
   }
-  document.querySelector('select[name=vendor_id]').addEventListener('change', e => {
-    const t = e.target.selectedOptions[0]?.dataset.terms;
-    if (t) document.getElementById('vendor_terms_input').value = t;
+  // ── Party comboboxes: custom dropdown (opens on click, filters, + create) ──
+  const VENDORS_LIST = [{% for v in vendors %}{id: {{ v.id }}, name: "{{ v.name|replace('"','\\"') }}", terms: {{ v.default_vendor_terms_days }}},{% endfor %}];
+  const CUSTOMERS_LIST = [{% for c in customers %}{id: {{ c.id }}, name: "{{ c.name|replace('"','\\"') }}", terms: {{ c.default_customer_terms_days }}},{% endfor %}];
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  function syncHidden(role) {
+    const items = role === 'vendor' ? VENDORS_LIST : CUSTOMERS_LIST;
+    const val = document.getElementById(role + '_input').value.trim();
+    const m = items.find(it => it.name.toLowerCase() === val.toLowerCase());
+    document.getElementById('f_' + (role === 'vendor' ? 'vendor_id' : 'purchaser_id')).value = m ? m.id : '';
+    document.getElementById('f_' + (role === 'vendor' ? 'vendor_new_name' : 'customer_new_name')).value = m ? '' : val;
+    if (m) document.getElementById((role === 'vendor' ? 'vendor' : 'customer') + '_terms_input').value = m.terms;
+    document.getElementById(role + '_new_hint').classList.toggle('hidden', !!m || !val);
+    return { val, isNew: !m && !!val, id: m ? m.id : null };
+  }
+  const resolveParty = syncHidden;
+
+  const OPT_STYLE = 'padding:9px 12px;cursor:pointer;font-size:14px;color:#111827;';
+  function setupCombo(role) {
+    const items = role === 'vendor' ? VENDORS_LIST : CUSTOMERS_LIST;
+    const input = document.getElementById(role + '_input');
+    const dd = document.getElementById(role + '_dropdown');
+    let opts = [];      // current option elements
+    let active = -1;    // keyboard-highlighted index
+
+    function selectOption(el) {
+      if (!el.dataset.new) input.value = el.dataset.name;
+      syncHidden(role);
+      dd.style.display = 'none';
+      active = -1;
+    }
+    function highlight(i) {
+      opts.forEach((o, idx) => o.style.background = idx === i ? '#eef2ff' : '');
+      if (opts[i]) opts[i].scrollIntoView({ block: 'nearest' });
+      active = i;
+    }
+    function open() { render(); dd.style.display = 'block'; }
+    function render() {
+      const q = input.value.trim().toLowerCase();
+      const matches = items.filter(it => it.name.toLowerCase().includes(q));
+      let html = matches.map(it =>
+        `<div class="party-opt" style="${OPT_STYLE}" data-name="${esc(it.name)}">${esc(it.name)}</div>`
+      ).join('');
+      const exact = items.some(it => it.name.toLowerCase() === q);
+      if (q && !exact) html += `<div class="party-opt" style="${OPT_STYLE}color:#b45309;font-weight:500;border-top:1px solid #f0f0f0;" data-new="1">➕ Create "${esc(input.value.trim())}"</div>`;
+      if (!html) html = `<div style="padding:9px 12px;font-size:13px;color:#9ca3af;">No parties yet — type a name to create one.</div>`;
+      dd.innerHTML = html;
+      opts = Array.from(dd.querySelectorAll('.party-opt'));
+      active = -1;
+      opts.forEach((el, idx) => {
+        el.addEventListener('mouseenter', () => highlight(idx));
+        el.addEventListener('mousedown', e => { e.preventDefault(); selectOption(el); });
+      });
+    }
+    input.addEventListener('focus', open);
+    input.addEventListener('click', open);
+    input.addEventListener('input', () => { syncHidden(role); open(); });
+    input.addEventListener('blur', () => setTimeout(() => { dd.style.display = 'none'; }, 160));
+    input.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault(); e.stopPropagation();
+        if (dd.style.display !== 'block') open();
+        highlight(Math.min(active + 1, opts.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault(); e.stopPropagation();
+        highlight(Math.max(active - 1, 0));
+      } else if (e.key === 'Enter') {
+        if (dd.style.display === 'block' && active >= 0 && opts[active]) {
+          e.preventDefault(); e.stopPropagation();
+          selectOption(opts[active]);
+        }
+      } else if (e.key === 'Escape') {
+        dd.style.display = 'none';
+      }
+    });
+    // Chevron toggles the list open/closed.
+    const caret = document.getElementById(role + '_caret');
+    if (caret) caret.addEventListener('mousedown', e => {
+      e.preventDefault();
+      if (dd.style.display === 'block') { dd.style.display = 'none'; }
+      else { input.focus(); open(); }
+    });
+  }
+  setupCombo('vendor');
+  setupCombo('customer');
+
+  // warn (don't block) if a payment split doesn't total 100% — server normalises
+  function checkSplits(){
+    const warn = document.getElementById('split-warn');
+    if (!warn) return;
+    const sum = side => ['advance','delivery','credit'].reduce((a,f)=>{
+      const el = document.querySelector(`[name=${side}_${f}_pct]`);
+      return a + (parseFloat(el && el.value) || 0);
+    }, 0);
+    const cs = sum('cust'), vs = sum('vend');
+    const msgs = [];
+    if (Math.abs(cs-100) > 0.01) msgs.push(`Customer = ${cs}%`);
+    if (Math.abs(vs-100) > 0.01) msgs.push(`Vendor = ${vs}%`);
+    if (msgs.length){ warn.textContent = '⚠ Split ' + msgs.join(' · ') + ' (should be 100% — will be normalised).'; warn.classList.remove('hidden'); }
+    else warn.classList.add('hidden');
+
+    // credit-days only matters when there's a Credit % — dim it otherwise
+    [['cust','customer_terms_input','cust_terms_hint'],
+     ['vend','vendor_terms_input','vend_terms_hint']].forEach(([side, inpId, hintId]) => {
+      const cred = parseFloat((document.querySelector(`[name=${side}_credit_pct]`)||{}).value) || 0;
+      const inp = document.getElementById(inpId), hint = document.getElementById(hintId);
+      if (!inp) return;
+      inp.style.opacity = cred > 0 ? '' : '0.45';
+      if (hint) hint.textContent = cred > 0 ? 'days after delivery the Credit % is due'
+                                            : 'not used — no credit portion (0%)';
+    });
+  }
+  document.querySelectorAll('.split-pct').forEach(el => el.addEventListener('input', checkSplits));
+  checkSplits();
+
+  function tradeError(msg) {
+    const box = document.getElementById('trade-form-error');
+    document.getElementById('trade-form-error-msg').textContent = msg;
+    box.classList.remove('hidden');
+  }
+
+  document.getElementById('trade-submit-btn').addEventListener('click', () => {
+    const v = resolveParty('vendor'), c = resolveParty('customer');
+    if (!v.val) { tradeError('Vendor is required.'); return; }
+    if (!c.val) { tradeError('Customer is required.'); return; }
+    if (v.val.toLowerCase() === c.val.toLowerCase()) { tradeError('Vendor and customer must be different.'); return; }
+    const hasLine = Array.from(document.querySelectorAll('#trade-lines input[name$="_item_name"]')).some(i => i.value.trim());
+    if (!hasLine) { tradeError('Add at least one line item.'); return; }
+    document.getElementById('trade-form-error').classList.add('hidden');
+    if (v.isNew || c.isNew) {
+      document.getElementById('np-vendor').classList.toggle('hidden', !v.isNew);
+      document.getElementById('np-customer').classList.toggle('hidden', !c.isNew);
+      if (v.isNew) document.getElementById('np-vendor-name').textContent = v.val;
+      if (c.isNew) document.getElementById('np-customer-name').textContent = c.val;
+      document.getElementById('step-trade').classList.add('hidden');
+      document.getElementById('step-party').classList.remove('hidden');
+    } else {
+      document.getElementById('trade-form').requestSubmit();
+    }
   });
-  document.querySelector('select[name=purchaser_id]').addEventListener('change', e => {
-    const t = e.target.selectedOptions[0]?.dataset.terms;
-    if (t) document.getElementById('customer_terms_input').value = t;
+  document.getElementById('np-back').addEventListener('click', () => {
+    document.getElementById('step-party').classList.add('hidden');
+    document.getElementById('step-trade').classList.remove('hidden');
   });
-  addTradeLine();
+
+  // Pre-fill from the Projection planner (if launched with ?from=projection).
+  const PREFILL = {{ prefill|tojson }};
+  if (PREFILL && PREFILL.lines && PREFILL.lines.length) {
+    PREFILL.lines.forEach(l => {
+      addTradeLine();
+      const i = lineCounter - 1;
+      const q = sel => document.querySelector(`[name=line_${i}_${sel}]`);
+      if (q('item_name')) q('item_name').value = l.name;
+      if (q('quantity'))  q('quantity').value  = l.qty;
+      if (q('unit_cost')) q('unit_cost').value = l.buy;
+      if (q('unit_price'))q('unit_price').value= l.sale;
+      if (q('notes') && (l.dye || l.bilty))
+        q('notes').value = `Dye/Block ${l.dye}, Bilty ${l.bilty} — add via Record Cost`;
+    });
+    const setv = (n,v)=>{ const e=document.querySelector(`[name=${n}]`); if(e && v!=null) e.value=v; };
+    setv('vend_advance_pct', PREFILL.vend_advance);
+    setv('vend_delivery_pct', PREFILL.vend_delivery);
+    setv('vend_credit_pct',  PREFILL.vend_credit);
+    setv('vendor_terms_days', PREFILL.vendor_terms);
+    setv('customer_terms_days', PREFILL.collect_days);
+    checkSplits();
+    setTimeout(()=>{ const vi=document.getElementById('vendor_input'); if(vi) vi.focus(); }, 60);
+  } else {
+    addTradeLine();
+  }
 </script>

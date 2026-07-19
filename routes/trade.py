@@ -2,7 +2,7 @@
 Routes for the Trade module.
 """
 import re
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 
 from config import DEFAULT_USER_ID, CURRENCY_SYMBOL
 from database import get_session
-from models import PaymentDirection, QuotationStatus, TradeStatus
+from models import Party, PaymentDirection, QuotationStatus, TradeStatus
 from services.trade import (
     CashAccountService,
     ItemService,
@@ -132,8 +132,52 @@ async def trades_list(
 
 
 @router.get("/trades/new", response_class=HTMLResponse)
-async def trade_new_modal(request: Request, session: Session = Depends(get_session)):
+async def trade_new_modal(request: Request, session: Session = Depends(get_session),
+                          from_: str = Query("", alias="from")):
     user_id = DEFAULT_USER_ID
+    # Previously-used spec values per label (lower-cased key) → autocomplete.
+    from models import TradeLineSpec as _TLS
+    spec_rows = session.exec(select(_TLS.label, _TLS.value)).all()
+    spec_values: dict[str, list[str]] = {}
+    for lab, val in spec_rows:
+        lab = (lab or "").strip().lower()
+        val = (val or "").strip()
+        if not lab or not val:
+            continue
+        bucket = spec_values.setdefault(lab, [])
+        if val not in bucket:
+            bucket.append(val)
+    for k in spec_values:
+        spec_values[k].sort()
+
+    # Optional pre-fill from the Projection planner: one line per included order,
+    # with buy/sale rates, qty, and the vendor payment split carried over. Vendor
+    # and customer are left blank for the user to pick.
+    prefill = None
+    if from_ == "projection":
+        from models import ProjectionLine
+        plines = session.exec(
+            select(ProjectionLine).where(
+                ProjectionLine.user_id == user_id, ProjectionLine.include == True  # noqa: E712
+            ).order_by(ProjectionLine.sort_order, ProjectionLine.id)
+        ).all()
+        # vendor payment split — averaged across lines (they're usually uniform)
+        def _avg(attr):
+            vals = [float(getattr(p, attr) or 0) for p in plines]
+            return round(sum(vals) / len(vals)) if vals else 0
+        prefill = {
+            "lines": [{
+                "name": p.item_name, "qty": float(p.quantity),
+                "buy": float(p.purchase_rate), "sale": float(p.sale_rate),
+                "dye": float(p.dye_block_cost), "bilty": float(p.bilty),
+            } for p in plines],
+            "vend_advance": _avg("pct_advance"),
+            "vend_delivery": _avg("pct_on_delivery"),
+            "vend_credit": _avg("pct_credit"),
+            "vendor_terms": int(round(sum(int(p.credit_days or 0) for p in plines) / len(plines))) if plines else 30,
+            "collect_days": int(round(sum(int(p.collection_lag_days or 0) for p in plines) / len(plines))) if plines else 30,
+        }
+
     return templates.TemplateResponse(
         "trade_new_modal.html",
         _ctx(
@@ -141,6 +185,8 @@ async def trade_new_modal(request: Request, session: Session = Depends(get_sessi
             vendors=PartyService.list_vendors(session, user_id),
             customers=PartyService.list_customers(session, user_id),
             items=ItemService.list(session, user_id, active_only=True),
+            spec_values=spec_values,
+            prefill=prefill,
             today=date.today(),
         ),
     )
@@ -153,18 +199,56 @@ async def trade_create(request: Request, session: Session = Depends(get_session)
 
     vendor_id = int(form.get("vendor_id") or 0)
     purchaser_id = int(form.get("purchaser_id") or 0)
+    customer_terms = int(_parse_decimal(form.get("customer_terms_days"), "30"))
+    vendor_terms = int(_parse_decimal(form.get("vendor_terms_days"), "7"))
+    split = dict(
+        cust_advance_pct=_parse_decimal(form.get("cust_advance_pct"), "0"),
+        cust_delivery_pct=_parse_decimal(form.get("cust_delivery_pct"), "0"),
+        cust_credit_pct=_parse_decimal(form.get("cust_credit_pct"), "100"),
+        vend_advance_pct=_parse_decimal(form.get("vend_advance_pct"), "0"),
+        vend_delivery_pct=_parse_decimal(form.get("vend_delivery_pct"), "0"),
+        vend_credit_pct=_parse_decimal(form.get("vend_credit_pct"), "100"),
+    )
+
+    # Inline party creation: if a vendor/customer name was typed that doesn't
+    # exist yet, the New-Party step collected its details — create the party
+    # now (with its ledger account) and use its id for the trade.
+    vendor_new = (form.get("vendor_new_name") or "").strip()
+    customer_new = (form.get("customer_new_name") or "").strip()
+    if not vendor_id and vendor_new:
+        vp = PartyService.create(
+            session, user_id, name=vendor_new, is_vendor=True, is_customer=False,
+            contact_person=(form.get("vendor_new_contact") or "").strip() or None,
+            phone=(form.get("vendor_new_phone") or "").strip() or None,
+            city=(form.get("vendor_new_city") or "").strip() or None,
+            default_vendor_terms_days=vendor_terms, default_customer_terms_days=30,
+        )
+        account_setup.sync_party_account(session, user_id, vp)
+        vendor_id = vp.id
+    if not purchaser_id and customer_new:
+        cp = PartyService.create(
+            session, user_id, name=customer_new, is_customer=True, is_vendor=False,
+            contact_person=(form.get("customer_new_contact") or "").strip() or None,
+            phone=(form.get("customer_new_phone") or "").strip() or None,
+            city=(form.get("customer_new_city") or "").strip() or None,
+            default_customer_terms_days=customer_terms, default_vendor_terms_days=7,
+        )
+        account_setup.sync_party_account(session, user_id, cp)
+        purchaser_id = cp.id
+
     if not vendor_id or not purchaser_id:
         raise HTTPException(400, "Vendor and purchaser are required")
     if vendor_id == purchaser_id:
         raise HTTPException(400, "Vendor and purchaser must be different parties")
-
-    customer_terms = int(_parse_decimal(form.get("customer_terms_days"), "30"))
-    vendor_terms = int(_parse_decimal(form.get("vendor_terms_days"), "7"))
     trade_date = _parse_date(form.get("trade_date")) or date.today()
     notes = (form.get("notes") or "").strip() or None
 
     # Reconstruct lines from posted indices.
     line_indices = sorted({int(k.split("_")[1]) for k in form.keys() if k.startswith("line_") and "_item_name" in k})
+    # existing catalog items, keyed by name — a typed-in name not in the catalog
+    # gets auto-created (and reused thereafter).
+    catalog_by_name = {(i.name or "").strip().lower(): i.id
+                       for i in ItemService.list(session, user_id)}
     lines: list[dict] = []
     for idx in line_indices:
         name = (form.get(f"line_{idx}_item_name") or "").strip()
@@ -178,6 +262,22 @@ async def trade_create(request: Request, session: Session = Depends(get_session)
         for lab, val in zip(spec_labels, spec_values):
             if lab.strip() or val.strip():
                 specs.append({"label": lab, "value": val})
+        # No catalog item picked → match by name, else create a new catalog item
+        # (with its spec labels as the template) so it's reusable next time.
+        if item_id is None:
+            key = name.lower()
+            if key in catalog_by_name:
+                item_id = catalog_by_name[key]
+            else:
+                new_item = ItemService.create(
+                    session, user_id,
+                    spec_labels=[l for l in spec_labels if l.strip()] or None,
+                    name=name,
+                    unit=(form.get(f"line_{idx}_unit") or "pcs").strip(),
+                    default_price=_parse_decimal(form.get(f"line_{idx}_unit_price"), "0"),
+                )
+                catalog_by_name[key] = new_item.id
+                item_id = new_item.id
         lines.append(
             {
                 "item_id": item_id,
@@ -203,6 +303,7 @@ async def trade_create(request: Request, session: Session = Depends(get_session)
         trade_date=trade_date,
         notes=notes,
         lines=lines,
+        **split,
     )
     return Response(status_code=204, headers={"HX-Redirect": f"/trade/trades/{trade.id}"})
 
@@ -363,6 +464,8 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
             trade=trade,
             vendor=vendor,
             purchaser=purchaser,
+            cust_terms_label=TradeService.terms_label(trade, "customer"),
+            vend_terms_label=TradeService.terms_label(trade, "vendor"),
             today=date.today(),
             customer_outstanding=customer_outstanding,
             trade_costs_total=trade_costs_total,
@@ -451,6 +554,85 @@ async def trade_delete(trade_id: int, session: Session = Depends(get_session)):
     TradeService.delete(session, DEFAULT_USER_ID, trade_id)
     # After delete the trade page no longer exists — redirect to the list.
     return Response(status_code=204, headers={"HX-Redirect": "/trade/trades"})
+
+
+# ───────── purchases (cost recorded per batch/rate) ─────
+
+
+@router.get("/trades/{trade_id}/purchase/new", response_class=HTMLResponse)
+async def trade_purchase_modal(request: Request, trade_id: int, session: Session = Depends(get_session)):
+    from services.trade import PurchaseService, ReceiptService
+    trade = TradeService.get(session, DEFAULT_USER_ID, trade_id)
+    if not trade:
+        raise HTTPException(404, "Trade not found")
+    line_info = []
+    for ln in trade.lines:
+        purchased = PurchaseService.line_purchased_qty(session, ln.id)
+        line_info.append({
+            "line": ln,
+            "purchased_qty": purchased,
+            "remaining": (Decimal(ln.quantity) - purchased).quantize(Decimal("0.001")),
+            "purchases": PurchaseService.list_for_line(session, ln.id),
+        })
+    return templates.TemplateResponse(
+        "trade_purchase_modal.html",
+        _ctx(request, trade=trade, line_info=line_info, today=date.today()),
+    )
+
+
+@router.post("/trades/{trade_id}/purchase")
+async def trade_purchase_post(trade_id: int, request: Request, session: Session = Depends(get_session)):
+    """Record purchases (qty + rate + optional invoice) per line, then re-post cost."""
+    from services.trade import PurchaseService
+    import os, uuid
+    user_id = DEFAULT_USER_ID
+    trade = TradeService.get(session, user_id, trade_id)
+    if not trade:
+        raise HTTPException(404, "Trade not found")
+    form = await request.form()
+    purchased_on = _parse_date(form.get("purchased_on")) or date.today()
+    notes = (form.get("notes") or "").strip() or None
+    upload_dir = "static/uploads/invoices"
+    os.makedirs(upload_dir, exist_ok=True)
+    recorded = 0
+    for ln in trade.lines:
+        qty_raw = form.get(f"line_{ln.id}_qty")
+        rate_raw = form.get(f"line_{ln.id}_rate")
+        if not qty_raw or not rate_raw:
+            continue
+        try:
+            qty = Decimal(str(qty_raw)); rate = Decimal(str(rate_raw))
+        except Exception:
+            continue
+        if qty <= 0:
+            continue
+        invoice_path = None
+        f = form.get(f"line_{ln.id}_invoice")
+        if f and hasattr(f, "filename") and f.filename:
+            ext = os.path.splitext(f.filename)[1].lower() or ".bin"
+            safe = f"{uuid.uuid4().hex}{ext}"
+            full = os.path.join(upload_dir, safe)
+            with open(full, "wb") as out:
+                while True:
+                    chunk = await f.read(64 * 1024)
+                    if not chunk:
+                        break
+                    out.write(chunk)
+            invoice_path = f"/{full}"
+        PurchaseService.record(session, user_id, trade_id, ln.id, qty, rate,
+                               purchased_on=purchased_on, vendor_invoice_path=invoice_path,
+                               notes=notes)
+        recorded += 1
+    if not recorded:
+        raise HTTPException(400, "No purchases entered")
+    return _close_modal()
+
+
+@router.post("/purchases/{purchase_id}/delete")
+async def purchase_delete(purchase_id: int, session: Session = Depends(get_session)):
+    from services.trade import PurchaseService
+    PurchaseService.delete(session, DEFAULT_USER_ID, purchase_id)
+    return _close_modal()
 
 
 # ───────── partial receipts (vendor delivery + invoice upload) ─────
@@ -1818,6 +2000,19 @@ async def reports_cash_flow(
     )
 
 
+@router.get("/reports/cashflow-management", response_class=HTMLResponse)
+async def reports_cashflow_management(
+    request: Request,
+    horizon: int = Query(120),
+    session: Session = Depends(get_session),
+):
+    from services.analytics import cash_flow_management
+    r = cash_flow_management(session, DEFAULT_USER_ID, horizon_days=max(30, min(365, horizon)))
+    return templates.TemplateResponse(
+        "trade_report_cashflow_management.html", _ctx(request, report=r),
+    )
+
+
 @router.get("/reports/customer-profitability", response_class=HTMLResponse)
 async def reports_customer_profitability(
     request: Request,
@@ -1896,6 +2091,102 @@ async def reports_daily_cash(
     return templates.TemplateResponse("trade_report_daily_cash.html", _ctx(request, report=r, days=days))
 
 
+# ═════════════════════════════════════════════════════════════════
+# Order Projection — plan a batch of orders, see day-wise cash needed
+# ═════════════════════════════════════════════════════════════════
+
+
+@router.get("/projection", response_class=HTMLResponse)
+async def projection_page(request: Request, session: Session = Depends(get_session)):
+    from services.analytics import order_projection
+    report = order_projection(session, DEFAULT_USER_ID)
+    return templates.TemplateResponse(
+        "trade_projection.html", _ctx(request, report=report, today=date.today()),
+    )
+
+
+@router.post("/projection", response_class=HTMLResponse)
+async def projection_save(request: Request, session: Session = Depends(get_session)):
+    """Upsert every order line from the editable table, recompute, and return the
+    live results partial (headline tiles + day-by-day table) so the page updates
+    without a full reload. Newly-created rows get their id echoed back via an
+    out-of-band hidden input so the next auto-save updates in place (no dupes)."""
+    from models import ProjectionLine
+    from services.analytics import order_projection
+    user_id = DEFAULT_USER_ID
+    form = await request.form()
+    idxs = sorted({int(k.split("_")[1]) for k in form.keys()
+                   if k.startswith("pline_") and k.endswith("_item_name")})
+    created = {}  # idx -> new ProjectionLine (needs id echoed back)
+    for i in idxs:
+        name = (form.get(f"pline_{i}_item_name") or "").strip()
+        if not name:
+            continue
+        raw_id = form.get(f"pline_{i}_id")
+        data = dict(
+            item_name=name,
+            quantity=_parse_decimal(form.get(f"pline_{i}_quantity"), "0"),
+            purchase_rate=_parse_decimal(form.get(f"pline_{i}_purchase_rate"), "0"),
+            sale_rate=_parse_decimal(form.get(f"pline_{i}_sale_rate"), "0"),
+            dye_block_cost=_parse_decimal(form.get(f"pline_{i}_dye_block_cost"), "0"),
+            bilty=_parse_decimal(form.get(f"pline_{i}_bilty"), "0"),
+            order_date=_parse_date(form.get(f"pline_{i}_order_date")),
+            lead_days=int(_parse_decimal(form.get(f"pline_{i}_lead_days"), "15")),
+            collection_lag_days=int(_parse_decimal(form.get(f"pline_{i}_collection_lag_days"), "30")),
+            pct_advance=_parse_decimal(form.get(f"pline_{i}_pct_advance"), "0"),
+            pct_on_delivery=_parse_decimal(form.get(f"pline_{i}_pct_on_delivery"), "0"),
+            pct_credit=_parse_decimal(form.get(f"pline_{i}_pct_credit"), "0"),
+            credit_days=int(_parse_decimal(form.get(f"pline_{i}_credit_days"), "30")),
+            include=bool(form.get(f"pline_{i}_include")),
+            sort_order=i,
+        )
+        if raw_id and raw_id.isdigit():
+            ln = session.get(ProjectionLine, int(raw_id))
+            if ln and ln.user_id == user_id:
+                for k, val in data.items():
+                    setattr(ln, k, val)
+                ln.updated_at = datetime.utcnow()
+                session.add(ln)
+                continue
+        ln = ProjectionLine(user_id=user_id, **data)
+        session.add(ln)
+        created[i] = ln
+    session.commit()
+    id_echoes = [{"idx": i, "id": ln.id} for i, ln in created.items()]
+    report = order_projection(session, user_id)
+    return templates.TemplateResponse(
+        "trade_projection_update.html",
+        _ctx(request, report=report, id_echoes=id_echoes),
+    )
+
+
+@router.post("/projection/import-sheet")
+async def projection_import_sheet(request: Request, session: Session = Depends(get_session)):
+    """Pull products from the 'fleure boxes' Numbers sheet (Table 1) and upsert
+    projection lines by product name. Requires the app to run on the Mac that has
+    Numbers; no-op with a friendly message otherwise."""
+    from services.projection_sheet import import_fleure_boxes
+    try:
+        n = import_fleure_boxes(session, DEFAULT_USER_ID)
+        msg = f"Synced {n} product(s) from the fleure boxes sheet."
+    except Exception as exc:  # noqa: BLE001 - surface any AppleScript/parse failure
+        msg = f"Couldn't read the sheet: {exc}"
+    return Response(status_code=204, headers={
+        "HX-Redirect": "/trade/projection",
+        "X-Sync-Message": msg[:200],
+    })
+
+
+@router.post("/projection/lines/{line_id}/delete")
+async def projection_delete_line(line_id: int, session: Session = Depends(get_session)):
+    from models import ProjectionLine
+    ln = session.get(ProjectionLine, line_id)
+    if ln and ln.user_id == DEFAULT_USER_ID:
+        session.delete(ln)
+        session.commit()
+    return Response(status_code=204)
+
+
 @router.get("/reports/trade-profitability", response_class=HTMLResponse)
 async def reports_trade_profitability(
     request: Request,
@@ -1928,6 +2219,128 @@ async def reports_pending_receivables(request: Request, session: Session = Depen
         "trade_report_pending_receivables.html",
         _ctx(request, report=report, today=report["today"]),
     )
+
+
+@router.get("/reports/vendor-pending", response_class=HTMLResponse)
+async def reports_vendor_pending(
+    request: Request, vendor_id: Optional[int] = Query(None),
+    session: Session = Depends(get_session),
+):
+    """Goods still owed by a single vendor — pick a vendor, then export a PDF
+    statement to send them (qty, order date, agreed price, pending value)."""
+    user_id = DEFAULT_USER_ID
+    vendors = PartyService.list_vendors(session, user_id)
+    selected = None
+    if vendor_id:
+        report = TradeReportService.pending_receivables(session, user_id)
+        selected = next((v for v in report["vendors"] if v["vendor_id"] == vendor_id), None)
+        if selected is None:
+            v = PartyService.get(session, user_id, vendor_id)
+            selected = {"vendor_id": vendor_id, "vendor_name": v.name if v else "—",
+                        "trades": [], "pending_value": Decimal("0"), "pending_qty": Decimal("0")}
+    return templates.TemplateResponse(
+        "trade_report_vendor_pending.html",
+        _ctx(request, vendors=vendors, selected=selected,
+             selected_id=vendor_id, today=date.today()),
+    )
+
+
+@router.get("/reports/vendor-pending/{vendor_id}.pdf")
+async def reports_vendor_pending_pdf(vendor_id: int, session: Session = Depends(get_session)):
+    from io import BytesIO
+    from services.pdf_helper import (
+        render_report_pdf, ReportSpec, KpiSpec, TableSpec, SectionTitle, ParagraphBlock, CalloutCard,
+    )
+    user_id = DEFAULT_USER_ID
+    vendor = PartyService.get(session, user_id, vendor_id)
+    if not vendor:
+        raise HTTPException(404, "Vendor not found")
+    report = TradeReportService.pending_receivables(session, user_id)
+    v = next((x for x in report["vendors"] if x["vendor_id"] == vendor_id), None)
+
+    def pkr(x):
+        try: return f"Rs. {Decimal(str(x)):,.2f}"
+        except Exception: return f"Rs. {x}"
+
+    # Group every pending line by BRAND (from its spec map).
+    by_brand: dict[str, list] = {}
+    total_qty = Decimal("0")
+    total_val = Decimal("0")
+    if v:
+        for tr in v["trades"]:
+            for ln in tr["lines"]:
+                sm = ln.get("specs_map", {})
+                # The brand is the Brand spec if set, else the customer/purchaser
+                # name (each customer is effectively a brand in this business).
+                brand = sm.get("brand") or tr.get("customer_name") or "Unspecified brand"
+                by_brand.setdefault(brand, []).append((tr, ln, sm))
+                total_qty += Decimal(ln["pending_qty"])
+                total_val += Decimal(ln["pending_value"])
+
+    def qty(x):
+        return f"{float(x):,g}"
+
+    sections = [
+        SectionTitle("Statement To"),
+        ParagraphBlock("<br/>".join(filter(None, [
+            f"<b>{vendor.name}</b>",
+            vendor.contact_person or "",
+            (f"Phone: {vendor.phone}" if vendor.phone else ""),
+            (vendor.city or ""),
+        ]))),
+        SectionTitle("Goods Still To Be Delivered — by Brand"),
+    ]
+    if not by_brand:
+        sections.append(ParagraphBlock("<i>Nothing pending from this vendor — all ordered goods delivered.</i>"))
+    for brand in sorted(by_brand):
+        rows = []
+        b_qty = Decimal("0")
+        b_val = Decimal("0")
+        for tr, ln, sm in by_brand[brand]:
+            size = sm.get("size") or "—"
+            other = " · ".join(f"{k}: {val}" for k, val in sm.items() if k not in ("brand", "size") and val)
+            size_html = f"<b><font size='10' color='#c2410c'>{size}</font></b>"
+            if other:
+                size_html += f"<br/><font color='#65675e' size='8'>{other}</font>"
+            rows.append([
+                size_html,
+                tr["trade_date"].strftime("%d-%b-%Y") if tr["trade_date"] else "—",
+                qty(ln["ordered_qty"]),
+                qty(ln["received_qty"]),
+                qty(ln["pending_qty"]),
+                pkr(ln["unit_cost"]),
+                pkr(ln["pending_value"]),
+            ])
+            b_qty += Decimal(ln["pending_qty"])
+            b_val += Decimal(ln["pending_value"])
+        sections.append(SectionTitle(f"Brand: {brand}", keep_with_next=True))
+        sections.append(TableSpec(
+            headers=["Size", "Order Date", "Ordered", "Received", "Pending", "Rate", "Pending Value"],
+            rows=rows,
+            col_widths=[95, 70, 60, 60, 60, 55, 85],
+            num_cols={2, 3, 4, 5, 6},
+            totals_row=["", "", "", "", qty(b_qty), "Subtotal", pkr(b_val)],
+        ))
+    sections.append(CalloutCard(label="Total Pending Value", value=pkr(total_val),
+                                suffix="Kindly arrange delivery of the above at the earliest."))
+
+    buf = BytesIO()
+    render_report_pdf(buf, ReportSpec(
+        title="Pending Goods Statement",
+        subtitle_parts=[f"Vendor: {vendor.name}", f"As of {date.today().strftime('%B %d, %Y')}"],
+        kpis=[
+            KpiSpec("Pending Value", pkr(total_val)),
+            KpiSpec("Pending Qty", f"{qty(total_qty)} pcs"),
+            KpiSpec("Open Trades", str(len(v["trades"]) if v else 0)),
+        ],
+        sections=sections,
+        footer_subtitle="Ibrahim Traders · pending goods",
+        generated_label="As of",
+        brand="IBRAHIM TRADERS",
+    ))
+    fname = f"Pending-Goods-{vendor.name.replace(' ','_')}.pdf"
+    return Response(content=buf.getvalue(), media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{fname}"'})
 
 
 @router.get("/reports/bilty", response_class=HTMLResponse)
@@ -2890,9 +3303,13 @@ async def trade_bilty_post(
             f"Bilty cost close — {trade.reference} · {event_date} "
             f"(closes {target_je.reference}) {close_tag}"
         )
+        _bcust = session.get(Party, trade.purchaser_id) if trade.purchaser_id else None
+        _bwho = _bcust.name if _bcust else "trade"
+        _bitems = TradeService.trade_items_descriptor(trade, event_date)
+        _bwt = f", {float(weight):g} kg" if weight else ""
         close_lines = [
             {"account_id": capital_acct.id, "debit": amt, "credit": Decimal("0"),
-             "description": f"Bilty cost absorbed by Capital A/C ({target_je.reference})"},
+             "description": f"Bilty → Capital: {_bwho} · {_bitems}{_bwt} ({trade.reference} · {event_date})"},
             {"account_id": pl_acct.id, "debit": Decimal("0"), "credit": amt,
              "description": f"Close P&L A/C — bilty for {event_date}"},
         ]

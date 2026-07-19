@@ -1,0 +1,126 @@
+<div id="dashboard-body" class="space-y-6">
+  {% set cur = currency %}
+  <!-- Net worth hero -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="stat-card md:col-span-1" style="border-color:#4f46e5;">
+      <div class="stat-label">Net Worth</div>
+      <div class="stat-value" style="color:{% if ov.net_worth >= 0 %}#4338ca{% else %}#b91c1c{% endif %};"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(ov.net_worth) }}</div>
+      <div class="stat-foot text-gray-500">{{ ov.active_count - ov.excluded_count }} of {{ ov.active_count }} active counted{% if ov.excluded_count %} · {{ ov.excluded_count }} excluded{% endif %}{% if ov.inactive %} · {{ ov.inactive|length }} inactive{% endif %}</div>
+    </div>
+    <div class="stat-card" style="border-color:#16a34a;">
+      <div class="stat-label">Assets (positive)</div>
+      <div class="stat-value" style="color:#15803d;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(ov.total_assets) }}</div>
+      <div class="stat-foot text-gray-500">what's owed to you / on hand</div>
+    </div>
+    <div class="stat-card" style="border-color:#dc2626;">
+      <div class="stat-label">Liabilities (negative)</div>
+      <div class="stat-value" style="color:#b91c1c;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(ov.total_liabilities) }}</div>
+      <div class="stat-foot text-gray-500">what you owe</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Transactions</div>
+      <div class="stat-value">{{ '{:,}'.format(ov.txn_count) }}</div>
+      <div class="stat-foot text-gray-500">{% if ov.last_txn %}latest {{ ov.last_txn.strftime('%d %b %Y') }}{% endif %}</div>
+    </div>
+  </div>
+
+  <p class="text-xs text-gray-500">Untick an account to leave it out of totals. Use <b>⊘ Archive</b> for accounts you deleted in Money Manager — history is kept, it drops from net worth and moves to the bottom. Changes save instantly.</p>
+
+  <!-- Ungrouped accounts needing a group (e.g. new from a sync) -->
+  {% if ov.ungrouped %}
+  <div class="bg-white border-2 rounded-lg overflow-hidden" style="border-color:#f59e0b;">
+    <div class="px-5 py-3 border-b border-amber-200 flex items-center justify-between" style="background:#fffbeb;">
+      <h2 class="text-sm font-bold text-amber-800">⚠ Needs a group <span class="text-amber-500 font-normal">· {{ ov.ungrouped|length }}</span></h2>
+      <span class="text-xs text-amber-600">new accounts from a sync — pick a group to file them</span>
+    </div>
+    <table class="min-w-full text-sm">
+      <tbody>
+        {% for a in ov.ungrouped %}
+        <tr class="border-t border-gray-100 hover:bg-amber-50">
+          <td class="px-5 py-2">
+            <a href="/accounts/{{ a.acct.id }}" class="text-indigo-700 hover:text-indigo-900 font-medium">{{ a.acct.name }}</a>
+            <span class="ml-2 text-[10px] uppercase tracking-wide text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{{ a.acct.type.value }}</span>
+          </td>
+          <td class="px-3 py-2 text-right tabular-nums font-medium" style="color:{% if a.balance >= 0 %}#111827{% else %}#b91c1c{% endif %};">{{ cur }} {{ '{:,.0f}'.format(a.balance) }}</td>
+          <td class="px-4 py-2 text-right" style="width:200px;">
+            <select class="px-2 py-1 text-xs border border-gray-300 rounded"
+                    hx-post="/accounts/{{ a.acct.id }}/set-group" name="group_name"
+                    hx-target="#dashboard-body" hx-swap="outerHTML">
+              <option value="">— choose group —</option>
+              {% for g in ov.all_group_names %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+            </select>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Group breakdown (active accounts) -->
+  {% for g in ov.groups %}
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between" style="background:#fafaf9;">
+      <h2 class="text-sm font-bold text-gray-800">{{ g.name }} <span class="text-gray-400 font-normal">· {{ g.accounts|length }}</span></h2>
+      <div class="tabular-nums font-bold" style="color:{% if g.total >= 0 %}#15803d{% else %}#b91c1c{% endif %};">{{ cur }} {{ '{:,.0f}'.format(g.total) }}</div>
+    </div>
+    <table class="min-w-full text-sm">
+      <tbody>
+        {% for a in g.accounts %}
+        <tr class="border-t border-gray-100 hover:bg-gray-50 group" {% if not a.included %}style="opacity:0.5;"{% endif %}>
+          <td class="px-5 py-2" style="width:34px;">
+            <input type="checkbox" title="Include in net worth"
+                   hx-post="/accounts/{{ a.acct.id }}/toggle-networth"
+                   hx-target="#dashboard-body" hx-swap="outerHTML"
+                   {% if a.included %}checked{% endif %}>
+          </td>
+          <td class="px-1 py-2">
+            <a href="/accounts/{{ a.acct.id }}" class="text-indigo-700 hover:text-indigo-900 font-medium">{{ a.acct.name }}</a>
+            <span class="ml-2 text-[10px] uppercase tracking-wide text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{{ a.acct.type.value }}</span>
+            {% if not a.included %}<span class="ml-1 text-[10px] uppercase tracking-wide text-amber-600">excluded</span>{% endif %}
+          </td>
+          <td class="px-3 py-2 text-right tabular-nums font-medium" style="color:{% if not a.included %}#9ca3af{% elif a.balance >= 0 %}#111827{% else %}#b91c1c{% endif %};">{{ cur }} {{ '{:,.0f}'.format(a.balance) }}</td>
+          <td class="px-4 py-2 text-right" style="width:90px;">
+            <button type="button" class="text-xs text-gray-400 hover:text-amber-700"
+                    title="Archive (deleted in Money Manager) — keeps history, drops from net worth"
+                    hx-post="/accounts/{{ a.acct.id }}/toggle-active"
+                    hx-target="#dashboard-body" hx-swap="outerHTML"
+                    hx-confirm="Archive “{{ a.acct.name }}”? Its history stays, but it leaves net worth and moves to the bottom.">⊘ Archive</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+
+  <!-- Inactive / archived accounts -->
+  {% if ov.inactive %}
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden" style="border-style:dashed;">
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between" style="background:#f9fafb;">
+      <h2 class="text-sm font-bold text-gray-500">Inactive · deleted in Money Manager <span class="text-gray-400 font-normal">· {{ ov.inactive|length }}</span></h2>
+      <span class="text-xs text-gray-400">not counted in net worth</span>
+    </div>
+    <table class="min-w-full text-sm">
+      <tbody>
+        {% for a in ov.inactive %}
+        <tr class="border-t border-gray-100" style="opacity:0.6;">
+          <td class="px-5 py-2">
+            <a href="/accounts/{{ a.acct.id }}" class="text-gray-600 hover:text-indigo-700 font-medium line-through">{{ a.acct.name }}</a>
+            <span class="ml-2 text-[10px] uppercase tracking-wide text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{{ a.acct.type.value }}</span>
+          </td>
+          <td class="px-3 py-2 text-right tabular-nums text-gray-500">{{ cur }} {{ '{:,.0f}'.format(a.balance) }}</td>
+          <td class="px-4 py-2 text-right" style="width:90px;">
+            <button type="button" class="text-xs text-indigo-500 hover:text-indigo-800"
+                    hx-post="/accounts/{{ a.acct.id }}/toggle-active"
+                    hx-target="#dashboard-body" hx-swap="outerHTML">↺ Restore</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <p class="text-xs text-gray-400">Balances are computed from every transaction (sum of money in − out). Transfers between your own accounts net to zero. Re-import anytime — it only adds new transactions, never duplicates.</p>
+</div>

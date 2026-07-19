@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Cash Flow Management{% endblock %}
+{% block content %}
+{% set cur = currency %}
+<style>
+  /* TRD refs: look like plain text, reveal as clickable only on hover */
+  .trd-link { color: inherit; text-decoration: none; cursor: pointer; }
+  .trd-link:hover { text-decoration: underline; }
+</style>
+<div class="space-y-6">
+  <div class="flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Cash Flow Management</h1>
+      <p class="page-subtitle">How to fund your <b>projected trades</b> by delaying vendor payments. It lines up your cash today, incoming receipts, the new investment you're planning (from Projection), and what you owe vendors — then works out the soonest you can pay each vendor without starving the new trades, and how much external cash you'd still need.</p>
+    </div>
+    <a href="/trade/reports" class="btn-secondary">← Reports</a>
+  </div>
+
+  {% if not report.has_projection %}
+  <div class="bg-white border border-gray-200 rounded-lg p-8 text-center">
+    <div class="text-4xl mb-2">📋</div>
+    <h2 class="text-lg font-bold text-gray-900">No projected trades yet</h2>
+    <p class="text-sm text-gray-500 mt-1 mb-4">This report plans how to fund the orders on your Projection tab. Add some planned orders first.</p>
+    <a href="/trade/projection" class="btn-primary">Open Projection</a>
+  </div>
+  {% else %}
+
+  <!-- Headline -->
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+    <div class="stat-card">
+      <div class="stat-label">Cash Today</div>
+      <div class="stat-value" style="color:{% if report.cash_today >= 0 %}#111827{% else %}#b91c1c{% endif %};"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(report.cash_today) }}</div>
+      <div class="stat-foot text-gray-500">incl. CEO float</div>
+    </div>
+    <div class="stat-card" style="border-color:#4f46e5;">
+      <div class="stat-label">Projected Investment</div>
+      <div class="stat-value" style="color:#4338ca;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(report.projected_investment) }}</div>
+      <div class="stat-foot text-gray-500">{{ report.proj_lines }} planned order(s)</div>
+    </div>
+    <div class="stat-card" style="border-color:#16a34a;">
+      <div class="stat-label">Vendor Pmts to Delay</div>
+      <div class="stat-value" style="color:#15803d;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(report.total_deferred) }}</div>
+      <div class="stat-foot text-gray-500">cash this frees up</div>
+    </div>
+    <div class="stat-card" style="border-color:#ea580c;">
+      <div class="stat-label">Extra Cash Needed</div>
+      <div class="stat-value" style="color:#c2410c;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(report.additional_needed) }}</div>
+      <div class="stat-foot text-gray-500">beyond today{% if report.peak_date %} · low {{ report.peak_date.strftime('%d %b') }}{% endif %}</div>
+    </div>
+    <div class="stat-card" {% if report.total_unfunded %}style="border-color:#dc2626;"{% endif %}>
+      <div class="stat-label">Still Unfunded</div>
+      <div class="stat-value" style="color:{% if report.total_unfunded %}#b91c1c{% else %}#15803d{% endif %};"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(report.total_unfunded) }}</div>
+      <div class="stat-foot text-gray-500">within {{ report.horizon_days }}d horizon</div>
+    </div>
+  </div>
+
+  <div class="accent-card" style="border-left-color:{% if report.additional_needed > 0 %}#ea580c{% else %}#16a34a{% endif %};">
+    <div class="text-sm text-gray-700">
+      {% if report.additional_needed > 0 %}
+      Delaying the vendor payments below frees up <b>{{ cur }} {{ '{:,.0f}'.format(report.total_deferred) }}</b> toward the projected investment. Even so, your cash position bottoms out at <b>{{ cur }} {{ '{:,.0f}'.format(-report.peak_external_needed) }}</b>{% if report.peak_date %} around <b>{{ report.peak_date.strftime('%d %b %Y') }}</b>{% endif %} — that's <b>{{ cur }} {{ '{:,.0f}'.format(report.additional_needed) }}</b> more than you have tied up today, so plan to have that much extra available.
+      {% else %}
+      ✓ Your incoming cash plus the vendor delays below fully cover the projected investment — no extra cash needed beyond what's already deployed, within the {{ report.horizon_days }}-day window.
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Plan at a glance: plain-language pointers -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-200" style="background:#f0fdf4;">
+        <h2 class="text-sm font-bold text-green-800">💰 Money coming in — collect &amp; put toward the new trades</h2>
+      </div>
+      <ul class="p-4 space-y-2">
+        {% for p in report.receipt_pointers %}
+        <li class="text-sm text-gray-700 flex gap-2">
+          <span style="color:#16a34a;">▸</span>
+          <span><b>{{ cur }} {{ '{:,.0f}'.format(p.amount) }}</b> around <b>{{ p.date.strftime('%d %b') }}</b>{% if p.days_out <= 0 %} <span class="text-gray-400">(now)</span>{% else %} <span class="text-gray-400">(+{{ p.days_out }}d)</span>{% endif %} — {% for sc in p.sources %}{{ cur }} {{ '{:,.0f}'.format(sc.amount) }} {{ sc.name }}{% if sc.ref %} · {% if sc.trade_id %}<a class="trd-link" href="/trade/trades/{{ sc.trade_id }}">{{ sc.ref }}</a>{% else %}{{ sc.ref }}{% endif %}{% endif %}{% if not loop.last %}; {% endif %}{% endfor %}.</span>
+        </li>
+        {% else %}
+        <li class="text-sm text-gray-400">No incoming receipts scheduled in the window.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-200" style="background:#fff7ed;">
+        <h2 class="text-sm font-bold text-amber-800">⏳ Deferred vendor payments — when you'll finally owe them</h2>
+      </div>
+      <ul class="p-4 space-y-2">
+        {% for p in report.vendor_pointers %}
+        <li class="text-sm text-gray-700 flex gap-2">
+          <span style="color:#c2410c;">▸</span>
+          <span>By <b>{{ p.date.strftime('%d %b') }}</b> — pay <b>{{ cur }} {{ '{:,.0f}'.format(p.amount) }}</b> to {{ p.vendors|join(', ') }}{% if p.count > 1 %} <span class="text-gray-400">({{ p.count }} bills)</span>{% endif %}.</span>
+        </li>
+        {% else %}
+        <li class="text-sm text-gray-400">No vendor payments need deferring.</li>
+        {% endfor %}
+        {% if report.total_unfunded %}
+        <li class="text-sm text-red-700 flex gap-2 pt-1 border-t border-gray-100 mt-2">
+          <span>⚠</span><span><b>{{ cur }} {{ '{:,.0f}'.format(report.total_unfunded) }}</b> can't be cleared within {{ report.horizon_days }} days — you'll need more cash or longer vendor terms.</span>
+        </li>
+        {% endif %}
+      </ul>
+    </div>
+  </div>
+
+  <!-- Vendor payments to delay -->
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-200" style="background:#fafaf9;">
+      <h2 class="text-sm font-bold text-gray-800">Vendor payments to delay</h2>
+      <p class="text-xs text-gray-500 mt-0.5">Pay each vendor no earlier than the “Pay by” date to keep cash free for the new trades. Rows marked unfunded can't be cleared within the horizon.</p>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left" style="color:#6b7280; font-size:11px; text-transform:uppercase;">
+          <th class="px-5 py-2">Vendor</th>
+          <th class="px-5 py-2">Type</th>
+          <th class="px-5 py-2 text-right">Amount</th>
+          <th class="px-5 py-2">Originally due</th>
+          <th class="px-5 py-2">Pay by (soonest)</th>
+          <th class="px-5 py-2 text-right">Delay</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in report.delays %}
+        <tr class="border-t border-gray-100 {% if d.status == 'unfunded' %}bg-red-50{% endif %}">
+          <td class="px-5 py-2 font-medium text-gray-800">{{ d.vendor }}{% if d.ref %} · {% if d.trade_id %}<a class="trd-link" href="/trade/trades/{{ d.trade_id }}">{{ d.ref }}</a>{% else %}{{ d.ref }}{% endif %}{% endif %}</td>
+          <td class="px-5 py-2 text-xs uppercase tracking-wide text-gray-400">{{ d.kind }}</td>
+          <td class="px-5 py-2 text-right tabular-nums">{{ cur }} {{ '{:,.0f}'.format(d.amount) }}</td>
+          <td class="px-5 py-2 text-gray-600">{{ d.due_date.strftime('%d %b %Y') if d.due_date else '—' }}</td>
+          <td class="px-5 py-2 {% if d.status == 'unfunded' %}text-red-700 font-semibold{% else %}text-gray-800{% endif %}">
+            {% if d.pay_date %}{{ d.pay_date.strftime('%d %b %Y') }}{% else %}beyond horizon{% endif %}
+          </td>
+          <td class="px-5 py-2 text-right tabular-nums font-semibold" style="color:{% if d.status=='unfunded' %}#b91c1c{% else %}#c2410c{% endif %};">
+            {% if d.days_delayed is not none %}+{{ d.days_delayed }}d{% else %}unfunded{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="px-5 py-8 text-center text-gray-400">No vendor payments need delaying — your cash covers the plan.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- Resulting cash timeline -->
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-200" style="background:#fafaf9;">
+      <h2 class="text-sm font-bold text-gray-800">Resulting cash timeline</h2>
+      <p class="text-xs text-gray-500 mt-0.5">With the delays applied. <b>Running</b> is your cash on hand; where it's red is the external cash you'd need that day. <b>Deferred</b> is vendor money still held back.</p>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left" style="color:#6b7280; font-size:11px; text-transform:uppercase;">
+          <th class="px-5 py-2">Date</th>
+          <th class="px-5 py-2 text-right">Receipts in</th>
+          <th class="px-5 py-2 text-right">Investment out</th>
+          <th class="px-5 py-2 text-right">Vendor paid</th>
+          <th class="px-5 py-2 text-right">Running cash</th>
+          <th class="px-5 py-2 text-right">Deferred to vendors</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in report.timeline %}
+        <tr class="border-t border-gray-100" {% if r.running < 0 %}style="background:#fff7ed;"{% endif %}>
+          <td class="px-5 py-1.5 whitespace-nowrap text-gray-800">{{ r.date.strftime('%a, %d %b') }}<span class="text-gray-400 text-xs ml-1">{% if r.day == 0 %}today{% else %}+{{ r.day }}d{% endif %}</span></td>
+          <td class="px-5 py-1.5 text-right tabular-nums" style="color:{% if r.inflow %}#15803d{% else %}#d1d5db{% endif %};">{% if r.inflow %}+{{ '{:,.0f}'.format(r.inflow) }}{% else %}—{% endif %}</td>
+          <td class="px-5 py-1.5 text-right tabular-nums" style="color:{% if r.invest_out %}#4338ca{% else %}#d1d5db{% endif %};">{% if r.invest_out %}−{{ '{:,.0f}'.format(r.invest_out) }}{% else %}—{% endif %}</td>
+          <td class="px-5 py-1.5 text-right tabular-nums" style="color:{% if r.vendor_paid %}#b91c1c{% else %}#d1d5db{% endif %};">{% if r.vendor_paid %}−{{ '{:,.0f}'.format(r.vendor_paid) }}{% else %}—{% endif %}</td>
+          <td class="px-5 py-1.5 text-right tabular-nums font-semibold" style="color:{% if r.running < 0 %}#c2410c{% else %}#111827{% endif %};">{{ cur }} {{ '{:,.0f}'.format(r.running) }}</td>
+          <td class="px-5 py-1.5 text-right tabular-nums text-gray-500">{% if r.deferred %}{{ '{:,.0f}'.format(r.deferred) }}{% else %}—{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="px-5 py-8 text-center text-gray-400">No cash movements in range.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <p class="text-xs text-gray-400">The projected investment is treated as fixed (it's the plan you're funding); existing vendor payables are the flexible lever. Receipts combine delivered-goods collections and the projected trades' own later collections. "Cash Today" includes the CEO funding float, so a negative running figure is genuinely new cash you'd need to bring in.</p>
+  {% endif %}
+</div>
+{% endblock %}

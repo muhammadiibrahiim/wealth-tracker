@@ -1,0 +1,47 @@
+<div class="modal-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8">
+  <div class="bg-white p-7 w-full max-w-lg mx-4">
+    <div class="flex items-start justify-between mb-1">
+      <h2 class="modal-title">Business Expense</h2>
+      <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
+    </div>
+    <p class="modal-subtitle mb-5">Just what it was for, how much, and where it was paid from. The rest is automatic — it lands in your profit &amp; ROE and reduces your Capital. No account picking.</p>
+
+    <form hx-post="/trade/vouchers/expense-quick" class="space-y-4">
+      <div>
+        <label class="field-label">What was it for?</label>
+        <input name="description" required placeholder="e.g. sample parcel freight, printing plates, tea for staff"
+               class="w-full px-3 py-2.5" autofocus>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="field-label">Amount ({{ currency }})</label>
+          <input name="amount" type="number" step="0.01" min="0" required placeholder="0.00"
+                 class="w-full px-3 py-2.5 text-right">
+        </div>
+        <div>
+          <label class="field-label">Date</label>
+          <input name="entry_date" type="date" value="{{ today.isoformat() }}" class="w-full px-3 py-2.5">
+        </div>
+      </div>
+      <div>
+        <label class="field-label">Paid from</label>
+        <select name="paid_from" class="w-full px-3 py-2.5">
+          {% for a in cash_accounts %}
+          <option value="{{ a.id }}" {% if a.id == default_id %}selected{% endif %}>{{ a.code }} — {{ a.name }}</option>
+          {% else %}
+          <option value="">No cash account — add one first</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="rounded-lg p-3 text-xs" style="background:#eff6ff; color:#334155;">
+        <b>What happens:</b> recorded as a business expense (reduces your profit, net income &amp; ROE) and taken out of Capital — routed through the P&amp;L automatically. Shows up on the P&amp;L report and in the vouchers list.
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-gray-200">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Cancel</button>
+        <button type="submit" class="btn-primary">Record Expense</button>
+      </div>
+    </form>
+  </div>
+</div>

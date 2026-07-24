@@ -954,8 +954,14 @@ class ProjectionLine(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     item_name: str = Field(max_length=200)
+    # Product group for the planner (e.g. "Dabbi" for boxes, "Stickers"). Purely
+    # for visual grouping of the planned-order rows; doesn't affect any calc.
+    group_name: str = Field(default="Dabbi", sa_column=Column(String(80), nullable=False, server_default="Dabbi"))
     quantity: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 3)))
     purchase_rate: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 4)))
+    # The vendor/party's OLD buy rate (their previous price) — reference only, so
+    # the owner can decide their new buy/sale rate against it. Not used in any calc.
+    party_old_rate: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 4)))
     sale_rate: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 4)))
     dye_block_cost: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 2)))
     bilty: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 2)))
@@ -976,6 +982,9 @@ class ProjectionLine(SQLModel, table=True):
     # Deprecated (superseded by the percentage split); kept for back-compat.
     pay_on_delivery: bool = Field(default=True)
     include: bool = Field(default=True)
+    # Whether the one-time Dye/Block cost still applies. Turn off to model the
+    # NEXT cycle (blocks already made) — excludes it from cash-out and KPIs.
+    dye_active: bool = Field(default=True)
     sort_order: int = Field(default=0)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

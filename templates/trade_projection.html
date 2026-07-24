@@ -35,7 +35,7 @@
   </div>
 
   <!-- Headline metrics -->
-  <div id="proj-tiles" class="grid grid-cols-2 md:grid-cols-5 gap-4">
+  <div id="proj-tiles" class="grid grid-cols-2 md:grid-cols-6 gap-4">
     {% include 'trade_projection_tiles.html' %}
   </div>
 
@@ -59,9 +59,11 @@
             <th class="py-1 pr-2">Product<span class="tip-i" data-tip="Product name. Matches the item on your fleure boxes sheet — used to sync.">i</span></th>
             <th class="py-1 pr-2">Order date<span class="tip-i" data-tip="The day you place this order — its own day 0. Different orders can be on different dates; the calendar below merges them all.">i</span></th>
             <th class="py-1 pr-2 text-right">Qty<span class="tip-i" data-tip="Pieces you plan to order.">i</span></th>
+            <th class="py-1 pr-2 text-right" style="color:#6b7280;">Party old rate<span class="tip-i" data-tip="The vendor/party's previous (old) buy rate, for reference. Use it to decide your new buy rate. Doesn't affect any calculation.">i</span></th>
             <th class="py-1 pr-2 text-right">Buy rate<span class="tip-i" data-tip="What you pay the manufacturer, per piece.">i</span></th>
             <th class="py-1 pr-2 text-right">Sale rate<span class="tip-i" data-tip="What your customer pays you, per piece.">i</span></th>
-            <th class="py-1 pr-2 text-right">Dye/Block<span class="tip-i" data-tip="One-time dye / printing-block cost for this product. Paid on the order date.">i</span></th>
+            <th class="py-1 pr-2 text-right">Dye/Block<span class="tip-i" data-tip="One-time dye / printing-block cost for this product. Paid on the order date. Use the checkbox on each row (or the header links) to exclude it from the KPIs — e.g. next cycle when the block is already made.">i</span>
+                <div style="font-weight:400; text-transform:none; margin-top:2px;"><a href="#" onclick="toggleAllDye(true);return false;" style="color:#2563eb;">all on</a> · <a href="#" onclick="toggleAllDye(false);return false;" style="color:#2563eb;">off</a></div></th>
             <th class="py-1 pr-2 text-right">Bilty<span class="tip-i" data-tip="Freight cost to move the goods. Paid when the goods arrive (at the delivery date).">i</span></th>
             <th class="py-1 pr-2 text-right" style="background:#f1f5f9;">Cost/pc<span class="tip-i" data-tip="Overhead per piece = (Dye/Block + Bilty) ÷ Qty. The dye and freight cost spread across each piece. Calculated — you can't edit it.">i</span></th>
             <th class="py-1 pr-2 text-right" style="background:#f0fdf4;">Net/pc<span class="tip-i" data-tip="Net profit per piece = Sale rate − Buy rate − (Dye/Block + Bilty) ÷ Qty. Calculated — you can't edit it.">i</span></th>
@@ -89,31 +91,65 @@
 <script>
   const PROJ_LINES = [
     {% for ln in report.lines %}
-    { id: {{ ln.id }}, name: {{ ln.item_name|tojson }}, qty: "{{ ln.quantity }}", buy: "{{ ln.purchase_rate }}", sale: "{{ ln.sale_rate }}",
+    { id: {{ ln.id }}, name: {{ ln.item_name|tojson }}, grp: {{ (ln.group_name or 'Dabbi')|tojson }}, qty: "{{ ln.quantity }}", oldrate: "{{ ln.party_old_rate }}", buy: "{{ ln.purchase_rate }}", sale: "{{ ln.sale_rate }}",
       dye: "{{ ln.dye_block_cost }}", bilty: "{{ ln.bilty }}", odate: "{{ ln.order_date.isoformat() if ln.order_date else '' }}",
       lead: {{ ln.lead_days }}, collect: {{ ln.collection_lag_days }},
       adv: "{{ ln.pct_advance }}", dely: "{{ ln.pct_on_delivery }}", cred: "{{ ln.pct_credit }}", creditd: {{ ln.credit_days }},
+      dyeon: {{ 'true' if ln.dye_active else 'false' }},
       inc: {{ 'true' if ln.include else 'false' }} }{% if not loop.last %},{% endif %}
     {% endfor %}
   ];
   const TODAY_ISO = "{{ today.isoformat() }}";
+  const GROUP_ORDER = ['Dabbi', 'Stickers'];
   let projIdx = 0;
+
+  // Insert `tr` at the end of its group's block (right before the next group
+  // header, or at the end of the table body if it's the last group).
+  function insertIntoGroup(tr, group) {
+    const body = document.getElementById('proj-rows');
+    let header = body.querySelector(`tr.proj-group-header[data-group="${group}"]`);
+    if (!header) { header = makeGroupHeader(group); body.appendChild(header); }
+    let ref = header.nextElementSibling;
+    while (ref && !ref.classList.contains('proj-group-header')) ref = ref.nextElementSibling;
+    body.insertBefore(tr, ref);  // ref null => appended at end
+  }
+
+  function makeGroupHeader(name) {
+    const tr = document.createElement('tr');
+    tr.className = 'proj-group-header';
+    tr.dataset.group = name;
+    tr.innerHTML = `<td colspan="18" style="padding:12px 8px 4px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-weight:700; color:#334155; font-size:12px; text-transform:uppercase; letter-spacing:.05em;">${name}</span>
+          <button type="button" class="text-indigo-600 hover:text-indigo-900 text-xs font-medium"
+                  onclick="addProjRow({grp:'${name}'})">+ Add ${name.toLowerCase()} item</button>
+        </div></td>`;
+    return tr;
+  }
+
   function addProjRow(d) {
     const i = projIdx++;
     const tr = document.createElement('tr');
     tr.className = 'border-t border-gray-100';
-    const v = d || { id:'', name:'', qty:'0', buy:'0', sale:'0', dye:'0', bilty:'0', odate:TODAY_ISO,
-                     lead:15, collect:30, adv:'0', dely:'100', cred:'0', creditd:30, inc:true };
+    const v = d || { id:'', name:'', grp:'Dabbi', qty:'0', oldrate:'0', buy:'0', sale:'0', dye:'0', bilty:'0', odate:TODAY_ISO,
+                     lead:15, collect:30, adv:'0', dely:'100', cred:'0', creditd:30, dyeon:true, inc:true };
+    const group = v.grp || 'Dabbi';
+    tr.dataset.group = group;
     const nz = (x) => (parseFloat(x)||0);
     tr.innerHTML = `
       <td class="py-1 pr-2 text-center"><input type="checkbox" name="pline_${i}_include" ${v.inc?'checked':''}></td>
-      <td class="py-1 pr-2"><input name="pline_${i}_item_name" value="${(v.name||'').replace(/"/g,'&quot;')}" placeholder="Product" class="px-2 py-1.5 text-sm" style="min-width:150px;">
-          <input id="pline-id-${i}" type="hidden" name="pline_${i}_id" value="${v.id||''}"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_item_name" value="${(v.name||'').replace(/"/g,'&quot;')}" placeholder="Product" class="px-2 py-1.5 text-sm" style="width:250px; box-sizing:border-box;">
+          <input id="pline-id-${i}" type="hidden" name="pline_${i}_id" value="${v.id||''}">
+          <input type="hidden" name="pline_${i}_group" value="${(group||'Dabbi').replace(/"/g,'&quot;')}"></td>
       <td class="py-1 pr-2"><input name="pline_${i}_order_date" value="${v.odate||TODAY_ISO}" type="date" class="px-2 py-1.5 text-sm" style="width:140px; box-sizing:border-box;"></td>
       <td class="py-1 pr-2"><input name="pline_${i}_quantity" oninput="projCalc(${i})" value="${nz(v.qty)}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:100px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><input name="pline_${i}_party_old_rate" value="${nz(v.oldrate)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right" style="width:90px; box-sizing:border-box; background:#f9fafb; color:#6b7280;" title="Party's old buy rate — reference only"></td>
       <td class="py-1 pr-2"><input name="pline_${i}_purchase_rate" oninput="projCalc(${i})" value="${nz(v.buy)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right" style="width:90px; box-sizing:border-box;"></td>
       <td class="py-1 pr-2"><input name="pline_${i}_sale_rate" oninput="projCalc(${i})" value="${nz(v.sale)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right" style="width:90px; box-sizing:border-box;"></td>
-      <td class="py-1 pr-2"><input name="pline_${i}_dye_block_cost" oninput="projCalc(${i})" value="${nz(v.dye)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right" style="width:100px; box-sizing:border-box;"></td>
+      <td class="py-1 pr-2"><div style="display:flex; align-items:center; gap:5px;">
+          <input type="checkbox" name="pline_${i}_dye_active" class="dye-toggle" ${v.dyeon===false?'':'checked'} onchange="dyeToggled(${i})" title="Uncheck to exclude this one-time dye/block cost from the KPIs (next cycle — block already made).">
+          <input name="pline_${i}_dye_block_cost" oninput="projCalc(${i})" value="${nz(v.dye)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right dye-input" style="width:90px; box-sizing:border-box;">
+        </div></td>
       <td class="py-1 pr-2"><input name="pline_${i}_bilty" oninput="projCalc(${i})" value="${nz(v.bilty)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right" style="width:95px; box-sizing:border-box;"></td>
       <td class="py-1 pr-2 text-right tabular-nums" style="background:#f1f5f9;"><span id="cost_pc_${i}" class="font-medium text-gray-700" title="Locked — calculated">—</span></td>
       <td class="py-1 pr-2 text-right tabular-nums" style="background:#f0fdf4;"><span id="net_pc_${i}" class="font-semibold" title="Locked — calculated">—</span></td>
@@ -125,9 +161,10 @@
       <td class="py-1 pr-2"><input name="pline_${i}_credit_days" value="${v.creditd}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:70px; box-sizing:border-box;"></td>
       <td class="py-1 text-right"><button type="button" class="text-gray-400 hover:text-red-600 text-xs" onclick="delProjRow(this)">✕</button></td>
     `;
-    document.getElementById('proj-rows').appendChild(tr);
+    insertIntoGroup(tr, group);
     if (window.htmx) htmx.process(tr);
-    projCalc(i);
+    dyeToggled(i);  // sets input opacity + runs projCalc
+    return tr;
   }
   function delProjRow(btn) {
     const row = btn.closest('tr');
@@ -144,10 +181,27 @@
   }
   // Locked per-piece figures. Cost/pc = (dye + bilty)/qty (overhead spread per
   // piece); Net/pc = sale − buy − that overhead. Recomputed live on every edit.
+  // Reflect a dye toggle: grey the input, recompute that row, then let the form
+  // save (checkbox change already bubbles to the form's change trigger).
+  function dyeToggled(i) {
+    const box = document.querySelector('[name="pline_'+i+'_dye_active"]');
+    const inp = document.querySelector('[name="pline_'+i+'_dye_block_cost"]');
+    if (inp) { inp.style.opacity = (box && box.checked) ? '1' : '0.4'; }
+    projCalc(i);
+  }
+  // Header control: turn every row's dye/block on or off at once.
+  function toggleAllDye(on) {
+    document.querySelectorAll('.dye-toggle').forEach(function(box){
+      box.checked = on;
+      const m = box.name.match(/pline_(\d+)_/); if (m) dyeToggled(m[1]);
+    });
+    if (window.htmx) htmx.trigger('#proj-form', 'change');
+  }
   function projCalc(i) {
     const g = (f) => parseFloat((document.querySelector('[name="pline_'+i+'_'+f+'"]')||{}).value) || 0;
+    const dyeOn = (document.querySelector('[name="pline_'+i+'_dye_active"]')||{}).checked;
     const qty = g('quantity'), buy = g('purchase_rate'), sale = g('sale_rate'),
-          dye = g('dye_block_cost'), bilty = g('bilty');
+          dye = dyeOn ? g('dye_block_cost') : 0, bilty = g('bilty');
     const overhead = qty > 0 ? (dye + bilty) / qty : 0;
     const net = sale - buy - overhead;
     const costEl = document.getElementById('cost_pc_' + i);
@@ -158,8 +212,22 @@
       netEl.style.color = net >= 0 ? '#15803d' : '#b91c1c';
     }
   }
-  PROJ_LINES.forEach(addProjRow);
-  if (!PROJ_LINES.length) addProjRow();
+  // Render group sections in a stable order: known groups first, then any
+  // others alphabetically. Each header is created on first use, so both the
+  // "Dabbi" and "Stickers" sections always show even before any rows land.
+  (function initGroups(){
+    const present = Array.from(new Set(PROJ_LINES.map(l => l.grp || 'Dabbi')));
+    const ordered = GROUP_ORDER.concat(
+      present.filter(g => !GROUP_ORDER.includes(g)).sort());
+    // Always show Dabbi + Stickers headers even if a group is empty.
+    ordered.forEach(g => {
+      const body = document.getElementById('proj-rows');
+      if (!body.querySelector(`tr.proj-group-header[data-group="${g}"]`)) {
+        body.appendChild(makeGroupHeader(g));
+      }
+    });
+    PROJ_LINES.forEach(addProjRow);
+  })();
   // initial fill for every row
   document.querySelectorAll('#proj-rows tr').forEach(function(tr){
     const el = tr.querySelector('[name^="pline_"][name$="_quantity"]');

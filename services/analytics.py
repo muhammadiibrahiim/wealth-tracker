@@ -27,14 +27,20 @@ ZERO = Decimal("0")
 
 
 def _weighted_payment_lag(session, account_ids: list[int], invoice_is_debit: bool,
-                          as_of: Optional[date] = None):
+                          as_of: Optional[date] = None, include_open: bool = True):
     """Real payment speed from the LEDGER, not a balance proxy.
 
     FIFO-matches each payment against the invoice it settles, PER ACCOUNT (a
     customer's receipt only pays down that customer's invoices), and returns the
     amount-weighted average lag in days. Advance payments (paid before the
-    invoice exists) contribute a NEGATIVE lag, so a business that pays vendors
-    up-front shows a DPO near — or below — zero, matching reality.
+    invoice exists) contribute a NEGATIVE lag.
+
+    With include_open=True (the default), invoices STILL OPEN at `as_of` are also
+    counted — aged to `as_of` (days-outstanding-so-far). This is essential: a
+    payable you're deliberately DELAYING is unpaid, so a matched-only average
+    would ignore it and report that you pay instantly. Counting the open balance
+    at its current age makes DSO/DPO reflect what's really happening on the
+    ledger — including the money you're sitting on.
 
     invoice_is_debit=True for A/R  (sale = debit, receipt = credit)
     invoice_is_debit=False for A/P (purchase = credit, payment = debit)
@@ -95,8 +101,84 @@ def _weighted_payment_lag(session, account_ids: list[int], invoice_is_debit: boo
                 if amt > 0:
                     pay_q.append((edate, amt))
 
+        # Count invoices still OPEN at as_of, aged to how long they've been
+        # outstanding so far — so delayed (unpaid) balances show their real age.
+        if include_open:
+            ref = as_of or date.today()
+            for idate, iamt in inv_q:
+                total_weighted += iamt * Decimal((ref - idate).days)
+                total_matched += iamt
+
     if total_matched > 0:
         return (total_weighted / total_matched), total_matched
+    return None, ZERO
+
+
+def _avg_open_age(session, account_ids: list[int], invoice_is_debit: bool,
+                  as_of: Optional[date] = None):
+    """Amount-weighted average AGE (days outstanding) of the currently-OPEN
+    balance, per account. Runs the same both-directions FIFO as the payment-lag
+    (so advances settle the earliest invoices first), then measures how long the
+    invoices STILL open at `as_of` have been sitting. This is the honest "how
+    long is money tied up right now" — it reflects the balances you're delaying,
+    and ignores how fast you happened to settle already-paid ones.
+
+    invoice_is_debit=True for A/R, False for A/P.
+    Returns (avg_age_days | None, open_amount)."""
+    from collections import deque
+    ref = as_of or date.today()
+    total_weighted = ZERO
+    total_open = ZERO
+    for aid in account_ids:
+        q = (
+            select(JournalEntry.entry_date, JournalLine.debit, JournalLine.credit)
+            .select_from(JournalLine)
+            .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+            .where(
+                JournalLine.account_id == aid,
+                JournalEntry.is_reversed == False,  # noqa: E712
+                JournalEntry.entry_type != JournalEntryType.REVERSAL,
+            )
+        )
+        if as_of is not None:
+            q = q.where(JournalEntry.entry_date <= as_of)
+        rows = session.exec(q.order_by(JournalEntry.entry_date, JournalEntry.id)).all()
+        inv_q: deque = deque()
+        pay_q: deque = deque()
+        for edate, debit, credit in rows:
+            debit = Decimal(debit or 0)
+            credit = Decimal(credit or 0)
+            inv_amt = debit if invoice_is_debit else credit
+            pay_amt = credit if invoice_is_debit else debit
+            if inv_amt > 0:
+                amt = inv_amt
+                while amt > 0 and pay_q:            # advances settle earliest invoices
+                    _pd, pamt = pay_q[0]
+                    m = min(amt, pamt)
+                    amt -= m
+                    if pamt - m == 0:
+                        pay_q.popleft()
+                    else:
+                        pay_q[0] = (_pd, pamt - m)
+                if amt > 0:
+                    inv_q.append((edate, amt))
+            if pay_amt > 0:
+                amt = pay_amt
+                while amt > 0 and inv_q:            # payments settle oldest invoice
+                    idate, iamt = inv_q[0]
+                    m = min(amt, iamt)
+                    amt -= m
+                    if iamt - m == 0:
+                        inv_q.popleft()
+                    else:
+                        inv_q[0] = (idate, iamt - m)
+                if amt > 0:
+                    pay_q.append((edate, amt))
+        for idate, iamt in inv_q:
+            total_weighted += iamt * Decimal((ref - idate).days)
+            total_open += iamt
+    if total_open > 0:
+        return (total_weighted / total_open), total_open
     return None, ZERO
 
 
@@ -460,17 +542,17 @@ def working_capital_metrics(session, user_id, as_of=None, period_days=365) -> di
         elif delta < 0:
             operating_ap += -delta
 
-    # DSO / DPO from the ledger — the REAL average lag between an invoice and
-    # the payment that settles it (FIFO-matched per party). Advance payments
-    # count as negative days. This reflects actual payment behaviour instead of
-    # the old balance-÷-flow proxy, which reported nonsense (e.g. 88-day DPO for
-    # a business that pays vendors up-front).
+    # DSO / DPO = amount-weighted AGE of the currently-OUTSTANDING balance, read
+    # from the ledger (not nominal trade terms). This answers "how long is money
+    # actually tied up right now" and reflects balances being DELAYED — a bill
+    # you're sitting on shows its real age. (The older matched-only lag ignored
+    # unpaid balances, so deferred payments were invisible and DPO read ~0.)
     # DSO/DPO reuse the trade-scoped AR/AP account ids computed above.
-    min_matched = Decimal("1000")       # need >Rs 1k of settled flow to be meaningful
-    dso_raw, dso_matched = _weighted_payment_lag(session, ar_ids, invoice_is_debit=True, as_of=as_of)
-    dpo_raw, dpo_matched = _weighted_payment_lag(session, ap_ids, invoice_is_debit=False, as_of=as_of)
-    dso = dso_raw if (dso_raw is not None and dso_matched >= min_matched) else None
-    dpo = dpo_raw if (dpo_raw is not None and dpo_matched >= min_matched) else None
+    min_open = Decimal("1000")          # need >Rs 1k outstanding to be meaningful
+    dso_raw, dso_open = _avg_open_age(session, ar_ids, invoice_is_debit=True, as_of=as_of)
+    dpo_raw, dpo_open = _avg_open_age(session, ap_ids, invoice_is_debit=False, as_of=as_of)
+    dso = dso_raw if (dso_raw is not None and dso_open >= min_open) else None
+    dpo = dpo_raw if (dpo_raw is not None and dpo_open >= min_open) else None
     ccc = (dso - dpo) if (dso is not None and dpo is not None) else None
 
     current_assets = cash + ar_balance
@@ -563,14 +645,15 @@ def time_based_performance(session, user_id, as_of=None) -> dict:
     for t in trades:
         if first_trade_date is None or t.trade_date < first_trade_date:
             first_trade_date = t.trade_date
+        # Sales and profit on the SAME basis — every non-cancelled trade in the
+        # period (back-to-back margins are locked at order time, so open orders
+        # count too and profit tracks the sales figure).
         if t.trade_date >= year_start:
             ytd_sales += Decimal(t.total_sale)
-            if t.status in realised:
-                ytd_profit += net_profit(t)
+            ytd_profit += net_profit(t)
         if t.trade_date >= month_start:
             mtd_sales += Decimal(t.total_sale)
-            if t.status in realised:
-                mtd_profit += net_profit(t)
+            mtd_profit += net_profit(t)
 
         if t.status in realised:
             capital = Decimal(t.total_cost)
@@ -620,7 +703,47 @@ def time_based_performance(session, user_id, as_of=None) -> dict:
     }
 
 
-def capital_utilization(session, user_id, as_of=None) -> dict:
+def _avg_equity_over_period(session, acct_ids, start, end):
+    """Time-weighted average of equity (credit-positive) across [start, end] —
+    the mean of each DAY's closing balance. This is the capital that was actually
+    at work: injecting Rs 1M in the last two days shouldn't count as if it funded
+    the whole month. Returns None if there's nothing to average."""
+    if not acct_ids or end < start:
+        return None
+    opening = ZERO
+    for aid in acct_ids:
+        opening += -balance_asof(session, aid, start - timedelta(days=1))  # credit-positive
+    rows = session.exec(
+        select(JournalEntry.entry_date,
+               func.coalesce(func.sum(JournalLine.debit), 0),
+               func.coalesce(func.sum(JournalLine.credit), 0))
+        .select_from(JournalLine)
+        .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+        .where(JournalLine.account_id.in_(acct_ids),
+               JournalEntry.is_reversed == False,  # noqa: E712
+               JournalEntry.entry_date >= start,
+               JournalEntry.entry_date <= end)
+        .group_by(JournalEntry.entry_date)
+    ).all()
+    delta = {d: (Decimal(cr) - Decimal(dr)) for d, dr, cr in rows}  # equity delta = CR − DR
+    running = opening
+    total = ZERO
+    n = 0
+    d = start
+    while d <= end:
+        running += delta.get(d, ZERO)
+        total += running
+        n += 1
+        d += timedelta(days=1)
+    return (total / n) if n else opening
+
+
+def capital_utilization(session, user_id, as_of=None, ni_from=None, ni_to=None) -> dict:
+    """Capital efficiency as of `as_of`. Net income for ROCE/ROE is measured over
+    [ni_from, ni_to] — default the trailing 365 days, but the dashboard passes a
+    single month so those returns read for the selected month. ROE is measured
+    against the TIME-WEIGHTED AVERAGE equity over the period (not the closing
+    balance), so it reflects the capital actually deployed through the month."""
     as_of = as_of or date.today()
     metrics = working_capital_metrics(session, user_id, as_of=as_of, period_days=365)
     cash = metrics["cash_balance"]
@@ -633,7 +756,9 @@ def capital_utilization(session, user_id, as_of=None) -> dict:
         for a in _accounts_in_subclass(session, user_id, sub_code):
             equity_total += -balance_asof(session, a.id, as_of)
 
-    pl = profit_and_loss(session, user_id, from_date=as_of - timedelta(days=365), to_date=as_of)
+    ni_from = ni_from or (as_of - timedelta(days=365))
+    ni_to = ni_to or as_of
+    pl = profit_and_loss(session, user_id, from_date=ni_from, to_date=ni_to)
     trailing_ni = pl["net_income"]
     roce = (trailing_ni / capital_deployed * 100) if capital_deployed > 0 else ZERO
 
@@ -644,26 +769,54 @@ def capital_utilization(session, user_id, as_of=None) -> dict:
     # ROI is measured against that total stake. Accounts are matched by name
     # (they live under Accounts Payable in this chart), with graceful fallback
     # if a business renamed them.
-    def _acct_balance_by_name(*names) -> Decimal:
+    equity_names = ("ibrahim (ceo)", "ceo", "funding", "capital a/c", "capital")
+    equity_accts = [a for a in session.exec(
+        select(Account).where(Account.user_id == user_id)).all()
+        if (a.name or "").strip().lower() in equity_names]
+
+    def _closing(*names) -> Decimal:
         total = ZERO
-        for a in session.exec(
-            select(Account).where(Account.user_id == user_id)
-        ).all():
-            nm = (a.name or "").strip().lower()
-            if any(nm == n.lower() for n in names):
-                total += -balance_asof(session, a.id, as_of)  # credit-positive
+        for a in equity_accts:
+            if (a.name or "").strip().lower() in [n.lower() for n in names]:
+                total += -balance_asof(session, a.id, ni_to)  # credit-positive
         return total
 
-    funding = _acct_balance_by_name("Ibrahim (CEO)", "CEO", "Funding")
-    retained = _acct_balance_by_name("Capital A/C", "Capital")
-    invested_capital = (funding + retained).quantize(Decimal("0.01"))
-    # Return per rupee of money in the business, annualised over trailing 12 mo.
-    roi_pct = (trailing_ni / invested_capital * 100) if invested_capital > 0 else ZERO
+    funding = _closing("Ibrahim (CEO)", "CEO", "Funding")
+    retained = _closing("Capital A/C", "Capital")
+    invested_capital = (funding + retained).quantize(Decimal("0.01"))  # closing snapshot
+
+    # Denominator = time-weighted AVERAGE equity over the period (mean of each
+    # day's closing balance), so a late-month injection doesn't overstate the
+    # base. Falls back to the closing snapshot if the average can't be formed.
+    avg_equity = _avg_equity_over_period(session, [a.id for a in equity_accts], ni_from, ni_to)
+    if avg_equity is None or avg_equity <= 0:
+        avg_equity = invested_capital
+    avg_invested_capital = Decimal(avg_equity).quantize(Decimal("0.01"))
+    # Earnings per rupee of your own money, over the period, on the average base.
+    roi_pct = (trailing_ni / avg_invested_capital * 100) if avg_invested_capital > 0 else ZERO
     # Total profit earned per rupee the owner funded, since inception.
     roi_since_inception = (retained / funding * 100) if funding > 0 else ZERO
 
+    # ── Actual Capital A/C growth over the period (what equity really grew by)
+    # vs the PROFIT booked into it. They differ when a non-P&L entry (settlement,
+    # owner draw, manual adjustment) hits Capital directly. capital_other surfaces
+    # that difference so it isn't mistaken for profit.
+    capital_acct = next((a for a in equity_accts
+                         if (a.name or "").strip().lower() in ("capital a/c", "capital")), None)
+    if capital_acct is not None:
+        c_open = -balance_asof(session, capital_acct.id, ni_from - timedelta(days=1))
+        c_close = -balance_asof(session, capital_acct.id, ni_to)
+        capital_growth = (c_close - c_open)
+    else:
+        capital_growth = ZERO
+    profit_booked = trailing_ni                       # net income posted this period
+    capital_other = (capital_growth - profit_booked)  # non-profit Capital movements
+
     return {
         "as_of": as_of,
+        "profit_booked": profit_booked.quantize(Decimal("0.01")),
+        "capital_growth": capital_growth.quantize(Decimal("0.01")),
+        "capital_other": capital_other.quantize(Decimal("0.01")),
         "components": [
             {"label": "Cash & Bank", "amount": cash},
             {"label": "Customer Receivables", "amount": ar},
@@ -676,6 +829,7 @@ def capital_utilization(session, user_id, as_of=None) -> dict:
         "funding_ceo": funding.quantize(Decimal("0.01")),
         "retained_capital": retained.quantize(Decimal("0.01")),
         "invested_capital": invested_capital,
+        "avg_invested_capital": avg_invested_capital,
         "roi_pct": roi_pct.quantize(Decimal("0.01")),
         "roi_since_inception_pct": roi_since_inception.quantize(Decimal("0.01")),
     }
@@ -1120,12 +1274,15 @@ def order_projection(session, user_id) -> dict:
             "amount": amount.quantize(Decimal("0.01")),
         })
 
-    total_purchase = total_dye = total_bilty = total_sale = ZERO
+    total_purchase = total_dye = total_bilty = total_sale = total_qty = ZERO
     for ln in active:
         qty = Decimal(ln.quantity)
+        total_qty += qty
         purchase = qty * Decimal(ln.purchase_rate)
         sale = qty * Decimal(ln.sale_rate)
-        dye = Decimal(ln.dye_block_cost)
+        # one-time dye/block — excluded from cash-out and KPIs when toggled off
+        # (models the next cycle where the block is already paid for).
+        dye = Decimal(ln.dye_block_cost) if getattr(ln, "dye_active", True) else ZERO
         bilty = Decimal(ln.bilty)
         lead = int(ln.lead_days or 0)
         collect_lag = int(ln.collection_lag_days or 0)
@@ -1159,6 +1316,8 @@ def order_projection(session, user_id) -> dict:
     total_out = total_purchase + total_dye + total_bilty
     net_profit = (total_sale - total_out).quantize(Decimal("0.01"))
     roi_pct = (net_profit / total_out * 100).quantize(Decimal("0.01")) if total_out > 0 else ZERO
+    # average net profit earned on each piece across the whole batch
+    profit_per_unit = (net_profit / total_qty).quantize(Decimal("0.01")) if total_qty > 0 else ZERO
 
     rows = []
     running = ZERO
@@ -1210,128 +1369,104 @@ def order_projection(session, user_id) -> dict:
         "total_sale": total_sale.quantize(Decimal("0.01")),
         "net_profit": net_profit,
         "roi_pct": roi_pct,
+        "total_qty": total_qty.quantize(Decimal("0.01")),
+        "profit_per_unit": profit_per_unit,
     }
 
 
-def cash_flow_management(session, user_id, horizon_days=120) -> dict:
-    """Plan which vendor payments to delay so the PROJECTED new trades can be
-    funded without going cash-negative.
+def _vendor_pay_tier(trades, tenure_days):
+    """Smart, non-binding priority for splitting incoming cash across vendors.
+    NEWER vendors (few trades / short relationship) are favoured — they get a
+    bigger slice of each receipt relative to what they're owed. LONG-STANDING
+    vendors have more goodwill, so we can push their credit and pay them a
+    smaller proportional slice. Returns (tier_key, weight_multiplier, reason)."""
+    if trades <= 1 or tenure_days <= 30:
+        return ("new", Decimal("2.0"), "New vendor — pay on priority")
+    if trades == 2 or tenure_days <= 75:
+        return ("recent", Decimal("1.5"), "Recent vendor — favour in the split")
+    if trades <= 5:
+        return ("growing", Decimal("1.15"), "Growing relationship")
+    return ("established", Decimal("0.9"), "Long-standing — credit can be pushed")
 
-    Combines three streams on one dated timeline:
-      • current cash (incl. the CEO float) and existing receivables → inflows
-      • the projected new-trade investment (order_projection) → outflows that
-        MUST go out on schedule, plus their later collections
-      • existing vendor payables (open trades) → DELAYABLE outflows
 
-    Then greedily pays each vendor at the EARLIEST day spare cash allows once the
-    new investment is covered, so the recommended pay dates are the soonest you
-    can settle each vendor without starving the new trades. Whatever cash is
-    still short after deferring vendors maximally is the external cash you must
-    inject for the investment itself.
+def cash_flow_management(session, user_id, horizon_days=120,
+                         inject_amount=None, inject_on=None) -> dict:
+    """Smart payment instructions for the EXISTING trades (no projection).
+
+    The report answers one question: as customer money lands, exactly how much
+    should I hand to each vendor so NOBODY gets starved? It
+
+      • lists every receipt you expect (from delivered/open existing trades),
+      • takes what you currently owe each vendor (from the ledger), and
+      • on each receipt date, distributes the cash on hand across ALL vendors
+        with a balance — proportional to what they're owed, but WEIGHTED so
+        newer vendors are favoured and long-standing vendors are pushed a bit.
+
+    Every vendor with a balance gets a slice of each disbursement (they can get
+    proportionally less than due, but never zero), and the split tilts toward
+    new relationships. Output is a dated list of "collect X → pay A/B/C" steps.
     """
     from collections import defaultdict
+    cent = Decimal("0.01")
+    eps = Decimal("0.01")
     today = date.today()
-    # exclude the CEO funding draw — that capital is already invested, not a gap
-    fc = bank_position_forecast(session, user_id, horizon_days, include_funding=False)
-    proj = order_projection(session, user_id)
-
+    fc = bank_position_forecast(session, user_id, horizon_days, include_funding=True)
     cash_today = Decimal(fc["cash_today"])
 
-    inflow_by_day = defaultdict(lambda: ZERO)
-    for f in fc["inflows"]:
-        inflow_by_day[max(0, f["days_out"])] += Decimal(f["amount"])
-    mand_out_by_day = defaultdict(lambda: ZERO)     # new-trade investment
-    for row in proj["rows"]:
-        d = max(0, row["day"])
-        mand_out_by_day[d] += Decimal(row["cash_out"])
-        inflow_by_day[d] += Decimal(row["cash_in"])
+    parties = list(session.exec(select(Party).where(Party.user_id == user_id)).all())
+    party_name = {p.id: p.name for p in parties}
 
-    payables = []
+    # ── how long / how much we've traded with each vendor (relationship depth) ──
+    all_trades = list(session.exec(
+        select(Trade).where(Trade.user_id == user_id,
+                            Trade.status != TradeStatus.CANCELLED)).all())
+    v_trades = defaultdict(int)
+    v_first = {}
+    for t in all_trades:
+        if not t.vendor_id:
+            continue
+        v_trades[t.vendor_id] += 1
+        if t.vendor_id not in v_first or t.trade_date < v_first[t.vendor_id]:
+            v_first[t.vendor_id] = t.trade_date
+
+    # ── what we owe each vendor across their open trades (current ledger debt +
+    #    the cost of goods still on order), grouped by vendor, with earliest due ──
+    name_to_pid = {p.name: p.id for p in parties}
+    ref_by_vendor = defaultdict(list)
+    agg = defaultdict(lambda: {"owed": ZERO, "due": None})
     for o in fc["outflows"]:
-        payables.append({
-            "label": o["label"], "amount": Decimal(o["amount"]),
-            "vendor": o.get("vendor", o["label"]), "ref": o.get("ref"),
-            "trade_id": o.get("trade_id"),
-            "due_day": max(0, o["days_out"]), "due_date": o["due_date"],
-            "kind": o.get("kind", ""), "paid": ZERO, "pay_day": None,
+        # Owed = what the LEDGER shows we owe (advance accrued at trade open +
+        # goods received but unpaid). Exclude projected future purchases for
+        # goods still on order — those aren't a debt until received/advanced.
+        if o.get("kind") == "projected":
+            continue
+        name = o.get("vendor") or o.get("label")
+        a = agg[name]
+        a["owed"] += Decimal(o["amount"])
+        d = o.get("due_date")
+        if d is not None and (a["due"] is None or d < a["due"]):
+            a["due"] = d
+        if o.get("ref"):
+            ref_by_vendor[name].append((o.get("trade_id"), o.get("ref")))
+
+    vendors = []
+    for name, a in agg.items():
+        if a["owed"] <= eps:
+            continue
+        pid = name_to_pid.get(name)
+        trades = v_trades.get(pid, 0)
+        tenure = (today - v_first[pid]).days if pid in v_first else 0
+        tier, mult, reason = _vendor_pay_tier(trades, tenure)
+        vendors.append({
+            "id": pid if pid is not None else name, "name": name,
+            "trades": trades, "tenure_days": tenure,
+            "tier": tier, "mult": mult, "reason": reason,
+            "owed": a["owed"].quantize(cent), "remaining": a["owed"],
+            "due_date": a["due"],
         })
-    payables.sort(key=lambda p: p["due_day"])
+    total_owed = sum((v["owed"] for v in vendors), ZERO)
 
-    horizon = max([horizon_days]
-                  + [p["due_day"] for p in payables]
-                  + [max(0, r["day"]) for r in proj["rows"]] + [0]) + 2
-
-    running = cash_today
-    backlog = []
-    pay_idx = 0
-    timeline = []
-    peak_shortfall = ZERO
-    peak_day = None
-
-    for d in range(0, horizon + 1):
-        cin = inflow_by_day.get(d, ZERO)
-        cout = mand_out_by_day.get(d, ZERO)
-        running += cin
-        running -= cout                     # investment leaves on schedule
-        while pay_idx < len(payables) and payables[pay_idx]["due_day"] <= d:
-            backlog.append(payables[pay_idx]); pay_idx += 1
-        vendor_paid_today = ZERO
-        backlog.sort(key=lambda p: p["due_day"])
-        for p in backlog:
-            if running <= 0:
-                break
-            owe = p["amount"] - p["paid"]
-            if owe <= 0:
-                continue
-            pay = min(running, owe)
-            p["paid"] += pay
-            running -= pay
-            vendor_paid_today += pay
-            if p["amount"] - p["paid"] <= Decimal("0.005"):
-                p["pay_day"] = d
-        backlog = [p for p in backlog if (p["amount"] - p["paid"]) > Decimal("0.005")]
-        shortfall = -running if running < 0 else ZERO
-        if shortfall > peak_shortfall:
-            peak_shortfall = shortfall
-            peak_day = d
-        deferred_bal = sum((pp["amount"] - pp["paid"] for pp in backlog), ZERO)
-        if cin or cout or vendor_paid_today or d == 0:
-            timeline.append({
-                "day": d, "date": today + timedelta(days=d),
-                "inflow": cin.quantize(Decimal("0.01")),
-                "invest_out": cout.quantize(Decimal("0.01")),
-                "vendor_paid": vendor_paid_today.quantize(Decimal("0.01")),
-                "running": running.quantize(Decimal("0.01")),
-                "deferred": deferred_bal.quantize(Decimal("0.01")),
-            })
-
-    delays = []
-    for p in payables:
-        remaining = (p["amount"] - p["paid"]).quantize(Decimal("0.01"))
-        if p["pay_day"] is not None and p["pay_day"] > p["due_day"]:
-            delays.append({
-                "label": p["label"], "vendor": p["vendor"], "ref": p["ref"],
-                "trade_id": p["trade_id"],
-                "amount": p["amount"].quantize(Decimal("0.01")),
-                "kind": p["kind"], "due_date": p["due_date"],
-                "pay_date": today + timedelta(days=p["pay_day"]),
-                "days_delayed": p["pay_day"] - p["due_day"],
-                "status": "delay", "remaining": ZERO,
-            })
-        elif p["pay_day"] is None and remaining > Decimal("0.005"):
-            delays.append({
-                "label": p["label"], "vendor": p["vendor"], "ref": p["ref"],
-                "trade_id": p["trade_id"],
-                "amount": p["amount"].quantize(Decimal("0.01")),
-                "kind": p["kind"], "due_date": p["due_date"], "pay_date": None,
-                "days_delayed": None, "status": "unfunded", "remaining": remaining,
-            })
-    delays.sort(key=lambda x: (x["status"] != "unfunded", -(x["days_delayed"] or 99999)))
-
-    # ── plain-language pointers ────────────────────────────────────────────
-    # (1) money coming in, from which customer/trade, aggregated per date
-    party_name = {p.id: p.name for p in
-                  session.exec(select(Party).where(Party.user_id == user_id)).all()}
+    # ── receipts: money coming in, grouped per date, with its customer sources ──
     rp = defaultdict(lambda: {"amount": ZERO, "sources": {}, "days_out": 0})
 
     def _add_src(slot, name, ref, tid, amt):
@@ -1349,69 +1484,270 @@ def cash_flow_management(session, user_id, horizon_days=120) -> dict:
             tid = getattr(t, "id", None)
         else:
             cust, ref, tid = "trade", "", None
-        # overdue receivables (customer hasn't paid yet) collapse to "now"
-        key = max(today, f["due_date"])
+        key = max(today, f["due_date"])       # overdue receivables collapse to "now"
         amt = Decimal(f["amount"])
         rp[key]["amount"] += amt
-        rp[key]["days_out"] = max(0, f["days_out"])
+        rp[key]["days_out"] = max(0, (key - today).days)
         _add_src(rp[key], cust, ref, tid, amt)
-    for row in proj["rows"]:                       # projected new-trade collections
-        for e in row.get("events", []):
-            if e["dir"] == "in":
-                key = row["date"]
-                amt = Decimal(e["amount"])
-                rp[key]["amount"] += amt
-                rp[key]["days_out"] = row["day"]
-                _add_src(rp[key], "Projected · " + e["text"].replace("Collect ", ""), "", None, amt)
-    receipt_pointers = [
-        {"date": d, "amount": v["amount"].quantize(Decimal("0.01")), "days_out": v["days_out"],
+
+    receipts = [
+        {"date": d, "amount": v["amount"], "days_out": v["days_out"],
          "sources": [{"name": k[0], "ref": k[1], "trade_id": val["trade_id"],
-                      "amount": val["amount"].quantize(Decimal("0.01"))}
+                      "amount": val["amount"].quantize(cent)}
                      for k, val in sorted(v["sources"].items(), key=lambda x: -x[1]["amount"])]}
         for d, v in sorted(rp.items()) if v["amount"] > 0
     ]
 
-    # (2) when each deferred vendor payment finally has to be made, per pay date
-    vp = defaultdict(lambda: {"amount": ZERO, "vendors": set(), "count": 0})
-    for d in delays:
-        if d["status"] != "delay" or not d["pay_date"]:
+    total_to_collect = sum((r["amount"] for r in receipts), ZERO)
+
+    # ── Projected upcoming vendor payables ─────────────────────────────────
+    # For goods still ON ORDER, the on-delivery + credit portions that will
+    # fall due WHEN they arrive (the advance portion is already in the hard
+    # 'owed' above). Delivery timing is predicted from each vendor's historical
+    # supply cadence (bank_position_forecast projected outflows); the amount is
+    # split by that trade's vendor terms. Kept SEPARATE from hard owed — it's an
+    # estimate, not a booked debt.
+    proj_by_trade = defaultdict(list)
+    for o in fc["outflows"]:
+        if o.get("kind") == "projected" and o.get("trade_id"):
+            proj_by_trade[o["trade_id"]].append((o["due_date"], Decimal(o["amount"])))
+    projected = []
+    projected_total = ZERO
+    trade_cache = {}
+    for tid, chunks in proj_by_trade.items():
+        t = trade_cache.get(tid) or session.get(Trade, tid)
+        if not t:
             continue
-        slot = vp[d["pay_date"]]
-        slot["amount"] += d["amount"]
-        slot["vendors"].add(d["label"].split(" · ")[0])
-        slot["count"] += 1
-    vendor_pointers = [
-        {"date": d, "amount": v["amount"].quantize(Decimal("0.01")),
-         "vendors": sorted(v["vendors"]), "count": v["count"]}
-        for d, v in sorted(vp.items())
+        trade_cache[tid] = t
+        vname = party_name.get(t.vendor_id, "vendor")
+        adv = Decimal(t.vend_advance_pct or 0)
+        dely = Decimal(t.vend_delivery_pct or 0)
+        cred = Decimal(t.vend_credit_pct or 0)
+        tot = adv + dely + cred
+        if tot <= 0:
+            dely, cred, tot = Decimal("100"), ZERO, Decimal("100")
+        cdays = int(t.vendor_terms_days or 0)
+        for ddate, cost in chunks:
+            od = cost * dely / tot
+            cr = cost * cred / tot
+            if od > Decimal("0.5"):
+                projected.append({"date": max(today, ddate), "vendor": vname,
+                                  "amount": od.quantize(cent), "ref": t.reference,
+                                  "trade_id": tid, "stage": "on delivery"})
+                projected_total += od
+            if cr > Decimal("0.5"):
+                cd = max(today, ddate + timedelta(days=cdays))
+                projected.append({"date": cd, "vendor": vname,
+                                  "amount": cr.quantize(cent), "ref": t.reference,
+                                  "trade_id": tid, "stage": f"credit +{cdays}d"})
+                projected_total += cr
+    proj_by_date = defaultdict(lambda: {"amount": ZERO, "items": []})
+    for p in projected:
+        slot = proj_by_date[p["date"]]
+        slot["amount"] += p["amount"]
+        slot["items"].append(p)
+    projected_pointers = [
+        {"date": d, "days_out": max(0, (d - today).days),
+         "amount": v["amount"].quantize(cent),
+         "items": sorted(v["items"], key=lambda x: -x["amount"])}
+        for d, v in sorted(proj_by_date.items())
     ]
 
-    total_deferred = sum((d["amount"] for d in delays if d["status"] == "delay"), ZERO)
-    total_unfunded = sum((d["remaining"] for d in delays if d["status"] == "unfunded"), ZERO)
-    # extra cash beyond what's already deployed today (today's float is negative
-    # when capital is already tied up in live trades)
-    already_deployed = -cash_today if cash_today < 0 else ZERO
-    additional_needed = peak_shortfall - already_deployed
-    if additional_needed < 0:
-        additional_needed = ZERO
+    # ── Recommended capital injection ──────────────────────────────────────
+    # Simulate meeting EVERY obligation by its due date (hard owed at its
+    # earliest due date + projected payables at theirs), funded by receipts plus
+    # any spare cash today. The deepest the running balance dips is the extra
+    # capital you'd need to inject, and by when.
+    # A capital injection the owner plans to make (amount + date) is treated as
+    # cash arriving on that date; the recommended figure below becomes the
+    # RESIDUAL still needed after it.
+    inj_amt = Decimal(str(inject_amount)) if inject_amount else ZERO
+    if inj_amt < 0:
+        inj_amt = ZERO
+    inj_when = max(today, inject_on) if (inj_amt > 0 and inject_on) else today
+
+    day_flow = defaultdict(lambda: ZERO)
+    for r in receipts:
+        day_flow[r["date"]] += r["amount"]
+    for v in vendors:
+        day_flow[max(today, v["due_date"] or today)] -= v["owed"]
+    for p in projected:
+        day_flow[p["date"]] -= p["amount"]
+    if inj_amt > 0:
+        day_flow[inj_when] += inj_amt
+    spare = cash_today if cash_today > 0 else ZERO
+    running_sim = spare
+    trough = ZERO      # deepest the balance dips (= amount needed)
+    onset = None       # FIRST day it dips negative (= have the cash by then)
+    for d in sorted(day_flow.keys()):
+        running_sim += day_flow[d]
+        if running_sim < trough:
+            trough = running_sim
+        if onset is None and running_sim < -eps:
+            onset = d
+    injection = (-trough).quantize(cent) if trough < 0 else ZERO
+    inj_date = onset
+
+    # ── Unified obligation plan: current owed (due now / by terms) AND the
+    #    projected supply payments (due when goods land) are ONE pool. Each
+    #    obligation "activates" on its due date; receipts + carried cash are then
+    #    split across whatever is currently due, weighted to favour new vendors. ──
+    def _meta(pid, name):
+        trades = v_trades.get(pid, 0) if pid is not None else 0
+        tenure = (today - v_first[pid]).days if (pid is not None and pid in v_first) else 0
+        tier, mult, reason = _vendor_pay_tier(trades, tenure)
+        return {"name": name, "tier": tier, "mult": mult, "reason": reason,
+                "trades": trades, "tenure_days": tenure}
+
+    vstate = {}
+
+    def _ensure(vid, name, pid):
+        if vid not in vstate:
+            vstate[vid] = {**_meta(pid, name), "remaining": ZERO, "paid": ZERO,
+                           "owed_hard": ZERO, "proj": ZERO, "due_date": None,
+                           "ref": None, "trade_id": None}
+        return vstate[vid]
+
+    obligations = []
+    for v in vendors:
+        st = _ensure(v["id"], v["name"], v["id"] if isinstance(v["id"], int) else None)
+        st["owed_hard"] = v["owed"]
+        st["due_date"] = v["due_date"]
+        refs = ref_by_vendor.get(v["name"], [])
+        st["ref"] = refs[0][1] if refs else None
+        st["trade_id"] = refs[0][0] if refs else None
+        obligations.append({"vid": v["id"], "amount": v["owed"],
+                            "due": max(today, v["due_date"] or today), "kind": "owed"})
+    for p in projected:
+        pid = name_to_pid.get(p["vendor"])
+        vid = pid if pid is not None else p["vendor"]
+        st = _ensure(vid, p["vendor"], pid)
+        st["proj"] += p["amount"]
+        if st["trade_id"] is None:
+            st["trade_id"] = p.get("trade_id"); st["ref"] = p.get("ref")
+        obligations.append({"vid": vid, "amount": p["amount"], "due": p["date"],
+                            "kind": "projected"})
+    obligations.sort(key=lambda o: o["due"])
+    total_obligations = sum((o["amount"] for o in obligations), ZERO)
+
+    def distribute(pool):
+        ids = list(vstate.keys())
+        alloc = {i: ZERO for i in ids}
+        pool = min(pool, sum((vstate[i]["remaining"] for i in ids), ZERO))
+        for _ in range(40):
+            if pool <= eps:
+                break
+            active = [i for i in ids if (vstate[i]["remaining"] - alloc[i]) > eps]
+            if not active:
+                break
+            tw = sum(((vstate[i]["remaining"] - alloc[i]) * vstate[i]["mult"] for i in active), ZERO)
+            if tw <= 0:
+                break
+            made = ZERO
+            for i in active:
+                room = vstate[i]["remaining"] - alloc[i]
+                want = pool * ((vstate[i]["remaining"] - alloc[i]) * vstate[i]["mult"]) / tw
+                pay = want if want < room else room
+                alloc[i] += pay
+                made += pay
+            pool -= made
+            if made <= eps:
+                break
+        return alloc
+
+    rmap = {r["date"]: r for r in receipts}
+    event_dates = sorted(set(rmap.keys()) | {o["due"] for o in obligations}
+                         | ({inj_when} if inj_amt > 0 else set()))
+    pool = cash_today if cash_today > 0 else ZERO
+    oblig_idx = 0
+    injected_done = False
+    instructions = []
+    cleared_date = None
+    for d in event_dates:
+        newly_due = ZERO
+        while oblig_idx < len(obligations) and obligations[oblig_idx]["due"] <= d:
+            o = obligations[oblig_idx]
+            oblig_idx += 1
+            vstate[o["vid"]]["remaining"] += o["amount"]
+            if o["kind"] == "projected":
+                newly_due += o["amount"]
+        r = rmap.get(d)
+        receipt_amt = r["amount"] if r else ZERO
+        inj_now = ZERO
+        if inj_amt > 0 and not injected_done and d >= inj_when:
+            inj_now = inj_amt
+            injected_done = True
+        pool += receipt_amt + inj_now
+        alloc = distribute(pool)
+        payments = []
+        total_paid = ZERO
+        for i, a in alloc.items():
+            if a > eps:
+                st = vstate[i]
+                st["remaining"] -= a
+                st["paid"] += a
+                total_paid += a
+                payments.append({
+                    "vendor": st["name"], "amount": a.quantize(cent),
+                    "tier": st["tier"], "reason": st["reason"],
+                    "remaining_after": st["remaining"].quantize(cent) if st["remaining"] > eps else ZERO,
+                    "trade_id": st["trade_id"], "ref": st["ref"],
+                })
+        pool -= total_paid
+        payments.sort(key=lambda x: -x["amount"])
+        if not payments and receipt_amt <= eps and newly_due <= eps and inj_now <= eps:
+            continue
+        instructions.append({
+            "date": d, "days_out": max(0, (d - today).days),
+            "opening": False,
+            "receipt": receipt_amt.quantize(cent),
+            "injected": inj_now.quantize(cent),
+            "sources": r["sources"] if r else [],
+            "new_due": newly_due.quantize(cent),
+            "payments": payments,
+            "paid_out": total_paid.quantize(cent),
+            "carried": pool.quantize(cent),
+        })
+        if (cleared_date is None and oblig_idx >= len(obligations)
+                and sum((vstate[i]["remaining"] for i in vstate), ZERO) <= eps
+                and total_obligations > 0):
+            cleared_date = d
+
+    total_paid_plan = sum((vstate[i]["paid"] for i in vstate), ZERO)
+    still_owed = (total_obligations - total_paid_plan)
+    if still_owed < 0:
+        still_owed = ZERO
+
+    vendor_summary = sorted(
+        [{"name": st["name"], "tier": st["tier"], "reason": st["reason"],
+          "trades": st["trades"], "tenure_days": st["tenure_days"],
+          "owed": st["owed_hard"].quantize(cent), "proj": st["proj"].quantize(cent),
+          "paid": st["paid"].quantize(cent),
+          "remaining": max(ZERO, st["owed_hard"] + st["proj"] - st["paid"]).quantize(cent),
+          "due_date": st["due_date"]}
+         for st in vstate.values()],
+        key=lambda x: ({"new": 0, "recent": 1, "growing": 2, "established": 3}[x["tier"]],
+                       -(x["owed"] + x["proj"])))
 
     return {
         "today": today,
-        "cash_today": cash_today.quantize(Decimal("0.01")),
-        "projected_investment": Decimal(proj["total_investment"]).quantize(Decimal("0.01")),
-        "peak_external_needed": peak_shortfall.quantize(Decimal("0.01")),
-        "additional_needed": additional_needed.quantize(Decimal("0.01")),
-        "peak_day": peak_day,
-        "peak_date": (today + timedelta(days=peak_day)) if peak_day is not None else None,
-        "total_deferred": total_deferred.quantize(Decimal("0.01")),
-        "total_unfunded": total_unfunded.quantize(Decimal("0.01")),
-        "delays": delays,
-        "receipt_pointers": receipt_pointers,
-        "vendor_pointers": vendor_pointers,
-        "timeline": timeline,
-        "has_projection": proj["active_count"] > 0,
-        "proj_lines": proj["active_count"],
         "horizon_days": horizon_days,
+        "cash_today": cash_today.quantize(cent),
+        "total_to_collect": total_to_collect.quantize(cent),
+        "total_owed": total_owed.quantize(cent),
+        "total_obligations": total_obligations.quantize(cent),
+        "total_paid_plan": total_paid_plan.quantize(cent),
+        "still_owed": still_owed.quantize(cent),
+        "cleared_date": cleared_date,
+        "vendor_count": len(vstate),
+        "instructions": instructions,
+        "vendor_summary": vendor_summary,
+        "projected_pointers": projected_pointers,
+        "projected_total": projected_total.quantize(cent),
+        "injection": injection,
+        "injection_date": inj_date,
+        "applied_injection": inj_amt.quantize(cent),
+        "applied_injection_date": (inj_when if inj_amt > 0 else None),
     }
 
 

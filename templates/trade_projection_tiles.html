@@ -17,6 +17,11 @@
       <div class="stat-value" style="color:#15803d;">{{ report.roi_pct }}%</div>
       <div class="stat-foot text-gray-500">on money invested</div>
     </div>
+    <div class="stat-card" style="border-color:#16a34a;">
+      <div class="stat-label">Profit / Unit<span class="tip-i" data-tip="Average net profit on each piece = total net profit ÷ total quantity across all included products. What you make, on average, per unit sold.">i</span></div>
+      <div class="stat-value" style="color:#15803d;"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.profit_per_unit) }}</div>
+      <div class="stat-foot text-gray-500">avg over {{ '{:,.0f}'.format(report.total_qty) }} pcs</div>
+    </div>
     <div class="stat-card">
       <div class="stat-label">Cash Recovered By<span class="tip-i" data-tip="The day your running balance climbs back to zero as customer collections arrive — i.e. when the batch has paid for itself.">i</span></div>
       <div class="stat-value">{% if report.recovery_day is not none %}day {{ report.recovery_day }}{% else %}—{% endif %}</div>

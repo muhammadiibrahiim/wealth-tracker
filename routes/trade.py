@@ -349,14 +349,16 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
     vendor = PartyService.get(session, user_id, trade.vendor_id)
     purchaser = PartyService.get(session, user_id, trade.purchaser_id)
 
-    # Trade costs — DR Capital A/C / CR payee entries posted via Record Cost.
-    # Skip reversed originals and their reversals so the list shows only what's net active.
+    # Trade costs posted via Record Cost. Self-paid costs now route through the
+    # P&L A/C (EXPENSE, Dr 3903 / Cr payee) + a close-to-Capital; customer-paid
+    # ones stay as a JOURNAL that reduces the customer's receivable. Both share
+    # the "{ref} cost:" prefix; the "{ref} cost close:" JVs are excluded by it.
     cost_prefix = f"{trade.reference} cost:"
     cost_entries = session.exec(
         select(JournalEntry).where(
             JournalEntry.user_id == user_id,
             JournalEntry.trade_id == trade.id,
-            JournalEntry.entry_type == JournalEntryType.JOURNAL,
+            JournalEntry.entry_type.in_([JournalEntryType.JOURNAL, JournalEntryType.EXPENSE]),
             JournalEntry.description.like(f"{cost_prefix}%"),
             JournalEntry.is_reversed == False,  # noqa: E712
         ).order_by(JournalEntry.entry_date, JournalEntry.id)
@@ -364,6 +366,10 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
     capital_acct = session.exec(
         select(Account).where(Account.user_id == user_id, Account.name == "Capital A/C")
     ).first()
+    pl_acct = session.exec(
+        select(Account).where(Account.user_id == user_id, Account.code == "3903")
+    ).first()
+    _skip_ids = {a.id for a in (capital_acct, pl_acct) if a}
     purchaser_acct = account_setup.sync_party_account(session, user_id, purchaser) if purchaser else None
     purchaser_acct_id = purchaser_acct.id if purchaser_acct else None
 
@@ -371,8 +377,9 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
     total_cost_absorbed = Decimal("0")
     customer_paid_costs = Decimal("0")
     for e in cost_entries:
+        # payee = the credited counterparty line (not the Capital or P&L legs)
         payee_line = next(
-            (ln for ln in e.lines if not capital_acct or ln.account_id != capital_acct.id),
+            (ln for ln in e.lines if ln.account_id not in _skip_ids and Decimal(ln.credit or 0) > 0),
             None,
         )
         if not payee_line:
@@ -870,23 +877,55 @@ async def trade_cost_post(
 
     desc = (description or "").strip() or "Trade cost"
     tag = " [paid-by-customer]" if customer_paid else ""
+    entry_date = _parse_date(cost_date) or date.today()
     try:
         from models import JournalEntryType as _JET
-        PostingEngine.post(
-            session, user_id,
-            entry_date=_parse_date(cost_date) or date.today(),
-            entry_type=_JET.JOURNAL,
-            description=f"{trade.reference} cost: {desc}{tag}",
-            lines=[
-                {"account_id": capital.id, "debit": amt, "credit": 0,
-                 "description": f"Cost absorbed by capital ({desc})"},
-                {"account_id": payee.id, "debit": 0, "credit": amt,
-                 "description": desc + (" (paid by customer)" if customer_paid else ""),
-                 "party_id": trade.purchaser_id if customer_paid else None,
-                 "trade_line_id": None},
-            ],
-            trade_id=trade.id,
-        )
+        if customer_paid:
+            # Customer bore this cost — it reduces their receivable (unchanged
+            # behaviour; not our P&L expense since we didn't incur it).
+            PostingEngine.post(
+                session, user_id, entry_date=entry_date, entry_type=_JET.JOURNAL,
+                description=f"{trade.reference} cost: {desc}{tag}",
+                lines=[
+                    {"account_id": capital.id, "debit": amt, "credit": 0,
+                     "description": f"Cost absorbed by capital ({desc})"},
+                    {"account_id": payee.id, "debit": 0, "credit": amt,
+                     "description": desc + " (paid by customer)",
+                     "party_id": trade.purchaser_id},
+                ],
+                trade_id=trade.id,
+            )
+        else:
+            # OUR cost — route it through the trade's P&L (3903) so it lands in
+            # THIS trade's profit AND net income, then close to Capital (mirrors
+            # how bilty is handled). No longer silently absorbed into Capital.
+            pl = session.exec(select(Account).where(
+                Account.user_id == user_id, Account.code == "3903")).first()
+            if not pl:
+                raise HTTPException(400, "Profit/Loss A/C (3903) not found")
+            PostingEngine.post(
+                session, user_id, entry_date=entry_date, entry_type=_JET.EXPENSE,
+                description=f"{trade.reference} cost: {desc}",
+                lines=[
+                    {"account_id": pl.id, "debit": amt, "credit": 0,
+                     "description": f"Trade cost — {desc} ({trade.reference})",
+                     "trade_line_id": None},
+                    {"account_id": payee.id, "debit": 0, "credit": amt,
+                     "description": desc, "party_id": None},
+                ],
+                trade_id=trade.id,
+            )
+            PostingEngine.post(
+                session, user_id, entry_date=entry_date, entry_type=_JET.JOURNAL,
+                description=f"{trade.reference} cost close: {desc}",
+                lines=[
+                    {"account_id": capital.id, "debit": amt, "credit": 0,
+                     "description": f"Close trade cost to Capital — {desc} ({trade.reference})"},
+                    {"account_id": pl.id, "debit": 0, "credit": amt,
+                     "description": f"Close trade cost — {desc} ({trade.reference})"},
+                ],
+                trade_id=trade.id,
+            )
     except PostingError as e:
         raise HTTPException(400, str(e))
     return _close_modal()
@@ -1131,7 +1170,8 @@ async def trade_invoice_pdf(trade_id: int, session: Session = Depends(get_sessio
 
 @router.post("/trades/{trade_id}/costs/{entry_id}/delete")
 async def trade_cost_delete(trade_id: int, entry_id: int, session: Session = Depends(get_session)):
-    """Reverse a previously-posted trade cost journal entry."""
+    """Reverse a previously-posted trade cost journal entry (and, for a self-paid
+    cost routed through the P&L, its matching close-to-Capital entry)."""
     from models import JournalEntry
     from services.posting import PostingEngine, PostingError
     user_id = DEFAULT_USER_ID
@@ -1140,6 +1180,21 @@ async def trade_cost_delete(trade_id: int, entry_id: int, session: Session = Dep
         raise HTTPException(404, "Cost entry not found")
     try:
         PostingEngine.reverse(session, user_id, entry_id, reason="Trade cost deleted")
+        # Self-paid costs post a paired "... cost close: ..." JV — reverse it too
+        # so the P&L clearing account and Capital stay balanced.
+        desc = entry.description or ""
+        close_desc = desc.replace(" cost: ", " cost close: ", 1)
+        if close_desc != desc:
+            close = session.exec(
+                select(JournalEntry).where(
+                    JournalEntry.user_id == user_id,
+                    JournalEntry.trade_id == trade_id,
+                    JournalEntry.description == close_desc,
+                    JournalEntry.is_reversed == False,  # noqa: E712
+                )
+            ).first()
+            if close:
+                PostingEngine.reverse(session, user_id, close.id, reason="Trade cost deleted")
     except PostingError as e:
         raise HTTPException(400, str(e))
     return Response(status_code=204, headers={"HX-Refresh": "true"})
@@ -1668,6 +1723,74 @@ async def voucher_create(request: Request, session: Session = Depends(get_sessio
     try:
         VoucherService.post_voucher(session, user_id, entry_date=entry_date,
                                      entry_type=entry_type, description=description, lines=lines)
+    except PostingError as e:
+        raise HTTPException(400, str(e))
+    return _close_modal()
+
+
+@router.get("/vouchers/expense-quick", response_class=HTMLResponse)
+async def expense_quick_modal(request: Request, session: Session = Depends(get_session)):
+    """Dead-simple business-expense entry: description + amount + paid-from. The
+    account routing (P&L → Capital) is handled automatically on post."""
+    from models import Account, AccountSubClass
+    user_id = DEFAULT_USER_ID
+    account_setup.seed_chart_of_accounts(session, user_id)
+    sub = session.exec(select(AccountSubClass).where(
+        AccountSubClass.user_id == user_id, AccountSubClass.code == "1100")).first()
+    cash = list(session.exec(select(Account).where(
+        Account.subclass_id == sub.id, Account.is_active == True)).all()) if sub else []  # noqa: E712
+    ceo = next((a for a in session.exec(select(Account).where(Account.user_id == user_id)).all()
+                if (a.name or "").strip().lower() in ("ibrahim (ceo)", "ceo", "funding")), None)
+    if ceo and ceo.id not in {a.id for a in cash}:
+        cash.append(ceo)
+    return templates.TemplateResponse(
+        "trade_expense_quick_modal.html",
+        _ctx(request, cash_accounts=cash, today=date.today(),
+             default_id=(ceo.id if ceo else (cash[0].id if cash else None))),
+    )
+
+
+@router.post("/vouchers/expense-quick")
+async def expense_quick_post(request: Request, session: Session = Depends(get_session)):
+    """Post a business expense with automatic P&L routing + close-to-Capital, so
+    it correctly hits net income / ROE AND reduces Capital — with no account
+    picking or manual closing. Mirrors the trade-cost / bilty pattern."""
+    from models import Account, JournalEntryType as _JET
+    from services.posting import PostingEngine, PostingError
+    user_id = DEFAULT_USER_ID
+    form = await request.form()
+    desc = (form.get("description") or "").strip() or "Business expense"
+    amt = _parse_decimal(form.get("amount"), "0")
+    paid_from_id = form.get("paid_from")
+    entry_date = _parse_date(form.get("entry_date")) or date.today()
+    if amt <= 0:
+        raise HTTPException(400, "Amount must be greater than zero")
+    if not paid_from_id:
+        raise HTTPException(400, "Choose where it was paid from")
+    pl = session.exec(select(Account).where(Account.user_id == user_id, Account.code == "3903")).first()
+    capital = session.exec(select(Account).where(Account.user_id == user_id, Account.name == "Capital A/C")).first()
+    paid = session.get(Account, int(paid_from_id))
+    if not (pl and capital and paid and paid.user_id == user_id):
+        raise HTTPException(400, "Required accounts not found")
+    try:
+        # 1) recognise the expense in the P&L (hits net income / ROE), paid from cash
+        PostingEngine.post(
+            session, user_id, entry_date=entry_date, entry_type=_JET.EXPENSE,
+            description=f"Business expense: {desc}",
+            lines=[
+                {"account_id": pl.id, "debit": amt, "credit": 0, "description": f"Business expense — {desc}"},
+                {"account_id": paid.id, "debit": 0, "credit": amt, "description": desc},
+            ],
+        )
+        # 2) close it into Capital (reduces retained equity), nets the P&L to zero
+        PostingEngine.post(
+            session, user_id, entry_date=entry_date, entry_type=_JET.JOURNAL,
+            description=f"Business expense close: {desc}",
+            lines=[
+                {"account_id": capital.id, "debit": amt, "credit": 0, "description": f"Close business expense to Capital — {desc}"},
+                {"account_id": pl.id, "debit": 0, "credit": amt, "description": f"Close business expense — {desc}"},
+            ],
+        )
     except PostingError as e:
         raise HTTPException(400, str(e))
     return _close_modal()

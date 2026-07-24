@@ -3,6 +3,7 @@
 Reads Table 1 on Sheet 1 via AppleScript and upserts ProjectionLine rows by
 product name. Column mapping (Table 1):
     [1] Item name        -> item_name
+    [2] Old buy rate     -> party_old_rate (party's previous rate, reference only)
     [3] New buy rate     -> sale_rate      (rate the customer buys at)
     [4] New purchase rate-> purchase_rate  (rate we pay the manufacturer)
     [6] Quantity         -> quantity
@@ -41,11 +42,12 @@ tell application "Numbers"
           set qy to my cellval(r, 6)
           set pu to my cellval(r, 4)
           set sa to my cellval(r, 3)
+          set od to my cellval(r, 2)
           set dy to my cellval(r, 9)
           set bl to my cellval(r, 10)
           set inc to value of cell 12 of row r
           if inc is missing value then set inc to false
-          set out to out & nm & tab & qy & tab & pu & tab & sa & tab & dy & tab & bl & tab & (inc as string) & linefeed
+          set out to out & nm & tab & qy & tab & pu & tab & sa & tab & dy & tab & bl & tab & (inc as string) & tab & od & linefeed
         end if
       end repeat
       return out
@@ -101,6 +103,7 @@ def import_fleure_boxes(session: Session, user_id: int) -> int:
         if len(parts) < 7:
             continue
         name, qty, pur, sale, dye, bilty, inc = (p.strip() for p in parts[:7])
+        old_rate = parts[7].strip() if len(parts) > 7 else "0"
         if not name:
             continue
         key = name.lower()
@@ -114,6 +117,7 @@ def import_fleure_boxes(session: Session, user_id: int) -> int:
         ln.item_name = name
         ln.quantity = _dec(qty)
         ln.purchase_rate = _dec(pur)
+        ln.party_old_rate = _dec(old_rate)
         ln.sale_rate = _dec(sale)
         ln.dye_block_cost = _dec(dye)
         ln.bilty = _dec(bilty)

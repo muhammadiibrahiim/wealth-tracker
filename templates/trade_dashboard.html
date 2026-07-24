@@ -8,12 +8,17 @@
   <div class="flex items-start justify-between flex-wrap gap-4">
     <div>
       <h1 class="page-title">Trade Dashboard</h1>
-      <p class="page-subtitle">Real-time view of your trading operations.</p>
+      <p class="page-subtitle">Showing <b>{{ month_label }}</b>{% if is_current_month %} <span class="text-gray-400">(to date)</span>{% endif %} — pick a month to scope the figures.</p>
     </div>
-    <div class="flex gap-2 flex-wrap">
+    <div class="flex gap-2 flex-wrap items-center">
+      <form method="get" action="/trade" class="flex items-center gap-2">
+        <label class="text-xs text-gray-500">Month</label>
+        <input type="month" name="month" value="{{ selected_month }}" max="{{ today.strftime('%Y-%m') }}"
+               onchange="this.form.submit()" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:6px;">
+      </form>
       <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=receipt"   hx-target="#modal-container">Receipt</button>
       <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=payment"   hx-target="#modal-container">Payment</button>
-      <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=expense"   hx-target="#modal-container">Expense</button>
+      <button class="btn-secondary text-xs" hx-get="/trade/vouchers/expense-quick"   hx-target="#modal-container">Expense</button>
       <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=owner_in"  hx-target="#modal-container">Owner In</button>
       <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=owner_out" hx-target="#modal-container">Owner Out</button>
       <button class="btn-secondary text-xs" hx-get="/trade/vouchers/new?preset=contra"    hx-target="#modal-container">Contra</button>
@@ -42,11 +47,11 @@
         <div class="stat-value">{{ kpis.open_trades }}</div>
       </div>
       <div class="stat-card stat-card-sm">
-        <div class="stat-label">This Month Sales</div>
+        <div class="stat-label">{{ month_short }} Sales</div>
         <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(kpis.month_sales) }}</div>
       </div>
       <div class="stat-card stat-card-sm">
-        <div class="stat-label">This Month Profit</div>
+        <div class="stat-label">{{ month_short }} Profit</div>
         <div class="stat-value" style="color: {% if kpis.month_profit >= 0 %}#1f6b4e{% else %}#a52e26{% endif %};">
           <span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(kpis.month_profit|abs) }}
         </div>
@@ -69,24 +74,38 @@
           <span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(kpis.outstanding_payable) }}
         </div>
       </div>
+      <a href="/trade/reports/general-ledger?account_id={{ kpis.capital_account_id }}" class="stat-card stat-card-sm" style="border-color:#4f46e5; text-decoration:none;" title="Open the Capital A/C ledger">
+        <div class="stat-label">Capital A/C Balance</div>
+        <div class="stat-value" style="color:{% if kpis.capital_balance >= 0 %}#4338ca{% else %}#a52e26{% endif %};">
+          <span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(kpis.capital_balance) }}
+        </div>
+        <div class="stat-foot text-gray-500">closing balance</div>
+      </a>
+      <a href="/trade/reports/general-ledger?account_id={{ kpis.capital_account_id }}" class="stat-card stat-card-sm" style="border-color:#16a34a; text-decoration:none;" title="What your Capital A/C actually grew by in {{ month_label }} = {{ currency }} {{ '{:,.0f}'.format(cap.capital_growth) }}. Of this, {{ currency }} {{ '{:,.0f}'.format(cap.profit_booked) }} is PROFIT booked from delivered trades (net income, after bilty){% if cap.capital_other != 0 %}, and {{ currency }} {{ '{:,.0f}'.format(cap.capital_other) }} is NON-profit movement (owner draws, settlements or manual adjustments that hit Capital directly){% endif %}. This differs from the '{{ month_short }} Profit' tile above, which is pipeline profit on trades ORDERED this month (includes open orders, before bilty).">
+        <div class="stat-label">Capital Growth · {{ month_short }}</div>
+        <div class="stat-value" style="color:{% if cap.capital_growth >= 0 %}#15803d{% else %}#a52e26{% endif %};">
+          <span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(cap.capital_growth) }}
+        </div>
+        <div class="stat-foot text-gray-500">profit {{ currency }} {{ '{:,.0f}'.format(cap.profit_booked) }}{% if cap.capital_other != 0 %} · adj {{ currency }} {{ '{:,.0f}'.format(cap.capital_other) }}{% endif %}</div>
+      </a>
     </div>
   </div>
 
   <!-- Business KPI strip -->
   <div>
     <div class="stat-label mb-3">Business Intelligence</div>
-    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-      <a href="/trade/reports/working-capital" class="stat-card stat-card-sm hover:shadow-md transition" title="Days Sales Outstanding — how long, on average, customers take to pay">
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+      <a href="/trade/reports/working-capital" class="stat-card stat-card-sm hover:shadow-md transition" title="Days Sales Outstanding — the amount-weighted AGE of your currently-unpaid customer receivables (how long that money has been sitting on the ledger, right now). Reflects real delays, not the nominal terms on the trade.">
         <div class="stat-label">DSO · Collect Days</div>
         <div class="stat-value">{% if wc.dso is none %}<span class="text-gray-400">—</span>{% else %}{{ wc.dso }}<span class="text-base text-gray-500 ml-1">d</span>{% endif %}</div>
         {% if wc.limited_history %}<div class="text-xs text-gray-400 mt-1">Need more sales history</div>{% endif %}
       </a>
-      <a href="/trade/reports/working-capital" class="stat-card stat-card-sm hover:shadow-md transition" title="Days Payable Outstanding — how long, on average, we take to pay vendors">
+      <a href="/trade/reports/working-capital" class="stat-card stat-card-sm hover:shadow-md transition" title="Days Payable Outstanding — the amount-weighted AGE of what you currently owe vendors but haven't paid. A low number means you pay vendors fast (advances pull this down); a high number means you're financing on their money.">
         <div class="stat-label">DPO · Pay Days</div>
         <div class="stat-value">{% if wc.dpo is none %}<span class="text-gray-400">—</span>{% else %}{{ wc.dpo }}<span class="text-base text-gray-500 ml-1">d</span>{% endif %}</div>
         {% if wc.limited_history %}<div class="text-xs text-gray-400 mt-1">Need more purchase history</div>{% endif %}
       </a>
-      <a href="/trade/reports/working-capital" class="stat-card stat-card-sm hover:shadow-md transition" title="Cash Conversion Cycle = DSO − DPO. Negative is good — vendors fund our receivables.">
+      <a href="/trade/reports/working-capital" class="stat-card stat-card-sm hover:shadow-md transition" title="Cash Conversion Cycle = DSO − DPO — the net days your own cash funds the gap between paying vendors and collecting from customers. Lower is better; negative means vendors finance you.">
         <div class="stat-label">CCC · Cash Cycle</div>
         <div class="stat-value" {% if wc.ccc is not none %}style="color: {% if wc.ccc <= 0 %}#1f6b4e{% else %}#a52e26{% endif %};"{% endif %}>{% if wc.ccc is none %}<span class="text-gray-400">—</span>{% else %}{{ wc.ccc }}<span class="text-base text-gray-500 ml-1">d</span>{% endif %}</div>
       </a>
@@ -94,9 +113,14 @@
         <div class="stat-label">Capital Deployed</div>
         <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(cap.capital_deployed) }}</div>
       </a>
-      <a href="/trade/reports/working-capital" class="stat-card stat-card-sm hover:shadow-md transition">
-        <div class="stat-label">ROCE (12mo)</div>
+      <a href="/trade/reports/working-capital" class="stat-card stat-card-sm hover:shadow-md transition" title="Return on Capital Employed in {{ month_label }} — the month's net income ÷ capital deployed (cash + receivables − payables).">
+        <div class="stat-label">ROCE · {{ month_short }}</div>
         <div class="stat-value" style="color: {% if cap.roce_pct >= 0 %}#1f6b4e{% else %}#a52e26{% endif %};">{{ cap.roce_pct }}%</div>
+      </a>
+      <a href="/trade/reports/working-capital" class="stat-card stat-card-sm hover:shadow-md transition" style="border-color:#4f46e5;" title="For every {{ currency }} 100 of your OWN money actually working in the business, you earned {{ currency }} {{ '%.2f'|format(cap.roi_pct) }} in {{ month_label }}. 'Your money' = CEO funding + Capital A/C. The base is the TIME-WEIGHTED AVERAGE of that equity across the month ({{ currency }} {{ '{:,.0f}'.format(cap.avg_invested_capital) }}) — the mean of every day's closing balance — NOT the month-end figure ({{ currency }} {{ '{:,.0f}'.format(cap.invested_capital) }}), so a late-month injection doesn't look like it funded the whole month. Earnings = {{ month_label }} net income {{ currency }} {{ '{:,.0f}'.format(cap.trailing_net_income) }} (Sales − Cost of goods − Bilty). Vendor and customer balances are excluded.">
+        <div class="stat-label">Return on Equity · {{ month_short }}</div>
+        <div class="stat-value" style="color: {% if cap.roi_pct >= 0 %}#4338ca{% else %}#a52e26{% endif %};">{{ cap.roi_pct }}%</div>
+        <div class="text-xs text-gray-500 mt-1">{{ currency }} {{ '%.2f'|format(cap.roi_pct) }} / {{ currency }} 100 · avg equity {{ currency }} {{ '{:,.0f}'.format(cap.avg_invested_capital) }}</div>
       </a>
     </div>
   </div>

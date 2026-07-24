@@ -25,6 +25,7 @@
         {% endif %}
         <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/purchase/new" hx-target="#modal-container">+ Record Purchase</button>
         <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/cost/new" hx-target="#modal-container">+ Record Cost</button>
+        <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/edit" hx-target="#modal-container">Edit Details</button>
         {% if customer_outstanding > 0 %}
         <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/payments/new?direction=inbound" hx-target="#modal-container">Record Customer Payment</button>
         {% endif %}
@@ -150,11 +151,12 @@
           <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ln.unit_price) }}</td>
           <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ln.quantity * ln.unit_cost) }}</td>
           <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ln.quantity * ln.unit_price) }}</td>
-          <td class="text-right">
-            {% if _status in ('open', 'delivered') %}
-            <form hx-post="/trade/trades/{{ trade.id }}/lines/{{ ln.id }}/delete" hx-confirm="Delete this line?">
-              <button class="text-red-600 text-xs hover:underline font-medium">Remove</button>
-            </form>
+          <td class="text-right whitespace-nowrap">
+            {% if _status in ('open', 'delivered', 'partially_paid') %}
+            <button type="button" class="text-indigo-600 text-xs hover:underline font-medium mr-3"
+                    hx-get="/trade/trades/{{ trade.id }}/lines/{{ ln.id }}/edit" hx-target="#modal-container">Edit</button>
+            <button type="button" class="text-red-600 text-xs hover:underline font-medium"
+                    hx-post="/trade/trades/{{ trade.id }}/lines/{{ ln.id }}/delete" hx-confirm="Delete this line?">Remove</button>
             {% endif %}
           </td>
         </tr>

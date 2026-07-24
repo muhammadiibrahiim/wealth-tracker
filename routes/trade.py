@@ -2,7 +2,7 @@
 Routes for the Trade module.
 """
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
@@ -66,18 +66,37 @@ def _close_modal() -> Response:
 
 
 @router.get("", response_class=HTMLResponse)
-async def dashboard(request: Request, session: Session = Depends(get_session)):
+async def dashboard(request: Request, month: str = Query(None),
+                    session: Session = Depends(get_session)):
+    import calendar
     user_id = DEFAULT_USER_ID
-    kpis = TradeReportService.dashboard_kpis(session, user_id)
+    today = date.today()
+    # Resolve the selected month (YYYY-MM) → its first day, last day, and the
+    # as-of date (today for the current month, month-end for a past month).
+    sel_start = today.replace(day=1)
+    if month:
+        try:
+            y, m = month.split("-")
+            sel_start = date(int(y), int(m), 1)
+        except (ValueError, TypeError):
+            sel_start = today.replace(day=1)
+    if sel_start > today:                      # no future months
+        sel_start = today.replace(day=1)
+    month_end = date(sel_start.year, sel_start.month,
+                     calendar.monthrange(sel_start.year, sel_start.month)[1])
+    as_of = min(today, month_end)
+
+    kpis = TradeReportService.dashboard_kpis(session, user_id, as_of=as_of)
     recent = TradeService.list(session, user_id)[:8]
     parties = PartyService.list(session, user_id)
     party_map = {p.id: p for p in parties}
     items = ItemService.list(session, user_id, active_only=True)
     accounts = CashAccountService.list(session, user_id, active_only=True)
     from services.analytics import working_capital_metrics, capital_utilization, time_based_performance
-    wc = working_capital_metrics(session, user_id)
-    cap = capital_utilization(session, user_id)
-    perf = time_based_performance(session, user_id)
+    wc = working_capital_metrics(session, user_id, as_of=as_of)
+    cap = capital_utilization(session, user_id, as_of=as_of,
+                              ni_from=sel_start, ni_to=as_of)
+    perf = time_based_performance(session, user_id, as_of=as_of)
     return templates.TemplateResponse(
         "trade_dashboard.html",
         _ctx(
@@ -92,6 +111,10 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
             wc=wc,
             cap=cap,
             perf=perf,
+            selected_month=sel_start.strftime("%Y-%m"),
+            month_label=sel_start.strftime("%B %Y"),
+            month_short=sel_start.strftime("%b %Y"),
+            is_current_month=(sel_start == today.replace(day=1)),
         ),
     )
 
@@ -305,6 +328,14 @@ async def trade_create(request: Request, session: Session = Depends(get_session)
         lines=lines,
         **split,
     )
+    # If this trade was created from the Projection planner, those planned orders
+    # are now real — remove them so they stop counting as "projected investment".
+    if form.get("from_projection"):
+        from models import ProjectionLine
+        for pl in session.exec(select(ProjectionLine).where(
+                ProjectionLine.user_id == user_id, ProjectionLine.include == True)).all():  # noqa: E712
+            session.delete(pl)
+        session.commit()
     return Response(status_code=204, headers={"HX-Redirect": f"/trade/trades/{trade.id}"})
 
 
@@ -531,6 +562,44 @@ async def trade_deliver_modal(request: Request, trade_id: int, session: Session 
         "trade_deliver_modal.html",
         _ctx(request, trade=trade, today=date.today(), line_defaults=line_defaults),
     )
+
+
+@router.get("/trades/{trade_id}/edit", response_class=HTMLResponse)
+async def trade_edit_modal(trade_id: int, request: Request,
+                           session: Session = Depends(get_session)):
+    trade = TradeService.get(session, DEFAULT_USER_ID, trade_id)
+    if not trade:
+        raise HTTPException(404, "Trade not found")
+    return templates.TemplateResponse(
+        "trade_edit_modal.html", _ctx(request, trade=trade),
+    )
+
+
+@router.post("/trades/{trade_id}/edit")
+async def trade_edit_save(trade_id: int, request: Request,
+                          session: Session = Depends(get_session)):
+    """Edit trade header: dates, terms days and the payment splits. These don't
+    touch the ledger (they affect due dates, forecast and docs only)."""
+    trade = TradeService.get(session, DEFAULT_USER_ID, trade_id)
+    if not trade:
+        raise HTTPException(404, "Trade not found")
+    form = await request.form()
+    td = _parse_date(form.get("trade_date"))
+    if td:
+        trade.trade_date = td
+    trade.customer_terms_days = int(_parse_decimal(form.get("customer_terms_days"), str(trade.customer_terms_days)))
+    trade.vendor_terms_days = int(_parse_decimal(form.get("vendor_terms_days"), str(trade.vendor_terms_days)))
+    for f in ("cust_advance_pct", "cust_delivery_pct", "cust_credit_pct",
+              "vend_advance_pct", "vend_delivery_pct", "vend_credit_pct"):
+        setattr(trade, f, _parse_decimal(form.get(f), str(getattr(trade, f))))
+    # refresh due dates from the (possibly new) terms if delivered
+    if trade.delivered_at:
+        trade.customer_due_date = trade.delivered_at + timedelta(days=trade.customer_terms_days)
+        trade.vendor_due_date = trade.trade_date + timedelta(days=trade.vendor_terms_days)
+    trade.updated_at = datetime.utcnow()
+    session.add(trade)
+    session.commit()
+    return _close_modal()
 
 
 @router.post("/trades/{trade_id}/cancel")
@@ -1082,6 +1151,59 @@ async def trade_line_delete(trade_id: int, line_id: int, session: Session = Depe
     return _close_modal()
 
 
+@router.get("/trades/{trade_id}/lines/{line_id}/edit", response_class=HTMLResponse)
+async def trade_line_edit_modal(trade_id: int, line_id: int, request: Request,
+                                session: Session = Depends(get_session)):
+    from models import TradeLine
+    line = session.get(TradeLine, line_id)
+    if not line or line.trade_id != trade_id:
+        raise HTTPException(404, "Line not found")
+    trade = TradeService.get(session, DEFAULT_USER_ID, trade_id)
+    return templates.TemplateResponse(
+        "trade_line_edit_modal.html", _ctx(request, trade=trade, line=line),
+    )
+
+
+@router.post("/trades/{trade_id}/lines/{line_id}")
+async def trade_line_update(trade_id: int, line_id: int, request: Request,
+                            session: Session = Depends(get_session)):
+    from models import TradeLine, TradeLineSpec
+    line = session.get(TradeLine, line_id)
+    if not line or line.trade_id != trade_id:
+        raise HTTPException(404, "Line not found")
+    trade = TradeService.get(session, DEFAULT_USER_ID, trade_id)
+    form = await request.form()
+    name = (form.get("item_name") or "").strip()
+    if name:
+        line.item_name = name
+    new_qty = _parse_decimal(form.get("quantity"), str(line.quantity))
+    # editing an open line is a correction — keep ordered == final unless goods
+    # have already been received against it
+    had_receipts = bool(line.receipts)
+    line.quantity = new_qty
+    if not had_receipts:
+        line.ordered_quantity = new_qty
+    line.unit = (form.get("unit") or line.unit).strip() or "pcs"
+    line.unit_cost = _parse_decimal(form.get("unit_cost"), str(line.unit_cost))
+    line.unit_price = _parse_decimal(form.get("unit_price"), str(line.unit_price))
+    line.line_notes = (form.get("line_notes") or "").strip() or None
+    # replace specs with submitted label/value pairs
+    for sp in list(line.specs):
+        session.delete(sp)
+    session.flush()
+    labels = form.getlist("spec_label")
+    values = form.getlist("spec_value")
+    for i, (lab, val) in enumerate(zip(labels, values)):
+        lab, val = (lab or "").strip(), (val or "").strip()
+        if lab or val:
+            session.add(TradeLineSpec(line_id=line.id, label=lab, value=val, sort_order=i))
+    session.add(line)
+    session.commit()
+    # recompute totals + re-post the ledger so COGS/sale reflect the edit
+    TradeService._repost_cost(session, trade)
+    return _close_modal()
+
+
 # ───────── payments ─────────────────────────────────────────────
 
 
@@ -1100,14 +1222,24 @@ async def payment_new_modal(
     # Every other ledger account is also selectable — a payment can land on any
     # account (CEO's ledger, a party ledger, etc.), grouped for the dropdown.
     cash_linked_ids = {a.account_id for a in accounts if a.account_id}
+    # Exclude the trade's own counterparty account so the user can't pick
+    # (e.g.) Fleure as the "paid into" destination for a Fleure receipt —
+    # a same-account DR/CR entry that nets to zero and hides the money.
+    excluded_ids = set(cash_linked_ids)
+    if direction == "outbound":
+        counterparty = PartyService.get(session, user_id, trade.vendor_id) if trade.vendor_id else None
+    else:
+        counterparty = PartyService.get(session, user_id, trade.purchaser_id) if trade.purchaser_id else None
+    if counterparty and counterparty.account_id:
+        excluded_ids.add(counterparty.account_id)
     gl_groups = []
     for cls_block in account_setup.list_accounts_grouped(session, user_id):
         for sub_block in cls_block["subclasses"]:
             sub = sub_block["subclass"]
-            accts = [a for a in sub_block["accounts"] if a.is_active and a.id not in cash_linked_ids]
+            accts = [a for a in sub_block["accounts"] if a.is_active and a.id not in excluded_ids]
             if accts:
                 gl_groups.append({"label": f"{sub.code} · {sub.name}", "accounts": accts})
-        loose = [a for a in cls_block["accounts_without_subclass"] if a.is_active and a.id not in cash_linked_ids]
+        loose = [a for a in cls_block["accounts_without_subclass"] if a.is_active and a.id not in excluded_ids]
         if loose:
             gl_groups.append({"label": cls_block["class"].name, "accounts": loose})
     dirn = PaymentDirection.OUTBOUND if direction == "outbound" else PaymentDirection.INBOUND
@@ -1154,19 +1286,22 @@ async def payment_create(
     if kind not in ("cash", "gl"):
         raise HTTPException(400, "Invalid account selection")
     dirn = PaymentDirection.OUTBOUND if direction == "outbound" else PaymentDirection.INBOUND
-    p = PaymentService.record(
-        session,
-        user_id,
-        trade_id=trade_id,
-        cash_account_id=ref_id if kind == "cash" else None,
-        gl_account_id=ref_id if kind == "gl" else None,
-        direction=dirn,
-        amount=amt,
-        paid_on=_parse_date(paid_on),
-        method=(method or "").strip() or None,
-        reference=(reference or "").strip() or None,
-        notes=(notes or "").strip() or None,
-    )
+    try:
+        p = PaymentService.record(
+            session,
+            user_id,
+            trade_id=trade_id,
+            cash_account_id=ref_id if kind == "cash" else None,
+            gl_account_id=ref_id if kind == "gl" else None,
+            direction=dirn,
+            amount=amt,
+            paid_on=_parse_date(paid_on),
+            method=(method or "").strip() or None,
+            reference=(reference or "").strip() or None,
+            notes=(notes or "").strip() or None,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     if p is None:
         raise HTTPException(400, "Account not found")
     return _close_modal()
@@ -2004,10 +2139,16 @@ async def reports_cash_flow(
 async def reports_cashflow_management(
     request: Request,
     horizon: int = Query(120),
+    inject: float = Query(0),
+    inject_on: str = Query(None),
     session: Session = Depends(get_session),
 ):
     from services.analytics import cash_flow_management
-    r = cash_flow_management(session, DEFAULT_USER_ID, horizon_days=max(30, min(365, horizon)))
+    r = cash_flow_management(
+        session, DEFAULT_USER_ID, horizon_days=max(30, min(365, horizon)),
+        inject_amount=(inject if inject and inject > 0 else None),
+        inject_on=_parse_date(inject_on),
+    )
     return templates.TemplateResponse(
         "trade_report_cashflow_management.html", _ctx(request, report=r),
     )
@@ -2125,8 +2266,10 @@ async def projection_save(request: Request, session: Session = Depends(get_sessi
         raw_id = form.get(f"pline_{i}_id")
         data = dict(
             item_name=name,
+            group_name=(form.get(f"pline_{i}_group") or "Dabbi").strip() or "Dabbi",
             quantity=_parse_decimal(form.get(f"pline_{i}_quantity"), "0"),
             purchase_rate=_parse_decimal(form.get(f"pline_{i}_purchase_rate"), "0"),
+            party_old_rate=_parse_decimal(form.get(f"pline_{i}_party_old_rate"), "0"),
             sale_rate=_parse_decimal(form.get(f"pline_{i}_sale_rate"), "0"),
             dye_block_cost=_parse_decimal(form.get(f"pline_{i}_dye_block_cost"), "0"),
             bilty=_parse_decimal(form.get(f"pline_{i}_bilty"), "0"),
@@ -2138,6 +2281,7 @@ async def projection_save(request: Request, session: Session = Depends(get_sessi
             pct_credit=_parse_decimal(form.get(f"pline_{i}_pct_credit"), "0"),
             credit_days=int(_parse_decimal(form.get(f"pline_{i}_credit_days"), "30")),
             include=bool(form.get(f"pline_{i}_include")),
+            dye_active=bool(form.get(f"pline_{i}_dye_active")),
             sort_order=i,
         )
         if raw_id and raw_id.isdigit():

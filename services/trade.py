@@ -340,6 +340,11 @@ class TradeService:
         session.add(trade)
         session.commit()
         session.refresh(trade)
+        # Recognise the vendor advance we owe from the moment the trade opens
+        # (cost-pending lines accrue nothing until their buy rate is filled in).
+        TradeService._post_advance_accrual(session, trade)
+        session.commit()
+        session.refresh(trade)
         return trade
 
     @staticmethod
@@ -389,6 +394,9 @@ class TradeService:
         session.add(trade)
         session.commit()
         session.refresh(trade)
+        TradeService._post_advance_accrual(session, trade)
+        session.commit()
+        session.refresh(trade)
         return trade
 
     @staticmethod
@@ -405,6 +413,9 @@ class TradeService:
         TradeService._recompute_totals(trade)
         TradeService._refresh_status(trade, session)
         session.add(trade)
+        session.commit()
+        session.refresh(trade)
+        TradeService._post_advance_accrual(session, trade)
         session.commit()
         session.refresh(trade)
         return trade
@@ -564,6 +575,138 @@ class TradeService:
                 description=f"Profit closing — {trade.reference}",
                 lines=closing_lines, trade_id=trade.id,
             )
+
+    # ── Vendor advance accrual (single-source-of-truth payables) ────────────
+    # The moment a trade opens (or its cost becomes known), recognise the
+    # advance we owe the vendor so the vendor A/P ledger reflects it — WITHOUT
+    # touching P&L / Capital:
+    #     DR Advance to Vendors (asset)  /  CR Vendor A/P     (= advance% × cost)
+    # On each delivery the purchase posting CONSUMES this advance (credits the
+    # asset) instead of piling a second payable on top, so the vendor never
+    # double-counts. The accrual is re-derived from the trade's CURRENT
+    # total_cost whenever the cost changes (Record Purchase, line edits), so a
+    # cost-pending trade accrues nothing until its buy rate is filled in.
+    ADVANCE_TAG = "[vendor-advance]"
+
+    @staticmethod
+    def _advance_to_vendors_acct(session: Session, user_id: int):
+        acct = session.exec(select(Account).where(
+            Account.user_id == user_id, Account.name == "Advance to Vendors")).first()
+        if acct:
+            return acct
+        from services import account_setup
+        try:
+            return account_setup.create_account(
+                session, user_id, name="Advance to Vendors", subclass_code="1900",
+                is_system=True,
+                description="Advances committed to vendors (payable recognised at trade open)")
+        except Exception:
+            return None
+
+    @staticmethod
+    def _vendor_advance_amount(trade: Trade) -> Decimal:
+        """The advance we owe the vendor = normalised advance% of total_cost."""
+        adv = Decimal(trade.vend_advance_pct or 0)
+        dely = Decimal(trade.vend_delivery_pct or 0)
+        cred = Decimal(trade.vend_credit_pct or 0)
+        tot = adv + dely + cred
+        if tot <= 0 or Decimal(trade.total_cost) <= 0:
+            return ZERO
+        return (Decimal(trade.total_cost) * adv / tot).quantize(Decimal("0.01"))
+
+    @staticmethod
+    def _advance_asset_balance(session: Session, trade: Trade, acct_id: int) -> Decimal:
+        """Outstanding Advance-to-Vendors asset for this trade = accrual debits −
+        consumption credits, read from the ledger."""
+        rows = session.exec(
+            select(JournalLine).join(
+                JournalEntry, JournalLine.journal_entry_id == JournalEntry.id
+            ).where(
+                JournalEntry.trade_id == trade.id,
+                JournalEntry.is_reversed == False,  # noqa: E712
+                JournalLine.account_id == acct_id,
+            )
+        ).all()
+        return sum((Decimal(ln.debit) - Decimal(ln.credit) for ln in rows), ZERO)
+
+    @staticmethod
+    def _purge_advance_accrual(session: Session, trade: Trade) -> None:
+        """Hard-delete the vendor-advance accrual entry (+ any reversals) so
+        re-deriving the advance leaves no correction clutter."""
+        entries = list(session.exec(
+            select(JournalEntry).where(
+                JournalEntry.user_id == trade.user_id,
+                JournalEntry.trade_id == trade.id,
+                JournalEntry.description.contains(TradeService.ADVANCE_TAG),
+            )
+        ).all())
+        if not entries:
+            return
+        refs = {e.reference for e in entries}
+        je_ids = {e.id for e in entries}
+        rev_chain = list(session.exec(
+            select(JournalEntry).where(
+                JournalEntry.user_id == trade.user_id,
+                JournalEntry.entry_type == JournalEntryType.REVERSAL,
+            )
+        ).all())
+        for r in rev_chain:
+            if r.description and any(r.description.startswith(f"REVERSAL of {ref}:") for ref in refs):
+                je_ids.add(r.id)
+        for je_id in je_ids:
+            session.exec(JournalLine.__table__.delete().where(
+                JournalLine.journal_entry_id == je_id))
+            e = session.get(JournalEntry, je_id)
+            if e:
+                session.delete(e)
+        session.flush()
+
+    @staticmethod
+    def _post_advance_accrual(session: Session, trade: Trade) -> None:
+        """(Re)post the vendor-advance accrual so it matches the trade's current
+        advance amount. Idempotent: if it already matches, no-op; if the amount
+        changed (or dropped to 0), purge and repost. Posts as a JOURNAL entry so
+        it is never confused with a delivery PURCHASE by the event-posting
+        idempotency/legacy checks."""
+        from services.posting import PostingEngine
+        from services import account_setup
+        if trade.status == TradeStatus.CANCELLED or not trade.vendor_id:
+            return
+        target = TradeService._vendor_advance_amount(trade)
+        existing = session.exec(
+            select(JournalEntry).where(
+                JournalEntry.user_id == trade.user_id,
+                JournalEntry.trade_id == trade.id,
+                JournalEntry.is_reversed == False,  # noqa: E712
+                JournalEntry.description.contains(TradeService.ADVANCE_TAG),
+            )
+        ).first()
+        current = sum((Decimal(ln.debit) for ln in existing.lines), ZERO) if existing else ZERO
+        if existing and abs(current - target) <= Decimal("0.005"):
+            return
+        if existing:
+            TradeService._purge_advance_accrual(session, trade)
+        if target <= Decimal("0.005"):
+            return
+        vendor = session.get(Party, trade.vendor_id)
+        adv_acct = TradeService._advance_to_vendors_acct(session, trade.user_id)
+        vendor_acct = account_setup.sync_party_account(session, trade.user_id, vendor)
+        if not adv_acct or not vendor_acct:
+            return
+        PostingEngine.post(
+            session, trade.user_id, entry_date=trade.trade_date,
+            entry_type=JournalEntryType.JOURNAL,
+            description=f"Vendor advance accrual — {vendor.name} ({trade.reference}) {TradeService.ADVANCE_TAG}",
+            lines=[
+                {"account_id": adv_acct.id, "debit": target, "credit": 0,
+                 "description": f"Advance committed to {vendor.name} ({trade.reference})",
+                 "party_id": vendor.id},
+                {"account_id": vendor_acct.id, "debit": 0, "credit": target,
+                 "description": f"Advance payable to {vendor.name} ({trade.reference})",
+                 "party_id": vendor.id},
+            ],
+            trade_id=trade.id,
+        )
 
     @staticmethod
     def payment_schedule(trade: Trade, side: str, total=None, delivery_date=None) -> list:
@@ -783,8 +926,16 @@ class TradeService:
                 lines=sale_lines, trade_id=trade.id,
             )
 
-        # PURCHASE entry: DR P&L / CR Vendor A/P
+        # PURCHASE entry: DR P&L / CR Vendor A/P — but first CONSUME any vendor
+        # advance already accrued for this trade (credit the advance asset
+        # instead of raising a second payable), so the vendor never double-books.
         if event_cost > 0:
+            adv_acct = TradeService._advance_to_vendors_acct(session, trade.user_id)
+            adv_avail = (TradeService._advance_asset_balance(session, trade, adv_acct.id)
+                         if adv_acct else ZERO)
+            consume = event_cost if event_cost < adv_avail else adv_avail
+            if consume < 0:
+                consume = ZERO
             cogs_lines = []
             for ln, q in line_objs:
                 cost = q * Decimal(ln.unit_cost)
@@ -795,11 +946,19 @@ class TradeService:
                     "description": f"Purchase of {customer.name} {ln.item_name} {float(q):g} {ln.unit} @ {Decimal(ln.unit_cost):.2f}",
                     "item_id": ln.item_id, "party_id": vendor.id, "trade_line_id": ln.id,
                 })
-            cogs_lines.append({
-                "account_id": vendor_acct.id, "debit": 0, "credit": event_cost,
-                "description": f"Purchase of {customer.name} {_summary('unit_cost')}",
-                "party_id": vendor.id,
-            })
+            if consume > 0:
+                cogs_lines.append({
+                    "account_id": adv_acct.id, "debit": 0, "credit": consume,
+                    "description": f"Advance applied — {vendor.name} ({trade.reference}{event_tag})",
+                    "party_id": vendor.id,
+                })
+            vendor_credit = event_cost - consume
+            if vendor_credit > 0:
+                cogs_lines.append({
+                    "account_id": vendor_acct.id, "debit": 0, "credit": vendor_credit,
+                    "description": f"Purchase of {customer.name} {_summary('unit_cost')}",
+                    "party_id": vendor.id,
+                })
             PostingEngine.post(
                 session, trade.user_id, entry_date=event_date,
                 entry_type=JournalEntryType.PURCHASE,
@@ -958,6 +1117,7 @@ class TradeService:
         # cleanly (e.g. final qty was edited). Only when there is a residual to
         # re-post — otherwise a receipt event on the same date would get
         # reversed and never replaced, silently dropping the sale from the books.
+        TradeService._post_advance_accrual(session, trade)
         if residual:
             TradeService._purge_event_journals(session, trade, d)
             TradeService._post_event_journals(session, trade, d, residual)
@@ -1063,6 +1223,12 @@ class TradeService:
         deliv = trade.delivered_at
         receipt_dates = sorted({r.received_on for ln in trade.lines
                                 for r in (ln.receipts or [])})
+        # Purge ALL delivery events up front, then re-derive the vendor-advance
+        # accrual, so each event's advance consumption re-allocates cleanly (in
+        # date order) against a fresh advance asset.
+        for _d in (set(receipt_dates) | ({deliv} if deliv else set())):
+            TradeService._purge_event_journals(session, trade, _d)
+        TradeService._post_advance_accrual(session, trade)
         for d in receipt_dates:
             if deliv and d == deliv:
                 continue  # delivered_at handled as the residual below
@@ -1463,6 +1629,25 @@ class PaymentService:
                 return None
         else:
             return None
+
+        # Safety net: never let a payment be booked where the source account
+        # equals the trade's own counterparty. That produces a same-account
+        # DR/CR journal (nets to zero, hides the money). This mirrors the
+        # dropdown-exclusion in payment_new_modal so the invariant holds
+        # even for direct API calls.
+        counterparty_party = None
+        if direction == PaymentDirection.INBOUND:
+            counterparty_party = session.get(Party, trade.purchaser_id) if trade.purchaser_id else None
+        else:
+            counterparty_party = session.get(Party, trade.vendor_id) if trade.vendor_id else None
+        if counterparty_party and gl_account and counterparty_party.account_id == gl_account.id:
+            side = "customer (purchaser)" if direction == PaymentDirection.INBOUND else "vendor"
+            raise ValueError(
+                f"Cannot post this payment: the destination account is the "
+                f"trade's own {side} — that would DR and CR the same account "
+                f"and hide the payment. Pick a bank / cash / CEO / other GL "
+                f"account instead."
+            )
         p = TradePayment(
             user_id=user_id,
             trade_id=trade.id,
@@ -1752,8 +1937,10 @@ class QuotationService:
 
 class TradeReportService:
     @staticmethod
-    def dashboard_kpis(session: Session, user_id: int) -> dict:
-        """KPIs for the trade dashboard.
+    def dashboard_kpis(session: Session, user_id: int, as_of: Optional[date] = None) -> dict:
+        """KPIs for the trade dashboard, as of `as_of` (default today). When a
+        past month-end is passed, ledger balances are taken at that date and the
+        "this-month" sales/profit are scoped to that month.
 
         Receivable / payable totals come from the *general ledger* (the actual
         balance on every A/R and A/P account), NOT from a Party.opening_balance
@@ -1768,7 +1955,7 @@ class TradeReportService:
         from services.ledger import balance_asof as _balance_asof
 
         trades = list(session.exec(select(Trade).where(Trade.user_id == user_id)).all())
-        today = date.today()
+        today = as_of or date.today()
 
         open_count = sum(
             1
@@ -1787,12 +1974,12 @@ class TradeReportService:
         outstanding_payable = ZERO
         if ar_sub:
             for a in session.exec(_select(_Account).where(_Account.subclass_id == ar_sub.id)).all():
-                outstanding_receivable += _balance_asof(session, a.id, None)
+                outstanding_receivable += _balance_asof(session, a.id, today)
         if ap_sub:
             # AP accounts have natural CREDIT balances; flip sign so the dashboard
             # reads as "money we owe (positive)".
             for a in session.exec(_select(_Account).where(_Account.subclass_id == ap_sub.id)).all():
-                outstanding_payable -= _balance_asof(session, a.id, None)
+                outstanding_payable -= _balance_asof(session, a.id, today)
 
         # ── Overdue is still per-trade (uses customer_due_date) ──────────
         # Net out customer-paid costs and write-offs (not just cash) so a trade
@@ -1806,26 +1993,22 @@ class TradeReportService:
                 overdue_receivable += ar
 
         # ── This-month sales / profit ────────────────────────────────────
-        # Profit only counts realised trades (delivered / partially-paid /
-        # paid / closed) — an open trade is still pipeline, not profit.
+        # Both on the same basis: every non-cancelled trade placed this month.
+        # In back-to-back trading the buy/sale rates are agreed up front, so an
+        # open order's profit is effectively locked — showing it (and matching
+        # sales) is more useful than waiting for delivery to book it.
         month_start = today.replace(day=1)
-        month_sales = sum(
-            (
-                Decimal(t.total_sale)
-                for t in trades
-                if t.trade_date >= month_start and t.status != TradeStatus.CANCELLED
-            ),
-            ZERO,
-        )
-        realised_statuses = (TradeStatus.DELIVERED, TradeStatus.PARTIALLY_PAID, TradeStatus.PAID, TradeStatus.CLOSED)
-        month_profit = sum(
-            (
-                Decimal(t.total_sale) - Decimal(t.total_cost)
-                for t in trades
-                if t.trade_date >= month_start and t.status in realised_statuses
-            ),
-            ZERO,
-        )
+        this_month = [t for t in trades
+                      if month_start <= t.trade_date <= today and t.status != TradeStatus.CANCELLED]
+        month_sales = sum((Decimal(t.total_sale) for t in this_month), ZERO)
+        month_profit = sum((Decimal(t.total_sale) - Decimal(t.total_cost)
+                            for t in this_month), ZERO)
+
+        # ── Capital A/C closing balance (equity: retained trade profit net of
+        # absorbed costs). Credit-positive, so negate the DR−CR balance. ──
+        capital_acct = session.exec(_select(_Account).where(
+            _Account.user_id == user_id, _Account.name == "Capital A/C")).first()
+        capital_balance = (-_balance_asof(session, capital_acct.id, today)) if capital_acct else ZERO
 
         return {
             "open_trades": open_count,
@@ -1834,6 +2017,8 @@ class TradeReportService:
             "outstanding_payable": outstanding_payable.quantize(Decimal("0.01")),
             "month_sales": month_sales.quantize(Decimal("0.01")),
             "month_profit": month_profit.quantize(Decimal("0.01")),
+            "capital_balance": capital_balance.quantize(Decimal("0.01")),
+            "capital_account_id": capital_acct.id if capital_acct else None,
         }
 
     @staticmethod

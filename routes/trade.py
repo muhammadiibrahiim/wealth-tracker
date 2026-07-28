@@ -3331,8 +3331,16 @@ async def reports_expenses(
     date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
     session: Session = Depends(get_session),
 ):
-    """All expense vouchers except bilties, dated, with a per-category summary."""
+    """All expense vouchers except bilties, dated, with a per-category summary.
+
+    Defaults to the CURRENT MONTH on first load (no dates given)."""
     user_id = DEFAULT_USER_ID
+    if not date_from and not date_to:
+        today = date.today()
+        first = today.replace(day=1)
+        nxt = date(today.year + 1, 1, 1) if today.month == 12 else date(today.year, today.month + 1, 1)
+        date_from = first.isoformat()
+        date_to = (nxt - timedelta(days=1)).isoformat()
     report = TradeReportService.expenses_report(
         session, user_id, from_date=_parse_date(date_from), to_date=_parse_date(date_to))
     return templates.TemplateResponse(

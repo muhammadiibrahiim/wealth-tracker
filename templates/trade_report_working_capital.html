@@ -52,8 +52,8 @@
         <div class="stat-label">Current Ratio</div>
         <div class="stat-value">{{ metrics.current_ratio if metrics.current_ratio is not none else '—' }}</div>
         <div class="text-sm text-gray-600 mt-2">
-          {% if metrics.current_ratio is none %}No vendor payables to compare against.
-          {% else %}For every <b>{{ currency }} 1</b> you owe vendors, you hold <b>{{ currency }} {{ metrics.current_ratio }}</b> in cash + customer receivables. Above 1.0 means you can cover what you owe.{% endif %}
+          {% if metrics.current_ratio is none %}No current liabilities to compare against.
+          {% else %}For every <b>{{ currency }} 1</b> of current liabilities (<b>{{ currency }} {{ '{:,.0f}'.format(metrics.current_liabilities) }}</b> owed), you hold <b>{{ currency }} {{ metrics.current_ratio }}</b> in current assets — cash, customer receivables and vendor prepayments (<b>{{ currency }} {{ '{:,.0f}'.format(metrics.current_assets) }}</b>). Above 1.0 means you can cover what you owe.{% endif %}
         </div>
       </div>
     </div>

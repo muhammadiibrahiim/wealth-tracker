@@ -639,8 +639,21 @@ def working_capital_metrics(session, user_id, as_of=None, period_days=365) -> di
     dpo = dpo_raw if (dpo_raw is not None and dpo_open >= min_open) else None
     ccc = (dso - dpo) if (dso is not None and dpo is not None) else None
 
-    current_assets = cash + ar_balance
-    current_ratio  = (current_assets / ap_balance) if ap_balance > 0 else None
+    # Current ratio: split EACH party account by sign instead of netting a
+    # prepaid to one party against a payable to another. A DR balance (customer
+    # owes us, or we've prepaid a vendor) is a current ASSET; a CR balance (we
+    # owe a vendor, or a customer paid in advance) is a current LIABILITY. Netting
+    # them (e.g. HI's prepaid against Ahmed's payable) understates liabilities and
+    # flatters the ratio — a prepaid to HI can't settle a payable to Ahmed.
+    current_assets = cash
+    current_liabilities = ZERO
+    for aid in set(ar_ids) | set(ap_ids):
+        b = balance_asof(session, aid, as_of)
+        if b > 0:
+            current_assets += b
+        elif b < 0:
+            current_liabilities += -b
+    current_ratio = (current_assets / current_liabilities) if current_liabilities > 0 else None
 
     def _flt(v):
         return round(float(v), 1) if v is not None else None
@@ -659,6 +672,8 @@ def working_capital_metrics(session, user_id, as_of=None, period_days=365) -> di
         "dpo": _flt(dpo),
         "ccc": _flt(ccc),
         "current_ratio": round(float(current_ratio), 2) if current_ratio is not None else None,
+        "current_assets": current_assets.quantize(Decimal("0.01")),
+        "current_liabilities": current_liabilities.quantize(Decimal("0.01")),
         # Tag the metric as low-confidence when there's < 60 days of sales history
         # (the user can see the warning in the dashboard tile).
         "limited_history": dso is None or dpo is None,

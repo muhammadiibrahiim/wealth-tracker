@@ -70,3 +70,6 @@ Trade-Form-And-Detail-Guide.md
 start.log
 *.tmp
 .mm_sync_state.json
+
+# User-uploaded files (invoices, payment proofs) — per-install data, never commit
+static/uploads/

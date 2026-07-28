@@ -86,7 +86,7 @@
         <tr>
           <td class="text-gray-700 whitespace-nowrap">{{ r.date }}</td>
           <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/vouchers/{{ r.entry_id }}">{{ r.reference }}</a></td>
-          <td class="text-gray-900">{{ r.description }}</td>
+          <td class="text-gray-900">{{ r.description }}{% if r.proof_path %} <a href="{{ r.proof_path }}" target="_blank" title="View payment proof" class="text-indigo-600 hover:underline">📎 proof</a>{% endif %}</td>
           <td class="text-right tabular-nums">{% if r.debit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(r.debit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
           <td class="text-right tabular-nums">{% if r.credit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(r.credit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
           <td class="text-right tabular-nums font-semibold {% if r.balance < 0 %}text-orange-700{% else %}text-gray-900{% endif %}">

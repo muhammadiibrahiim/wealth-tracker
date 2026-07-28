@@ -82,7 +82,8 @@
   </div>
 
   <!-- Totals strip -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+  {% set invested = trade.total_cost + trade_costs_total %}
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
     <div class="stat-card">
       <div class="stat-label">Total Cost</div>
       <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(trade.total_cost) }}</div>
@@ -105,11 +106,19 @@
       </div>
       <div class="text-xs mt-1 text-gray-500">after bilty &amp; trade costs ({{ currency }} {{ '{:,.0f}'.format(trade_costs_total) }})</div>
     </div>
+    <div class="stat-card" style="border-color:#4f46e5;" title="Return on this trade = net profit ÷ everything you put in (goods cost + bilty + trade costs). What each rupee invested in the trade earned.">
+      <div class="stat-label">ROI</div>
+      <div class="stat-value" style="color: {% if net_profit >= 0 %}#4338ca{% else %}#c2410c{% endif %};">{{ '{:,.2f}'.format(net_profit / invested * 100) if invested > 0 else '0.00' }}%</div>
+      <div class="text-xs mt-1 text-gray-500">net profit ÷ {{ currency }} {{ '{:,.0f}'.format(invested) }} invested</div>
+    </div>
   </div>
 
   <!-- Lines -->
   <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200" style="background: #fafaf9;"><h2>Line Items</h2></div>
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between" style="background: #fafaf9;">
+      <h2>Line Items</h2>
+      <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/lines/new" hx-target="#modal-container">+ Add Line Item</button>
+    </div>
     <table class="min-w-full">
       <thead>
         <tr>
@@ -589,7 +598,13 @@
         <tr>
           <td class="text-gray-700 text-sm whitespace-nowrap">{{ p.paid_on }}</td>
           <td class="text-gray-700 text-sm">{{ p.cash_account.name if p.cash_account else (p.gl_account.name if p.gl_account else '—') }}</td>
-          <td class="text-gray-700 text-sm">{{ p.method or '—' }}</td>
+          <td class="text-gray-700 text-sm">
+            {{ p.method or '—' }}{% if p.reference %} · {{ p.reference }}{% endif %}
+            {% if p.proof_path %}
+            <a href="{{ p.proof_path }}" target="_blank" title="View payment proof" class="inline-flex items-center gap-1 ml-1 text-indigo-600 hover:underline">
+              <img src="{{ p.proof_path }}" alt="proof" style="height:26px;width:26px;object-fit:cover;border-radius:4px;border:1px solid #e5e7eb;vertical-align:middle;"> <span class="text-xs">proof</span>
+            </a>{% endif %}
+          </td>
           <td class="text-right tabular-nums text-sm font-medium" style="color: #15803d;">+ {{ currency }} {{ '{:,.2f}'.format(p.amount) }}</td>
           <td class="text-right"><form hx-post="/trade/payments/{{ p.id }}/delete" hx-confirm="Delete payment?"><button class="text-red-600 text-xs hover:underline">Del</button></form></td>
         </tr>

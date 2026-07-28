@@ -8,12 +8,31 @@
       <h1 class="page-title">Trades</h1>
       <p class="page-subtitle">Every back-to-back vendor → customer transaction.</p>
     </div>
-    <button class="btn-primary" hx-get="/trade/trades/new" hx-target="#modal-container">+ New Trade</button>
+    <div class="flex gap-2">
+      <button class="btn-secondary" hx-get="/trade/payments/receive/new" hx-target="#modal-container" title="Receive one customer payment and auto-apply it oldest-due-first across their trades">💰 Receive Payment</button>
+      <button class="btn-secondary" hx-get="/trade/trades/receive/new" hx-target="#modal-container" title="Record one vendor delivery across many trades/items, with a single bilty split by weight">📦 Receive Goods</button>
+      <button class="btn-primary" hx-get="/trade/trades/new" hx-target="#modal-container">+ New Trade</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  {% set qs = ('&party_id=' ~ current_party) if current_party else '' %}
+  {% set qs = qs ~ (('&status=' ~ current_status) if current_status else '') %}
+  <div class="flex items-center gap-1 border-b border-gray-200">
+    <a href="/trade/trades?tab=all{{ qs }}"
+       class="px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition {% if current_tab != 'pending' %}border-indigo-600 text-indigo-700{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
+      All <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full {% if current_tab != 'pending' %}bg-indigo-100 text-indigo-700{% else %}bg-gray-100 text-gray-500{% endif %}">{{ all_count }}</span>
+    </a>
+    <a href="/trade/trades?tab=pending{{ qs }}"
+       class="px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition {% if current_tab == 'pending' %}border-indigo-600 text-indigo-700{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
+      Pending <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full {% if current_tab == 'pending' %}bg-indigo-100 text-indigo-700{% else %}bg-gray-100 text-gray-500{% endif %}">{{ pending_count }}</span>
+    </a>
   </div>
 
   <!-- Filter -->
   <div class="bg-white border border-gray-200 rounded-lg p-6">
     <form method="get" class="flex items-end gap-4 flex-wrap">
+      <input type="hidden" name="tab" value="{{ current_tab }}">
       <div>
         <label class="field-label">Status</label>
         <select name="status" class="px-3 py-2.5">
@@ -44,7 +63,8 @@
           <th class="text-left">Purchaser</th>
           <th class="text-right">Cost</th>
           <th class="text-right">Sale</th>
-          <th class="text-right">Profit</th>
+          <th class="text-right">Net Profit</th>
+          <th class="text-right">ROI</th>
           <th class="text-left">Status</th>
           <th class="text-left">Due</th>
           <th></th>
@@ -59,9 +79,11 @@
           <td class="text-gray-800">{{ party_map[t.purchaser_id].name if party_map.get(t.purchaser_id) else '—' }}</td>
           <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(t.total_cost) }}</td>
           <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(t.total_sale) }}</td>
-          <td class="text-right tabular-nums font-semibold" style="color: {% if (t.total_sale - t.total_cost) >= 0 %}#15803d{% else %}#c2410c{% endif %};">
-            {{ currency }} {{ '{:,.0f}'.format(t.total_sale - t.total_cost) }}
+          {% set m = trade_metrics.get(t.id) if trade_metrics else None %}
+          <td class="text-right tabular-nums font-semibold" style="color: {% if m and m.net_profit >= 0 %}#15803d{% else %}#c2410c{% endif %};" title="Net of bilty &amp; trade costs">
+            {{ currency }} {{ '{:,.0f}'.format(m.net_profit if m else (t.total_sale - t.total_cost)) }}
           </td>
+          <td class="text-right tabular-nums" style="color:#4338ca;" title="Net profit ÷ money invested (cost + trade costs)">{% if m and m.roi is not none %}{{ '{:,.1f}'.format(m.roi) }}%{% else %}—{% endif %}</td>
           <td>{% include "partials/trade_status_badge.html" %}</td>
           <td class="text-gray-600 whitespace-nowrap">
             {% if t.customer_due_date %}

@@ -41,6 +41,8 @@
     ('/trade/reports/daily-cash',             'Daily Cash Requirement', 'Day-by-day: how much cash you must inject each day (ignores CEO funding).'),
     ('/trade/reports/cashflow-management',     'Cash Flow Management',    'Which vendor payments to delay (and to when) so your projected trades get funded without going negative.'),
     ('/trade/reports/vendor-pending',         'Vendor Pending Goods',   'Goods a vendor still owes — pick a vendor, export a PDF statement to send them.'),
+    ('/trade/reports/customer-pending',       'Customer Pending Goods', 'Goods WE still owe to deliver — by customer, per trade, valued at the sale rate.'),
+    ('/trade/reports/goods-sent',             'Goods Sent', 'Dated dispatch statement for a customer — by PO, quantity sent under each, over a date range. Export to send them.'),
     ('/trade/reports/trade-profitability',    'Trade Profitability',    'Top trades by GP, biggest variances, oldest unsettled.'),
   ]) }}
 
@@ -49,6 +51,7 @@
     ('/trade/reports/ledger', 'Party Ledger',  'Dated ledger for a customer or vendor.'),
     ('/trade/reports/items',  'Item Report',   'Units sold, revenue, margin per item.'),
     ('/trade/reports/aging',  'AR Aging',      'Customer receivables bucketed by days overdue.'),
+    ('/trade/reports/ap-aging', 'AP Aging',    'What you owe vendors, bucketed by days overdue (payments matched oldest-first).'),
     ('/trade/reports/pending-receivables', 'Pending Receivable Items', 'Qty still owed by each vendor — per trade, per line, with pending value.'),
     ('/trade/reports/bilty',  'Bilty Report',  'Every bilty entry — date, trade, customer + city, terminal, weight, amount, paid-by-customer status.'),
   ]) }}

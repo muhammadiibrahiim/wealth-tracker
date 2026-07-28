@@ -18,7 +18,7 @@
       <p class="text-sm text-yellow-900">You need at least one account first. <a href="/trade/accounts" class="underline font-medium">Add a cash account →</a></p>
     </div>
     {% else %}
-    <form hx-post="/trade/trades/{{ trade.id }}/payments" class="space-y-4">
+    <form hx-post="/trade/trades/{{ trade.id }}/payments" class="space-y-4" enctype="multipart/form-data">
       <input type="hidden" name="direction" value="{{ direction }}">
 
       <div>
@@ -68,6 +68,19 @@
         <textarea name="notes" rows="2" class="w-full px-3 py-2.5"></textarea>
       </div>
 
+      <div>
+        <label class="field-label">Payment Screenshot / Proof</label>
+        <div id="pay-proof-drop" tabindex="0"
+             style="border:2px dashed #d1d5db; border-radius:8px; padding:14px; text-align:center; cursor:pointer; background:#fafafa; outline:none;">
+          <div id="pay-proof-empty" class="text-sm text-gray-500 select-none">
+            📎 Click to choose, drag in, or <b>paste a screenshot</b> (⌘V / Ctrl-V)
+          </div>
+          <img id="pay-proof-preview" alt="proof preview" style="display:none; max-height:170px; margin:4px auto 0; border-radius:6px; border:1px solid #e5e7eb;">
+          <div id="pay-proof-name" class="text-xs text-gray-400 mt-1"></div>
+        </div>
+        <input type="file" name="proof" id="pay-proof-input" accept="image/*" style="display:none;">
+      </div>
+
       <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
         <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Cancel</button>
         <button type="submit" class="btn-primary">Save Payment</button>
@@ -76,3 +89,45 @@
     {% endif %}
   </div>
 </div>
+
+<script>
+(function(){
+  var drop=document.getElementById('pay-proof-drop');
+  var input=document.getElementById('pay-proof-input');
+  if(!drop||!input) return;
+  var empty=document.getElementById('pay-proof-empty');
+  var preview=document.getElementById('pay-proof-preview');
+  var nameEl=document.getElementById('pay-proof-name');
+  function render(file){
+    if(!file) return;
+    try{ preview.src=URL.createObjectURL(file); }catch(e){}
+    preview.style.display='block'; empty.style.display='none';
+    nameEl.textContent=(file.name||'screenshot')+' · '+Math.max(1,Math.round((file.size||0)/1024))+' KB — click to replace';
+  }
+  function setFile(file){
+    try{ var dt=new DataTransfer(); dt.items.add(file); input.files=dt.files; }catch(e){}
+    render(file);
+  }
+  drop.addEventListener('click', function(){ input.click(); });
+  input.addEventListener('change', function(){ if(input.files&&input.files[0]) render(input.files[0]); });
+  drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.style.background='#eef2ff'; });
+  drop.addEventListener('dragleave', function(){ drop.style.background='#fafafa'; });
+  drop.addEventListener('drop', function(e){ e.preventDefault(); drop.style.background='#fafafa';
+    if(e.dataTransfer.files&&e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+  // Paste a screenshot anywhere while this modal is open. Self-cleans when the
+  // modal is removed so listeners don't pile up across opens.
+  function onPaste(e){
+    if(!document.body.contains(drop)){ document.removeEventListener('paste', onPaste); return; }
+    var items=(e.clipboardData&&e.clipboardData.items)||[];
+    for(var i=0;i<items.length;i++){
+      if(items[i].type && items[i].type.indexOf('image')===0){
+        var blob=items[i].getAsFile();
+        var ext=((blob.type.split('/')[1])||'png').replace('jpeg','jpg');
+        var file=new File([blob], 'payment-'+Date.now()+'.'+ext, {type:blob.type});
+        setFile(file); e.preventDefault(); break;
+      }
+    }
+  }
+  document.addEventListener('paste', onPaste);
+})();
+</script>

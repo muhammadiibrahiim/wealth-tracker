@@ -52,7 +52,13 @@
         </span>
         {% if ledger.balance < 0 %}<span class="pill-cr">CR</span>{% else %}<span class="pill-dr">DR</span>{% endif %}
       </div>
-      <div class="text-xs text-gray-500 mt-1">{% if ledger.balance < 0 %}Owed by us to them{% elif ledger.balance > 0 %}Owed by them to us{% else %}Settled{% endif %}</div>
+      <div class="text-xs text-gray-500 mt-1">
+        {% if ledger.balance < 0 %}
+          You owe them {{ currency }} {{ '{:,.0f}'.format(ledger.balance|abs) }}{% if ledger.party.is_customer and not ledger.party.is_vendor %} (advance received){% endif %}
+        {% elif ledger.balance > 0 %}
+          {% if ledger.party.is_vendor and not ledger.party.is_customer %}You've paid ahead — they owe you {{ currency }} {{ '{:,.0f}'.format(ledger.balance) }} in goods/credit{% else %}They owe you {{ currency }} {{ '{:,.0f}'.format(ledger.balance) }}{% endif %}
+        {% else %}Settled — nothing outstanding{% endif %}
+      </div>
     </div>
   </div>
 
@@ -101,7 +107,7 @@
           <td class="whitespace-nowrap">
             <a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/vouchers/{{ e.trade_id }}">{{ e.ref }}</a>
           </td>
-          <td class="text-gray-800">{{ e.kind }}</td>
+          <td class="text-gray-800">{{ e.kind }}{% if e.proof_path %} <a href="{{ e.proof_path }}" target="_blank" title="View payment proof" class="text-indigo-600 hover:underline">📎 proof</a>{% endif %}</td>
           <td class="whitespace-nowrap text-right tabular-nums">
             {% if e.debit > 0 %}<span class="font-medium text-gray-900">{{ currency }} {{ '{:,.2f}'.format(e.debit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}
           </td>

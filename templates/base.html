@@ -324,6 +324,9 @@
       .modal-backdrop {
         background-color: rgba(35, 37, 29, 0.55) !important;
         backdrop-filter: blur(2px);
+        /* Sit ABOVE the fixed sidebar (z-index:1000) so wide modals aren't
+           clipped/covered by it. Applies to every modal, consistently. */
+        z-index: 1100 !important;
       }
       #modal-container .bg-white {
         background: var(--surface-card) !important;

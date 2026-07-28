@@ -3,208 +3,229 @@
 {% block content %}
 {% set cur = currency %}
 <style>
-  .trd-link { color: inherit; text-decoration: none; cursor: pointer; }
-  .trd-link:hover { text-decoration: underline; }
   .tier-badge { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.03em;
                 padding:1px 7px; border-radius:999px; white-space:nowrap; }
   .tier-new         { background:#dcfce7; color:#166534; }
   .tier-recent      { background:#ccfbf1; color:#115e59; }
   .tier-growing     { background:#f3f4f6; color:#374151; }
   .tier-established { background:#ffedd5; color:#9a3412; }
-  .pay-row { display:flex; align-items:center; gap:10px; padding:7px 0; border-top:1px dashed #e5e7eb; }
-  .pay-row:first-child { border-top:none; }
 </style>
-<div class="space-y-6">
+<div class="space-y-6" id="cfm-content">
   <div class="flex items-start justify-between flex-wrap gap-4">
     <div>
       <h1 class="page-title">Cash Flow Management</h1>
-      <p class="page-subtitle">Smart payment instructions for your <b>existing trades</b>. As each customer receipt lands, it tells you exactly how much to hand each vendor — <b>everyone gets paid</b>, split to favour newer vendors and push long-standing ones. It also projects the <b>upcoming</b> vendor payments as goods still on order arrive (from each vendor's supply history), and flags a recommended <b>capital injection</b> if those payables outrun your incoming cash.</p>
+      <p class="page-subtitle">What your cash position means, and how to divide your payments.</p>
     </div>
     <a href="/trade/reports" class="btn-secondary">← Reports</a>
   </div>
 
-  <!-- Headline -->
-  <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-    <div class="stat-card">
-      <div class="stat-label">Cash Today</div>
-      <div class="stat-value" style="color:{% if report.cash_today >= 0 %}#111827{% else %}#b91c1c{% endif %};"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(report.cash_today) }}</div>
-      <div class="stat-foot text-gray-500">{% if report.cash_today < 0 %}capital deployed{% else %}on hand now{% endif %}</div>
+  <!-- EXPECTED SUPPLY ARRIVALS — owner sets when on-order goods will land -->
+  {% if report.on_order %}
+  <div class="bg-white border rounded-lg overflow-hidden" style="border-color:{% if report.on_order_needs_date %}#f59e0b{% else %}#e5e7eb{% endif %};">
+    <div class="px-6 py-4 border-b" style="background:#fffbeb; border-color:#fde68a;">
+      <h2 class="text-base font-bold" style="color:#92400e;">📦 Expected supply arrivals</h2>
+      <p class="text-xs text-gray-600 mt-1">Goods still on order. Set the date each supply is expected to arrive — the forecast then schedules that trade's vendor payment and the resulting customer collection from that date.{% if report.on_order_needs_date %} <b style="color:#b45309;">Amber rows have no delivery history yet, so a date is needed to plan them.</b>{% endif %}</p>
     </div>
-    <div class="stat-card" style="border-color:#16a34a;">
-      <div class="stat-label">To Collect</div>
-      <div class="stat-value" style="color:#15803d;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(report.total_to_collect) }}</div>
-      <div class="stat-foot text-gray-500">customer receipts ahead</div>
-    </div>
-    <div class="stat-card" style="border-color:#4f46e5;">
-      <div class="stat-label">Owed to Vendors</div>
-      <div class="stat-value" style="color:#4338ca;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(report.total_owed) }}</div>
-      <div class="stat-foot text-gray-500">{{ report.vendor_count }} vendor(s)</div>
-    </div>
-    <div class="stat-card" {% if report.still_owed %}style="border-color:#dc2626;"{% else %}style="border-color:#16a34a;"{% endif %}>
-      <div class="stat-label">Still Owed After</div>
-      <div class="stat-value" style="color:{% if report.still_owed %}#b91c1c{% else %}#15803d{% endif %};"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(report.still_owed) }}</div>
-      <div class="stat-foot text-gray-500">current + upcoming, {{ report.horizon_days }}d</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Vendors Cleared By</div>
-      <div class="stat-value">{% if report.cleared_date %}{{ report.cleared_date.strftime('%d %b') }}{% else %}—{% endif %}</div>
-      <div class="stat-foot text-gray-500">{% if report.cleared_date %}all settled{% else %}not fully in window{% endif %}</div>
-    </div>
-  </div>
-
-  <div class="accent-card" style="border-left-color:{% if report.still_owed > 0 %}#ea580c{% else %}#16a34a{% endif %};">
-    <div class="text-sm text-gray-700">
-      {% if report.still_owed > 0 %}
-      Across current owed <b>plus</b> the upcoming supply payments (total <b>{{ cur }} {{ '{:,.0f}'.format(report.total_obligations) }}</b>), your incoming receipts fund <b>{{ cur }} {{ '{:,.0f}'.format(report.total_paid_plan) }}</b>. <b>{{ cur }} {{ '{:,.0f}'.format(report.still_owed) }}</b> is still short within {{ report.horizon_days }} days{% if report.injection > 0 %} — see the recommended injection above{% endif %}. Pay down the current balances first; the shortfall is mostly the upcoming deliveries.
-      {% else %}
-      ✓ Your incoming receipts fully cover every vendor's <b>current</b> balance{% if report.cleared_date %} by <b>{{ report.cleared_date.strftime('%d %b %Y') }}</b>{% endif %}. Follow the steps below — collect, then pay out the listed amounts; every vendor gets a share of each receipt.{% if report.projected_total > 0 %} Watch the <b>upcoming</b> payments below too — those aren't owed yet but will fall due as new goods arrive.{% endif %}
-      {% endif %}
-    </div>
-  </div>
-
-  {% if report.injection > 0 %}
-  <div class="accent-card" style="border-left-color:#dc2626; background:#fef2f2;">
-    <div class="flex items-start gap-3">
-      <span style="font-size:20px;">💰</span>
-      <div class="text-sm text-gray-800">
-        <b>Recommended capital injection: {{ cur }} {{ '{:,.0f}'.format(report.injection) }}{% if report.injection_date %} by {{ report.injection_date.strftime('%d %b %Y') }}{% endif %}.</b>
-        This is a <b>timing bridge</b>, not a loss — your receipts do eventually cover everything{% if report.cleared_date %} (fully clear by {{ report.cleared_date.strftime('%d %b %Y') }}){% endif %}, but the upcoming supply payments below fall due <i>before</i> that cash arrives, so your position dips this much around then. Have this ready — or delay/renegotiate the deliveries that pile up around that date.
-      </div>
+    <div class="divide-y divide-gray-100">
+      {% for o in report.on_order %}
+      <form method="post" action="/trade/reports/cashflow-management/expected-date" class="px-6 py-3 flex items-center justify-between gap-3 flex-wrap{% if o.no_history and not o.expected_date %} bg-amber-50{% endif %}">
+        <input type="hidden" name="trade_id" value="{{ o.trade_id }}">
+        <div class="min-w-0">
+          <a class="font-mono text-indigo-600 hover:underline" href="/trade/trades/{{ o.trade_id }}">{{ o.ref }}</a>
+          <span class="text-sm text-gray-800">· <b>{{ o.vendor }}</b> → {{ o.customer }}</span>
+          <div class="text-xs text-gray-500">supply {{ cur }} {{ '{:,.0f}'.format(o.pending_cost) }} · sells {{ cur }} {{ '{:,.0f}'.format(o.pending_sale) }}
+            {% if o.no_history %}<span class="ml-1 font-semibold" style="color:#b45309;">· no history — set a date</span>{% else %}<span class="ml-1 text-gray-400">· timing estimated from history</span>{% endif %}
+          </div>
+          {% if o.pay_schedule %}
+          <div class="text-xs mt-1" style="color:#374151;">
+            <span class="text-gray-400">you'll pay</span>
+            {% for s in o.pay_schedule %}<span class="whitespace-nowrap"><b>{{ cur }} {{ '{:,.0f}'.format(s.amount) }}</b> <span class="text-gray-500">{{ s.stage }} · due {{ s.due.strftime('%d %b') }}</span></span>{% if not loop.last %} <span class="text-gray-300">·</span> {% endif %}{% endfor %}
+            {% if o.pay_schedule|length > 1 %}<span class="text-gray-400">= {{ cur }} {{ '{:,.0f}'.format(o.net_payable) }} net</span>{% endif %}
+          </div>
+          {% elif o.net_payable == 0 %}
+          <div class="text-xs mt-1" style="color:#15803d;">✓ fully prepaid — nothing left to pay on arrival</div>
+          {% endif %}
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="date" name="expected_date" value="{{ o.expected_date.isoformat() if o.expected_date else '' }}" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:6px;">
+          <button type="submit" class="btn-primary" style="padding:6px 14px;">Save</button>
+        </div>
+      </form>
+      {% endfor %}
     </div>
   </div>
   {% endif %}
 
-  <!-- Expected upcoming vendor payments (projected from supply) -->
-  {% if report.projected_pointers %}
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-5 py-3 border-b border-gray-200" style="background:#eef2ff;">
-      <h2 class="text-sm font-bold" style="color:#3730a3;">🔮 Expected upcoming vendor payments — projected from supply</h2>
-      <p class="text-xs text-gray-500 mt-0.5">These fall due WHEN goods still on order arrive — timing estimated from each vendor's historical supply rate (advance portion is already in “owed”). They're now folded into the payment plan below (they activate on these dates). Total projected: <b>{{ cur }} {{ '{:,.0f}'.format(report.projected_total) }}</b>.</p>
-    </div>
-    <ul class="p-4 space-y-2">
-      {% for p in report.projected_pointers %}
-      <li class="text-sm text-gray-700 flex gap-2">
-        <span style="color:#4f46e5;">▸</span>
-        <span>Around <b>{{ p.date.strftime('%d %b %Y') }}</b> <span class="text-gray-400 text-xs">(+{{ p.days_out }}d)</span> — <b>{{ cur }} {{ '{:,.0f}'.format(p.amount) }}</b>:
-          {% for i in p['items'] %}{{ i.vendor }}{% if i.ref %} · {% if i.trade_id %}<a class="trd-link" href="/trade/trades/{{ i.trade_id }}">{{ i.ref }}</a>{% else %}{{ i.ref }}{% endif %}{% endif %} {{ cur }} {{ '{:,.0f}'.format(i.amount) }} <span class="text-gray-400">({{ i.stage }})</span>{% if not loop.last %}; {% endif %}{% endfor %}.</span>
-      </li>
-      {% endfor %}
+  <!-- THE SITUATION -->
+  <div class="accent-card" style="border-left-color:{% if report.peak_shortfall > 0 %}#ea580c{% else %}#16a34a{% endif %};">
+    <div class="stat-label mb-2">📊 Where you stand</div>
+    <ul class="space-y-2 text-sm text-gray-800" style="list-style:disc; padding-left:20px;">
+      {% for b in report.summary_bullets %}<li>{{ b }}</li>{% endfor %}
     </ul>
   </div>
+
+  <!-- WHAT TO DO -->
+  <div class="accent-card" style="border-left-color:#4f46e5; background:#eef2ff;">
+    <div class="stat-label mb-2">✅ What to do</div>
+    <ul class="space-y-2 text-sm text-gray-900" style="list-style:disc; padding-left:20px;">
+      {% for b in report.action_bullets %}<li>{{ b }}</li>{% endfor %}
+    </ul>
+  </div>
+
+  <!-- VENDOR PAYMENT DELAYS — live what-if sliders -->
+  {% if report.vendor_delays %}
+  <div class="bg-white border border-gray-200 rounded-lg p-5">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <div class="stat-label">🎚️ Vendor payment delays — what-if</div>
+      <div class="text-xs text-gray-400">drag a slider — the plan below updates live</div>
+    </div>
+    <p class="text-xs text-gray-500 mb-4">Max days you can stretch each vendor's payment past its due date before a cash injection is flagged. Previewing only — click <b>Save</b> to keep the change.</p>
+    <form id="cfm-delay-form"
+          hx-get="/trade/reports/cashflow-management"
+          hx-target="#cfm-content" hx-select="#cfm-content" hx-swap="outerHTML"
+          hx-trigger="change delay:150ms" hx-include="#cfm-delay-form">
+      <input type="hidden" name="horizon" value="{{ report.horizon_days }}">
+      {% if report.applied_injection > 0 %}
+      <input type="hidden" name="inject" value="{{ '%.0f'|format(report.applied_injection) }}">
+      <input type="hidden" name="inject_on" value="{{ report.applied_injection_date.isoformat() if report.applied_injection_date else '' }}">
+      {% endif %}
+      <div class="space-y-3">
+        {% for v in report.vendor_delays %}
+        <div class="flex items-center gap-4">
+          <div class="text-sm font-medium text-gray-800 truncate" style="width:160px;">{{ v.name }}</div>
+          <input type="range" min="0" max="30" step="1" value="{{ v.days }}" name="d_{{ v.id }}"
+                 style="flex:1; accent-color:#4f46e5;"
+                 oninput="document.getElementById('cfm-days-{{ v.id }}').textContent = this.value + (this.value=='1' ? ' day' : ' days');">
+          <div class="text-sm tabular-nums font-semibold text-gray-900 whitespace-nowrap" style="width:66px;" id="cfm-days-{{ v.id }}">{{ v.days }} day{{ 's' if v.days != 1 }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="flex items-center gap-3 mt-4">
+        <button type="button"
+                hx-post="/trade/reports/cashflow-management/delays"
+                hx-include="#cfm-delay-form"
+                hx-target="#cfm-content" hx-select="#cfm-content" hx-swap="outerHTML"
+                class="btn-primary" style="padding:6px 16px;">Save as default</button>
+        {% if report.delay_overridden %}<span class="text-xs font-semibold" style="color:#b45309;">⚠ previewing unsaved values</span>{% endif %}
+      </div>
+    </form>
+  </div>
   {% endif %}
 
-  <!-- Smart payment instructions -->
+  <!-- PAYMENT PLAN DESCRIPTION — open totals + injection requirement (inject X to pay Y on Z) -->
+  <div class="accent-card" style="border-left-color:{% if report.injection_events %}#b45309{% else %}#4f46e5{% endif %}; background:{% if report.injection_events %}#fffbeb{% else %}#eef2ff{% endif %};">
+    <div class="stat-label mb-2">🧾 Payment plan — what's open, and what to inject</div>
+    <p class="text-sm text-gray-800">
+      Across your current open trades, customers owe you <b style="color:#15803d;">{{ cur }} {{ '{:,.0f}'.format(report.receivables_total) }}</b> and you owe vendors <b style="color:#b91c1c;">{{ cur }} {{ '{:,.0f}'.format(report.payables_total) }}</b>{% if report.projected_total > 0 %}, plus about <b>{{ cur }} {{ '{:,.0f}'.format(report.projected_total) }}</b> more once goods on order arrive{% endif %}.
+    </p>
+    {% if report.injection_events %}
+    <p class="text-sm text-gray-900 mt-3 mb-1">You'll need to inject <b style="color:#b45309;">{{ cur }} {{ '{:,.0f}'.format(report.total_injection_needed) }}</b> in total — vendor payments fall due before the collections that would cover them:</p>
+    <ul class="space-y-1.5 text-sm text-gray-900" style="list-style:disc; padding-left:20px;">
+      {% for e in report.injection_events %}
+      <li>Inject <b style="color:#b45309;">{{ cur }} {{ '{:,.0f}'.format(e.amount) }}</b> on <b>{{ e.date.strftime('%a, %d %b') }}</b>{% if e.days_out is not none %} <span class="text-gray-400 text-xs">(+{{ e.days_out }}d)</span>{% endif %}{% if e.vendors %} to pay {% for v in e.vendors %}<b>{{ v }}</b>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}.</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-green-700 mt-2">✓ No cash injection needed — your collections cover every vendor payment as it falls due.</p>
+    {% endif %}
+  </div>
+
+  <!-- HOW TO DIVIDE PAYMENTS — smart per-vendor allocation as each receipt lands -->
   <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-5 py-3 border-b border-gray-200" style="background:#fafaf9;">
-      <h2 class="text-sm font-bold text-gray-800">📋 Payment plan — collect, then pay out</h2>
-      <p class="text-xs text-gray-500 mt-0.5">Each step: the money you'll receive, then exactly how to split it across vendors. Newer vendors are favoured; long-standing ones are pushed — but nobody is skipped.</p>
-      <form method="get" action="/trade/reports/cashflow-management" class="mt-3 flex flex-wrap items-end gap-3">
-        <div>
-          <label class="field-label" style="font-size:11px; display:block; color:#6b7280;">Capital I can inject ({{ cur }})</label>
-          <input type="number" step="1000" min="0" name="inject" style="width:150px; padding:6px 10px; border:1px solid #d1d5db; border-radius:6px;"
-                 value="{{ '{:.0f}'.format(report.applied_injection if report.applied_injection > 0 else report.injection) }}">
-        </div>
-        <div>
-          <label class="field-label" style="font-size:11px; display:block; color:#6b7280;">Available by</label>
-          <input type="date" name="inject_on" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:6px;"
-                 value="{{ (report.applied_injection_date or report.injection_date).isoformat() if (report.applied_injection_date or report.injection_date) else '' }}">
-        </div>
-        <button type="submit" class="btn-primary" style="padding:7px 16px;">Apply to plan</button>
-        {% if report.applied_injection > 0 %}
-        <a href="/trade/reports/cashflow-management" class="btn-secondary" style="padding:7px 14px;">Clear</a>
-        {% endif %}
-      </form>
-      {% if report.applied_injection > 0 %}
-      <p class="text-xs mt-2" style="color:#15803d;">✓ Injecting {{ cur }} {{ '{:,.0f}'.format(report.applied_injection) }}{% if report.applied_injection_date %} on {{ report.applied_injection_date.strftime('%d %b %Y') }}{% endif %} — spread across the plan below.{% if report.injection > 0 %} <span style="color:#c2410c;">Still short {{ cur }} {{ '{:,.0f}'.format(report.injection) }}{% if report.injection_date %} by {{ report.injection_date.strftime('%d %b %Y') }}{% endif %} — bump the amount or move the date earlier.</span>{% else %} <b>Timing gap fully covered ✓</b>{% endif %}</p>
-      {% endif %}
+    <div class="px-6 py-4 border-b border-gray-200" style="background:#eef2ff;">
+      <div class="flex items-baseline justify-between flex-wrap gap-2">
+        <h2 class="text-base font-bold" style="color:#3730a3;">↗ How to divide your payments</h2>
+        <div class="text-sm text-gray-600">still to pay <b style="color:#b91c1c;">{{ cur }} {{ '{:,.0f}'.format(report.payables_total) }}</b>{% if report.cleared_date %} · <span class="text-green-700">all cleared by {{ report.cleared_date.strftime('%d %b') }}</span>{% endif %}</div>
+      </div>
+      <p class="text-xs text-gray-500 mt-1">As each customer payment comes in, split it across your vendors like this — <b>newer vendors get the bigger share</b>, long-standing ones are pushed a little, but everyone gets something.</p>
     </div>
     <div class="divide-y divide-gray-100">
       {% for ins in report.instructions %}
-      <div class="px-5 py-4">
+      {% if ins.payments or ins.receipt > 0 %}
+      <div class="px-6 py-4">
         <div class="flex items-baseline justify-between flex-wrap gap-2 mb-2">
-          <div class="text-sm">
-            {% if ins.receipt > 0 %}
-            <span class="font-bold text-green-700">Collect {{ cur }} {{ '{:,.0f}'.format(ins.receipt) }}</span>
-            <span class="text-gray-500">on {{ ins.date.strftime('%a, %d %b %Y') }}</span>
-            {% else %}
-            <span class="font-bold" style="color:#4338ca;">🔮 Supply arrives</span>
-            <span class="text-gray-500">on {{ ins.date.strftime('%a, %d %b %Y') }}</span>
-            {% endif %}
+          <div>
+            {% if ins.receipt > 0 %}<span class="text-lg font-bold text-green-700">Collect {{ cur }} {{ '{:,.0f}'.format(ins.receipt) }}</span>
+            {% elif ins.injected > 0 %}<span class="text-lg font-bold" style="color:#b45309;">💰 Inject {{ cur }} {{ '{:,.0f}'.format(ins.injected) }}</span>
+            {% else %}<span class="text-base font-bold" style="color:#4338ca;">🔮 Supply arrives</span>{% endif %}
+            <span class="text-gray-500 ml-1">{{ ins.date.strftime('%a, %d %b %Y') }}</span>
             <span class="text-gray-400 text-xs">{% if ins.days_out <= 0 %}(now){% else %}(+{{ ins.days_out }}d){% endif %}</span>
-            {% if ins.injected > 0 %}<span class="font-bold" style="color:#15803d;"> · 💰 inject {{ cur }} {{ '{:,.0f}'.format(ins.injected) }}</span>{% endif %}
+            {% if ins.receipt > 0 and ins.injected > 0 %}<span class="font-bold" style="color:#b45309;"> · 💰 inject {{ cur }} {{ '{:,.0f}'.format(ins.injected) }}</span>{% endif %}
           </div>
-          <div class="text-xs text-gray-500">pay out {{ cur }} {{ '{:,.0f}'.format(ins.paid_out) }}{% if ins.carried > 0 %} · <span title="Cash left over, carried forward">carry {{ cur }} {{ '{:,.0f}'.format(ins.carried) }}</span>{% endif %}</div>
+          <div class="text-xs text-gray-500 whitespace-nowrap">pay out {{ cur }} {{ '{:,.0f}'.format(ins.paid_out) }}{% if ins.carried > 0 %} · carry {{ cur }} {{ '{:,.0f}'.format(ins.carried) }}{% endif %}</div>
         </div>
-        {% if ins.new_due > 0 %}
-        <div class="text-xs mb-2" style="color:#4338ca;">⤷ {{ cur }} {{ '{:,.0f}'.format(ins.new_due) }} of upcoming supply payments fell due{% if ins.receipt <= 0 and ins.paid_out <= 0 %} — no cash to cover it today (adds to the injection){% endif %}.</div>
-        {% endif %}
         {% if ins.sources %}
-        <div class="text-xs text-gray-500 mb-2">from
-          {% for s in ins.sources %}{{ s.name }}{% if s.ref %} · {% if s.trade_id %}<a class="trd-link" href="/trade/trades/{{ s.trade_id }}">{{ s.ref }}</a>{% else %}{{ s.ref }}{% endif %}{% endif %} ({{ cur }} {{ '{:,.0f}'.format(s.amount) }}){% if not loop.last %}, {% endif %}{% endfor %}
+        <div class="text-xs text-gray-500 mb-2">↘ received from
+          {% for s in ins.sources %}<b class="text-gray-700">{{ s.name }}</b>{% if s.ref %} · {% if s.trade_id %}<a class="text-indigo-600 hover:underline font-mono" href="/trade/trades/{{ s.trade_id }}">{{ s.ref }}</a>{% else %}<span class="font-mono">{{ s.ref }}</span>{% endif %}{% endif %} ({{ cur }} {{ '{:,.0f}'.format(s.amount) }}){% if not loop.last %}, {% endif %}{% endfor %}
         </div>
         {% endif %}
         {% if ins.payments %}
-        <div style="background:#f9fafb; border-radius:8px; padding:4px 12px;">
+        <div style="background:#f9fafb; border:1px solid #f0f1f3; border-radius:10px; padding:4px 16px;">
           {% for p in ins.payments %}
-          <div class="pay-row">
-            <span style="color:#c2410c;">→</span>
-            <span class="font-medium text-gray-800" style="min-width:150px;">{{ p.vendor }}</span>
-            <span class="tier-badge tier-{{ p.tier }}" title="{{ p.reason }}">{{ p.tier }}</span>
-            <span class="font-semibold tabular-nums" style="color:#111827;">{{ cur }} {{ '{:,.0f}'.format(p.amount) }}</span>
-            <span class="text-xs text-gray-400">{% if p.remaining_after > 0 %}({{ cur }} {{ '{:,.0f}'.format(p.remaining_after) }} still owed){% else %}(cleared ✓){% endif %}</span>
+          <div class="flex items-center justify-between gap-3 py-2.5" style="{% if not loop.first %}border-top:1px dashed #e5e7eb;{% endif %}{% if p.from_injection %}background:#fffbeb;border-radius:6px;padding-left:8px;padding-right:8px;{% endif %}">
+            <span class="text-sm"><span style="color:#c2410c;">→</span> pay <b class="text-gray-900">{{ p.vendor }}</b> <span class="tier-badge tier-{{ p.tier }}" title="{{ p.reason }}">{{ p.tier }}</span> <b class="text-gray-900 tabular-nums" style="font-size:15px;">{{ cur }} {{ '{:,.0f}'.format(p.amount) }}</b> {% if p.from_injection %}<span class="text-xs font-semibold" style="color:#b45309;">💰 from injection (deadline reached)</span>{% else %}<span class="text-xs text-gray-400">{% if p.remaining_after > 0 %}({{ cur }} {{ '{:,.0f}'.format(p.remaining_after) }} still owed){% else %}(cleared ✓){% endif %}</span>{% endif %}</span>
           </div>
           {% endfor %}
         </div>
-        {% else %}
-        <div class="text-xs text-gray-400" style="padding:2px 2px;">No spare cash to pay out — this obligation waits (feeds the capital-injection figure).</div>
         {% endif %}
       </div>
+      {% endif %}
       {% else %}
-      <div class="px-5 py-8 text-center text-gray-400">No receipts expected in the window — nothing to distribute yet.</div>
+      <div class="px-6 py-8 text-center text-green-700 font-medium">🎉 Everything's paid.</div>
       {% endfor %}
     </div>
   </div>
 
-  <!-- Vendor summary -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-5 py-3 border-b border-gray-200" style="background:#fafaf9;">
-      <h2 class="text-sm font-bold text-gray-800">Vendors — who you owe & how they're prioritised</h2>
-      <p class="text-xs text-gray-500 mt-0.5">Priority is smart, not a hard rule: newer / fewer-trade vendors are favoured; long-standing vendors have goodwill so their credit is pushed.</p>
+  <!-- COLLECT (simple list) -->
+  <div class="bg-white border border-gray-200 rounded-lg p-5">
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-sm font-bold" style="color:#166534;">↘ Collect these (chase biggest / overdue first)</div>
+      <div class="text-xs text-gray-500">owed to you <b style="color:#15803d;">{{ cur }} {{ '{:,.0f}'.format(report.receivables_total) }}</b></div>
     </div>
+    <ul class="space-y-1.5 text-sm">
+      {% for g in report.customer_plans %}
+      <li class="flex items-center justify-between gap-3">
+        <span><b class="text-gray-900">{{ g.name }}</b> <span class="text-gray-400 text-xs">{{ g['items']|length }} invoice{{ 's' if g['items']|length != 1 }}{% for it in g['items'] %}{% if it.overdue %} · <span style="color:#b91c1c;">overdue</span>{% endif %}{% endfor %}</span></span>
+        <span class="tabular-nums font-semibold whitespace-nowrap" style="color:#15803d;">{{ cur }} {{ '{:,.0f}'.format(g.outstanding) }}</span>
+      </li>
+      {% else %}
+      <li class="text-gray-400">Nothing outstanding.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Optional detail: full timeline, collapsed -->
+  <details class="bg-white border border-gray-200 rounded-lg p-5">
+    <summary class="text-sm font-medium text-gray-700 cursor-pointer select-none">📈 See the day-by-day timeline &amp; simulate a capital injection</summary>
+    <form method="get" action="/trade/reports/cashflow-management" class="mt-3 mb-4 flex flex-wrap items-end gap-3">
+      <div>
+        <label class="field-label" style="font-size:11px; display:block; color:#6b7280;">Inject ({{ cur }})</label>
+        <input type="number" step="1000" min="0" name="inject" style="width:140px; padding:6px 10px; border:1px solid #d1d5db; border-radius:6px;"
+               value="{{ '{:.0f}'.format(report.applied_injection if report.applied_injection > 0 else report.peak_shortfall) }}">
+      </div>
+      <div>
+        <label class="field-label" style="font-size:11px; display:block; color:#6b7280;">On date</label>
+        <input type="date" name="inject_on" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:6px;"
+               value="{{ (report.applied_injection_date or report.onset_date).isoformat() if (report.applied_injection_date or report.onset_date) else '' }}">
+      </div>
+      <button type="submit" class="btn-primary" style="padding:7px 16px;">Apply</button>
+      {% if report.applied_injection > 0 %}<a href="/trade/reports/cashflow-management" class="btn-secondary" style="padding:7px 14px;">Clear</a>{% endif %}
+    </form>
     <div style="overflow-x:auto;">
-    <table class="min-w-full text-sm">
-      <thead>
-        <tr class="text-left" style="color:#6b7280; font-size:11px; text-transform:uppercase;">
-          <th class="px-5 py-2">Vendor</th>
-          <th class="px-5 py-2">Priority</th>
-          <th class="px-5 py-2 text-right">Trades</th>
-          <th class="px-5 py-2 text-right">Owed now</th>
-          <th class="px-5 py-2 text-right">Upcoming</th>
-          <th class="px-5 py-2 text-right">Will pay</th>
-          <th class="px-5 py-2 text-right">Still owed</th>
-          <th class="px-5 py-2">Earliest due</th>
-        </tr>
-      </thead>
+    <table class="min-w-full text-xs">
+      <thead><tr class="text-left text-gray-500"><th class="py-1 pr-4">Date</th><th class="py-1 pr-4 text-right">In</th><th class="py-1 pr-4 text-right">Out</th><th class="py-1 text-right">Running</th></tr></thead>
       <tbody>
-        {% for v in report.vendor_summary %}
-        <tr class="border-t border-gray-100">
-          <td class="px-5 py-2 font-medium text-gray-800">{{ v.name }}</td>
-          <td class="px-5 py-2"><span class="tier-badge tier-{{ v.tier }}" title="{{ v.reason }}">{{ v.tier }}</span></td>
-          <td class="px-5 py-2 text-right tabular-nums text-gray-600">{{ v.trades }}</td>
-          <td class="px-5 py-2 text-right tabular-nums">{{ cur }} {{ '{:,.0f}'.format(v.owed) }}</td>
-          <td class="px-5 py-2 text-right tabular-nums" style="color:#4338ca;">{% if v.proj > 0 %}{{ cur }} {{ '{:,.0f}'.format(v.proj) }}{% else %}—{% endif %}</td>
-          <td class="px-5 py-2 text-right tabular-nums" style="color:#15803d;">{{ cur }} {{ '{:,.0f}'.format(v.paid) }}</td>
-          <td class="px-5 py-2 text-right tabular-nums" style="color:{% if v.remaining %}#b91c1c{% else %}#9ca3af{% endif %};">{{ cur }} {{ '{:,.0f}'.format(v.remaining) }}</td>
-          <td class="px-5 py-2 text-gray-600">{{ v.due_date.strftime('%d %b %Y') if v.due_date else '—' }}</td>
+        {% for e in report.timeline %}
+        <tr class="{% if e.short %}bg-red-50{% endif %}">
+          <td class="py-1 pr-4 whitespace-nowrap text-gray-700">{{ e.date.strftime('%d %b') }}</td>
+          <td class="py-1 pr-4 text-right tabular-nums {% if e.inflow > 0 %}text-green-700{% else %}text-gray-300{% endif %}">{% if e.inflow > 0 %}+{{ '{:,.0f}'.format(e.inflow) }}{% else %}—{% endif %}</td>
+          <td class="py-1 pr-4 text-right tabular-nums" style="{% if e.outflow > 0 %}color:#b45309;{% else %}color:#d1d5db;{% endif %}">{% if e.outflow > 0 %}−{{ '{:,.0f}'.format(e.outflow) }}{% else %}—{% endif %}</td>
+          <td class="py-1 text-right tabular-nums font-semibold" style="color:{% if e.short %}#b91c1c{% else %}#15803d{% endif %};">{{ '{:,.0f}'.format(e.running) }}</td>
         </tr>
-        {% else %}
-        <tr><td colspan="8" class="px-5 py-8 text-center text-gray-400">No vendor balances outstanding.</td></tr>
         {% endfor %}
       </tbody>
     </table>
     </div>
-  </div>
-
-  <p class="text-xs text-gray-400">Receipts are your expected customer collections from delivered and open existing trades. "Owed to vendors" combines what the ledger shows you currently owe plus the cost of goods still on order. Each receipt is split across all vendors with a balance, weighted by relationship — so every vendor is paid something on every disbursement, with newer vendors getting a larger proportional share.</p>
+  </details>
 </div>
 {% endblock %}

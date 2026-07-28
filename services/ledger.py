@@ -15,6 +15,7 @@ from models import (
     JournalEntry,
     JournalEntryType,
     JournalLine,
+    TradePayment,
 )
 
 
@@ -161,6 +162,18 @@ def account_ledger(
     q = q.order_by(JournalEntry.entry_date, JournalEntry.id, JournalLine.id)
     rows = session.exec(q).all()
 
+    # Batch-map payment_id → uploaded proof image so payment rows can link their
+    # bank screenshot / receipt straight from the ledger.
+    pay_ids = {e.payment_id for _ln, e in rows if e.payment_id}
+    proof_map: dict = {}
+    if pay_ids:
+        for pid, path in session.exec(
+            select(TradePayment.id, TradePayment.proof_path).where(
+                TradePayment.id.in_(pay_ids), TradePayment.proof_path.is_not(None)
+            )
+        ).all():
+            proof_map[pid] = path
+
     running = opening
     total_dr = ZERO
     total_cr = ZERO
@@ -178,6 +191,7 @@ def account_ledger(
             "debit": Decimal(ln.debit),
             "credit": Decimal(ln.credit),
             "balance": running.quantize(Decimal("0.01")),
+            "proof_path": proof_map.get(e.payment_id),
         })
 
     return {

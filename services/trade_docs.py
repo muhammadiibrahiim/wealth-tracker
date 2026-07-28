@@ -6,7 +6,8 @@ on-demand from the live Trade data. No persistence — every doc is a
 computed view, which means existing trades automatically inherit access
 to every document type with no backfill needed.
 
-Reference numbers derive from the trade ref:  e.g. OC-TRD-0001, DN-TRD-0001.
+Reference numbers use only the NUMERIC part of the trade ref, so external docs
+carry a clean "OC-0001 / DN-0001 / PO-0001" number — never our internal "TRD-".
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -110,7 +111,11 @@ def _bill_to_html(party: Party) -> str:
 
 def _ref_for(kind: str, trade: Trade, suffix: str = "") -> str:
     prefix, *_ = KINDS[kind]
-    base = f"{prefix}-{trade.reference}"
+    # External documents carry a clean "PO-0019" / "DN-0019" style number built
+    # from the NUMERIC part of the internal trade ref only — never our internal
+    # "TRD-" scheme (customers/vendors shouldn't see it).
+    ref_num = (trade.reference or "").split("-")[-1] or (trade.reference or "")
+    base = f"{prefix}-{ref_num}"
     return f"{base}-{suffix}" if suffix else base
 
 
@@ -248,7 +253,6 @@ def build_doc_pdf(ctx: DocContext) -> bytes:
         subtitle_parts=[
             f"{title} {ref}",
             f"Issued {date.today().strftime('%B %d, %Y')}",
-            f"Trade {ctx.trade.reference}",
         ],
         kpis=kpis,
         sections=sections,
@@ -267,10 +271,8 @@ def _default_kpis(ctx: DocContext) -> list:
             KpiSpec("Amount", _pkr(ctx.payment.amount)),
             KpiSpec("Method", (ctx.payment.method or "cash").title()),
             KpiSpec("Date",   ctx.payment.paid_on.strftime("%b %d, %Y")),
-            KpiSpec("Trade",  t.reference),
         ]
     kpis = [
-        KpiSpec("Trade", t.reference),
         KpiSpec("Items", str(len(t.lines))),
     ]
     if kind == "vendor_po":

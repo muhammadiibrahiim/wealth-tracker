@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
@@ -17,6 +17,7 @@ from models import Party, PaymentDirection, QuotationStatus, TradeStatus
 from services.trade import (
     CashAccountService,
     ItemService,
+    MasterReceiptService,
     PartyService,
     PaymentService,
     QuotationService,
@@ -127,6 +128,7 @@ async def trades_list(
     request: Request,
     status: Optional[str] = Query(None),
     party_id: Optional[int] = Query(None),
+    tab: Optional[str] = Query("all"),
     session: Session = Depends(get_session),
 ):
     user_id = DEFAULT_USER_ID
@@ -137,8 +139,29 @@ async def trades_list(
         except ValueError:
             status_enum = None
     trades = TradeService.list(session, user_id, status=status_enum, party_id=party_id)
+    # All / Pending tabs. "Pending" = the cycle isn't done yet (still to deliver
+    # and/or still to collect) — i.e. anything not Completed/Cancelled/Closed.
+    _DONE = {TradeStatus.COMPLETED, TradeStatus.CANCELLED, TradeStatus.CLOSED}
+    all_count = len(trades)
+    pending_trades = [t for t in trades if t.status not in _DONE]
+    pending_count = len(pending_trades)
+    tab = (tab or "all").lower()
+    if tab == "pending":
+        trades = pending_trades
     parties = PartyService.list(session, user_id)
     party_map = {p.id: p for p in parties}
+    # Net profit (after bilty + trade costs) and ROI per trade — same basis as
+    # the trade-detail card so the numbers match.
+    trade_metrics = {}
+    for t in trades:
+        tc = TradeService.trade_costs_total(session, user_id, t)
+        net = (Decimal(t.total_sale) - Decimal(t.total_cost) - tc)
+        invested = Decimal(t.total_cost) + tc
+        roi = (net / invested * 100) if invested > 0 else None
+        trade_metrics[t.id] = {
+            "net_profit": net.quantize(Decimal("0.01")),
+            "roi": (roi.quantize(Decimal("0.01")) if roi is not None else None),
+        }
     return templates.TemplateResponse(
         "trade_list.html",
         _ctx(
@@ -146,8 +169,12 @@ async def trades_list(
             trades=trades,
             parties=parties,
             party_map=party_map,
+            trade_metrics=trade_metrics,
             current_status=status,
             current_party=party_id,
+            current_tab=tab,
+            all_count=all_count,
+            pending_count=pending_count,
             statuses=[s.value for s in TradeStatus],
             today=date.today(),
         ),
@@ -806,6 +833,179 @@ async def receipt_delete(receipt_id: int, session: Session = Depends(get_session
     return _close_modal()
 
 
+@router.get("/goods-received", response_class=HTMLResponse)
+async def goods_received(request: Request, session: Session = Depends(get_session)):
+    """Log of every goods-receipt, grouped into deliveries (one vendor, one date)
+    — the combined view of what came in on each Master Receive / partial delivery."""
+    from models import (TradeLineReceipt, TradeLine, Trade, TradeBilty,
+                        TradePurchase, TradeTerminal, JournalEntry, Party)
+    user_id = DEFAULT_USER_ID
+    vname = {p.id: p.name for p in session.exec(select(Party).where(Party.user_id == user_id)).all()}
+    rows = session.exec(
+        select(TradeLineReceipt, TradeLine, Trade)
+        .join(TradeLine, TradeLineReceipt.line_id == TradeLine.id)
+        .join(Trade, TradeLine.trade_id == Trade.id)
+        .where(Trade.user_id == user_id)
+        .order_by(TradeLineReceipt.received_on.desc(), Trade.id)
+    ).all()
+
+    groups: dict = {}
+    for r, line, trade in rows:
+        key = (r.received_on, trade.vendor_id)
+        g = groups.get(key)
+        if g is None:
+            g = groups[key] = {"date": r.received_on, "vendor": vname.get(trade.vendor_id, "?"),
+                               "vendor_id": trade.vendor_id, "lines": [], "trade_ids": set(),
+                               "notes": [], "invoice": None, "total_qty": Decimal("0")}
+        batches = session.exec(select(TradePurchase).where(
+            TradePurchase.line_id == line.id,
+            TradePurchase.purchased_on == r.received_on)).all()
+        g["lines"].append({
+            "trade_id": trade.id, "trade_ref": trade.reference, "customer": vname.get(trade.purchaser_id, "?"),
+            "item": line.item_name, "unit": line.unit, "qty": Decimal(r.received_qty),
+            "batches": [{"qty": Decimal(b.quantity), "rate": Decimal(b.unit_cost)} for b in batches],
+            "receipt_id": r.id,
+        })
+        g["trade_ids"].add(trade.id)
+        g["total_qty"] += Decimal(r.received_qty)
+        if r.notes and r.notes not in g["notes"]:
+            g["notes"].append(r.notes)
+        if r.vendor_invoice_path and not g["invoice"]:
+            g["invoice"] = r.vendor_invoice_path
+
+    # attach bilty (summed across the group's trades for that date)
+    deliveries = []
+    for key, g in groups.items():
+        d = g["date"]
+        bilty_total = Decimal("0"); kg = Decimal("0"); terms = []; paid_cust = False
+        for tid in g["trade_ids"]:
+            for b in session.exec(select(TradeBilty).where(
+                    TradeBilty.trade_id == tid, TradeBilty.delivery_date == d)).all():
+                je = session.get(JournalEntry, b.journal_entry_id)
+                if je and not je.is_reversed:
+                    bilty_total += sum((Decimal(l.debit) for l in je.lines), Decimal("0"))
+                if b.weight_kgs:
+                    kg += Decimal(b.weight_kgs)
+                if b.paid_by_customer:
+                    paid_cust = True
+                if b.terminal_id:
+                    t = session.get(TradeTerminal, b.terminal_id)
+                    if t and t.name not in terms:
+                        terms.append(t.name)
+        g["bilty_total"] = bilty_total.quantize(Decimal("0.01"))
+        g["bilty_kg"] = kg
+        g["terminals"] = terms
+        g["paid_by_customer"] = paid_cust
+        g["trade_count"] = len(g["trade_ids"])
+        deliveries.append(g)
+    deliveries.sort(key=lambda x: x["date"], reverse=True)
+    return templates.TemplateResponse(
+        "trade_goods_received.html", _ctx(request, deliveries=deliveries),
+    )
+
+
+@router.get("/trades/receive/new", response_class=HTMLResponse)
+async def master_receive_modal(request: Request, session: Session = Depends(get_session)):
+    """Master Receive Voucher — one vendor delivery across many trades/items."""
+    from models import Account, AccountSubClass, TradeTerminal, TradeStatus
+    from services.trade import ReceiptService
+    user_id = DEFAULT_USER_ID
+    open_trades = [t for t in TradeService.list(session, user_id)
+                   if t.status in (TradeStatus.OPEN, TradeStatus.DELIVERED, TradeStatus.PARTIALLY_PAID)]
+    trades_data = []
+    for t in open_trades:
+        vendor = PartyService.get(session, user_id, t.vendor_id)
+        customer = PartyService.get(session, user_id, t.purchaser_id)
+        lines = []
+        pending = False
+        for ln in t.lines:
+            recv = ReceiptService.line_received_total(session, ln.id)
+            remaining = float(ln.quantity) - float(recv)
+            if remaining > 0.0005:
+                pending = True
+            # short spec summary for the picker (e.g. size / brand)
+            spec = " · ".join(f"{s.label}: {s.value}" for s in (ln.specs or []) if s.value)[:60]
+            lines.append({"id": ln.id, "name": ln.item_name, "unit": ln.unit,
+                          "ordered": float(ln.quantity), "received": float(recv),
+                          "remaining": remaining, "rate": float(ln.unit_cost), "spec": spec})
+        trades_data.append({"id": t.id, "ref": t.reference,
+                            "vendor": vendor.name if vendor else "?",
+                            "customer": customer.name if customer else "?",
+                            "date": t.trade_date.isoformat() if t.trade_date else "",
+                            "delivered": t.delivered_at is not None,
+                            "pending": pending, "lines": lines})
+    sub = session.exec(select(AccountSubClass).where(
+        AccountSubClass.user_id == user_id, AccountSubClass.code == "1100")).first()
+    cash = list(session.exec(select(Account).where(
+        Account.subclass_id == sub.id, Account.is_active == True)).all()) if sub else []  # noqa: E712
+    ceo = next((a for a in session.exec(select(Account).where(Account.user_id == user_id)).all()
+                if (a.name or "").strip().lower() in ("ibrahim (ceo)", "ceo", "funding")), None)
+    if ceo and ceo.id not in {a.id for a in cash}:
+        cash.append(ceo)
+    terminals = list(session.exec(select(TradeTerminal).where(
+        TradeTerminal.user_id == user_id).order_by(TradeTerminal.name)).all())
+    return templates.TemplateResponse(
+        "trade_master_receive_modal.html",
+        _ctx(request, trades_data=trades_data, cash_accounts=cash, terminals=terminals,
+             today=date.today(), default_cash_id=(ceo.id if ceo else (cash[0].id if cash else None))),
+    )
+
+
+@router.post("/trades/receive")
+async def master_receive_post(request: Request, session: Session = Depends(get_session)):
+    from services.trade import MasterReceiveService
+    import os, uuid
+    user_id = DEFAULT_USER_ID
+    form = await request.form()
+    received_on = _parse_date(form.get("received_on")) or date.today()
+    bilty_total = _parse_decimal(form.get("bilty_total"), "0")
+    bilty_by_customer = bool(form.get("bilty_by_customer"))
+    terminal = (form.get("terminal") or "").strip()
+    notes = (form.get("notes") or "").strip() or None
+    paid_from_raw = form.get("paid_from_id")
+    paid_from_id = int(paid_from_raw) if (paid_from_raw and str(paid_from_raw).isdigit()) else None
+
+    # one shared vendor-invoice image for the whole delivery
+    invoice_path = None
+    f = form.get("invoice")
+    if f is not None and hasattr(f, "filename") and f.filename:
+        upload_dir = "static/uploads/invoices"
+        os.makedirs(upload_dir, exist_ok=True)
+        ext = os.path.splitext(f.filename)[1].lower() or ".bin"
+        full_path = os.path.join(upload_dir, f"{uuid.uuid4().hex}{ext}")
+        with open(full_path, "wb") as out:
+            while True:
+                chunk = await f.read(64 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+        invoice_path = f"/{full_path}"
+
+    idxs = sorted({int(k.split("_")[1]) for k in form.keys()
+                   if k.startswith("row_") and k.endswith("_trade_id")})
+    rows = []
+    for i in idxs:
+        tid = form.get(f"row_{i}_trade_id")
+        lid = form.get(f"row_{i}_line_id")
+        qty = form.get(f"row_{i}_qty")
+        if not (tid and lid and qty):
+            continue
+        try:
+            if Decimal(str(qty)) <= 0:
+                continue
+        except Exception:
+            continue
+        rows.append({"trade_id": int(tid), "line_id": int(lid), "qty": qty,
+                     "rate": form.get(f"row_{i}_rate") or "0", "kg": form.get(f"row_{i}_kg") or "0"})
+    if not rows:
+        raise HTTPException(400, "Add at least one received line (trade, item, qty)")
+    MasterReceiveService.record(
+        session, user_id, received_on, rows, bilty_total=bilty_total,
+        terminal_name=terminal, paid_from_id=paid_from_id, notes=notes,
+        invoice_path=invoice_path, bilty_by_customer=bilty_by_customer)
+    return _close_modal()
+
+
 # ───────── trade-attributed cost (DR Capital A/C / CR payee) ────────
 
 
@@ -1206,6 +1406,61 @@ async def trade_line_delete(trade_id: int, line_id: int, session: Session = Depe
     return _close_modal()
 
 
+@router.get("/trades/{trade_id}/lines/new", response_class=HTMLResponse)
+async def trade_line_add_modal(trade_id: int, request: Request,
+                               session: Session = Depends(get_session)):
+    user_id = DEFAULT_USER_ID
+    trade = TradeService.get(session, user_id, trade_id)
+    if not trade:
+        raise HTTPException(404, "Trade not found")
+    # Previously-used spec values per label → autocomplete (same as create modal).
+    from models import TradeLineSpec as _TLS
+    spec_values: dict[str, list[str]] = {}
+    for lab, val in session.exec(select(_TLS.label, _TLS.value)).all():
+        lab, val = (lab or "").strip().lower(), (val or "").strip()
+        if lab and val and val not in spec_values.setdefault(lab, []):
+            spec_values[lab].append(val)
+    for k in spec_values:
+        spec_values[k].sort()
+    return templates.TemplateResponse(
+        "trade_line_add_modal.html",
+        _ctx(request, trade=trade,
+             items=ItemService.list(session, user_id, active_only=True),
+             spec_values=spec_values),
+    )
+
+
+@router.post("/trades/{trade_id}/lines")
+async def trade_line_add(trade_id: int, request: Request,
+                         session: Session = Depends(get_session)):
+    form = await request.form()
+    name = (form.get("item_name") or "").strip()
+    if not name:
+        raise HTTPException(400, "Item name is required")
+    specs = []
+    for lab, val in zip(form.getlist("spec_label"), form.getlist("spec_value")):
+        lab, val = (lab or "").strip(), (val or "").strip()
+        if lab or val:
+            specs.append({"label": lab or "Spec", "value": val})
+    raw_item_id = form.get("item_id")
+    ln = {
+        "item_id": int(raw_item_id) if (raw_item_id and str(raw_item_id).strip().isdigit()) else None,
+        "item_name": name,
+        "quantity": form.get("quantity") or "1",
+        "unit": (form.get("unit") or "pcs").strip() or "pcs",
+        "unit_cost": form.get("unit_cost") or "0",
+        "unit_price": form.get("unit_price") or "0",
+        "line_notes": (form.get("line_notes") or "").strip() or None,
+        "specs": specs,
+    }
+    trade = TradeService.add_line(session, DEFAULT_USER_ID, trade_id, ln)
+    if trade is None:
+        raise HTTPException(400, "Could not add line — trade not found or cancelled")
+    # re-post the ledger so cost/sale reflect the new line (like the edit path)
+    TradeService._repost_cost(session, TradeService.get(session, DEFAULT_USER_ID, trade_id))
+    return _close_modal()
+
+
 @router.get("/trades/{trade_id}/lines/{line_id}/edit", response_class=HTMLResponse)
 async def trade_line_edit_modal(trade_id: int, line_id: int, request: Request,
                                 session: Session = Depends(get_session)):
@@ -1326,12 +1581,28 @@ async def payment_create(
     method: Optional[str] = Form(None),
     reference: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
+    proof: Optional[UploadFile] = File(None),
     session: Session = Depends(get_session),
 ):
     user_id = DEFAULT_USER_ID
     amt = _parse_decimal(amount, "0")
     if amt <= 0:
         raise HTTPException(400, "Amount must be greater than zero")
+    # Optional proof-of-payment image (pasted screenshot / uploaded receipt).
+    proof_path = None
+    if proof is not None and getattr(proof, "filename", None):
+        import os, uuid
+        upload_dir = "static/uploads/payments"
+        os.makedirs(upload_dir, exist_ok=True)
+        ext = os.path.splitext(proof.filename)[1].lower() or ".png"
+        full_path = os.path.join(upload_dir, f"{uuid.uuid4().hex}{ext}")
+        with open(full_path, "wb") as out:
+            while True:
+                chunk = await proof.read(64 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+        proof_path = f"/{full_path}"
     # account_ref is "cash:<id>" (managed cash/bank account) or "gl:<id>" (any ledger account)
     try:
         kind, raw_id = account_ref.split(":", 1)
@@ -1354,6 +1625,7 @@ async def payment_create(
             method=(method or "").strip() or None,
             reference=(reference or "").strip() or None,
             notes=(notes or "").strip() or None,
+            proof_path=proof_path,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -1365,6 +1637,107 @@ async def payment_create(
 @router.post("/payments/{payment_id}/delete")
 async def payment_delete(payment_id: int, session: Session = Depends(get_session)):
     PaymentService.delete(session, DEFAULT_USER_ID, payment_id)
+    return _close_modal()
+
+
+def _gl_groups_for_receipt(session, user_id):
+    """Cash/bank + every GL account (grouped) a customer receipt can land in."""
+    from services import account_setup
+    accounts = [a for a in CashAccountService.list(session, user_id, active_only=True) if a.kind != "capital"]
+    cash_linked_ids = {a.account_id for a in accounts if a.account_id}
+    gl_groups = []
+    for cls_block in account_setup.list_accounts_grouped(session, user_id):
+        for sub_block in cls_block["subclasses"]:
+            sub = sub_block["subclass"]
+            accts = [a for a in sub_block["accounts"] if a.is_active and a.id not in cash_linked_ids]
+            if accts:
+                gl_groups.append({"label": f"{sub.code} · {sub.name}", "accounts": accts})
+        loose = [a for a in cls_block["accounts_without_subclass"] if a.is_active and a.id not in cash_linked_ids]
+        if loose:
+            gl_groups.append({"label": cls_block["class"].name, "accounts": loose})
+    return accounts, gl_groups
+
+
+@router.get("/payments/receive/new", response_class=HTMLResponse)
+async def master_receive_payment_modal(request: Request, session: Session = Depends(get_session)):
+    """Master Payment Receive — one customer receipt, auto-applied oldest-due-first
+    across that customer's outstanding trades."""
+    user_id = DEFAULT_USER_ID
+    customers = PartyService.list_customers(session, user_id)
+    accounts, gl_groups = _gl_groups_for_receipt(session, user_id)
+    return templates.TemplateResponse(
+        "trade_master_payment_modal.html",
+        _ctx(request, customers=customers, accounts=accounts, gl_groups=gl_groups, today=date.today()),
+    )
+
+
+@router.get("/payments/receive/preview", response_class=HTMLResponse)
+async def master_receive_payment_preview(
+    request: Request, customer_id: Optional[int] = Query(None),
+    amount: Optional[str] = Query(None), session: Session = Depends(get_session),
+):
+    user_id = DEFAULT_USER_ID
+    prev = None
+    if customer_id:
+        prev = MasterReceiptService.preview(session, user_id, customer_id, _parse_decimal(amount, "0"))
+    return templates.TemplateResponse(
+        "trade_master_payment_preview.html", _ctx(request, prev=prev),
+    )
+
+
+@router.post("/payments/receive")
+async def master_receive_payment_post(
+    request: Request,
+    customer_id: int = Form(...),
+    amount: str = Form(...),
+    account_ref: str = Form(...),
+    received_on: Optional[str] = Form(None),
+    method: Optional[str] = Form(None),
+    reference: Optional[str] = Form(None),
+    notes: Optional[str] = Form(None),
+    proof: Optional[UploadFile] = File(None),
+    session: Session = Depends(get_session),
+):
+    user_id = DEFAULT_USER_ID
+    amt = _parse_decimal(amount, "0")
+    if amt <= 0:
+        raise HTTPException(400, "Amount must be greater than zero")
+    try:
+        kind, raw_id = account_ref.split(":", 1)
+        ref_id = int(raw_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(400, "Invalid account selection")
+    if kind not in ("cash", "gl"):
+        raise HTTPException(400, "Invalid account selection")
+    proof_path = None
+    if proof is not None and getattr(proof, "filename", None):
+        import os, uuid
+        upload_dir = "static/uploads/payments"
+        os.makedirs(upload_dir, exist_ok=True)
+        ext = os.path.splitext(proof.filename)[1].lower() or ".png"
+        full_path = os.path.join(upload_dir, f"{uuid.uuid4().hex}{ext}")
+        with open(full_path, "wb") as out:
+            while True:
+                chunk = await proof.read(64 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+        proof_path = f"/{full_path}"
+    try:
+        res = MasterReceiptService.record(
+            session, user_id, customer_id=customer_id, amount=amt,
+            received_on=_parse_date(received_on),
+            cash_account_id=ref_id if kind == "cash" else None,
+            gl_account_id=ref_id if kind == "gl" else None,
+            method=(method or "").strip() or None,
+            reference=(reference or "").strip() or None,
+            notes=(notes or "").strip() or None,
+            proof_path=proof_path,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error", "Could not apply the payment"))
     return _close_modal()
 
 
@@ -1427,6 +1800,7 @@ def _party_form_payload(form_values: dict) -> dict:
         "tax_id": (form_values.get("tax_id") or "").strip() or None,
         "default_customer_terms_days": int(form_values.get("default_customer_terms_days") or 30),
         "default_vendor_terms_days": int(form_values.get("default_vendor_terms_days") or 7),
+        "max_payment_delay_days": max(0, int(form_values.get("max_payment_delay_days") or 1)),
         "opening_balance": _parse_decimal(form_values.get("opening_balance"), "0"),
         "opening_balance_date": _parse_date(form_values.get("opening_balance_date")),
         "notes": (form_values.get("notes") or "").strip() or None,
@@ -2267,14 +2641,64 @@ async def reports_cashflow_management(
     session: Session = Depends(get_session),
 ):
     from services.analytics import cash_flow_management
+    # What-if slider overrides arrive as query params d_<party_id>=<days>. They
+    # only preview — nothing is saved unless the user clicks Save (POST below).
+    overrides = {}
+    for k, v in request.query_params.items():
+        if k.startswith("d_"):
+            try:
+                overrides[int(k[2:])] = max(0, min(60, int(float(v))))
+            except (ValueError, TypeError):
+                pass
     r = cash_flow_management(
         session, DEFAULT_USER_ID, horizon_days=max(30, min(365, horizon)),
         inject_amount=(inject if inject and inject > 0 else None),
         inject_on=_parse_date(inject_on),
+        delay_overrides=overrides or None,
     )
     return templates.TemplateResponse(
         "trade_report_cashflow_management.html", _ctx(request, report=r),
     )
+
+
+@router.post("/reports/cashflow-management/delays")
+async def reports_cashflow_save_delays(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    """Persist the vendor max-payment-delay sliders as each party's stored default."""
+    form = await request.form()
+    for k, v in form.items():
+        if not k.startswith("d_"):
+            continue
+        try:
+            pid = int(k[2:]); days = max(0, min(60, int(float(v))))
+        except (ValueError, TypeError):
+            continue
+        p = session.get(Party, pid)
+        if p and p.user_id == DEFAULT_USER_ID:
+            p.max_payment_delay_days = days
+            session.add(p)
+    session.commit()
+    return RedirectResponse("/trade/reports/cashflow-management", status_code=303)
+
+
+@router.post("/reports/cashflow-management/expected-date")
+async def reports_cashflow_set_expected_date(
+    trade_id: int = Form(...),
+    expected_date: Optional[str] = Form(None),
+    session: Session = Depends(get_session),
+):
+    """Owner sets (or clears) the expected arrival date for goods still on order,
+    so Cash Flow Management schedules that trade's supply payment from this date
+    instead of guessing from vendor history."""
+    from models import Trade
+    t = session.get(Trade, trade_id)
+    if t and t.user_id == DEFAULT_USER_ID:
+        t.expected_delivery_date = _parse_date(expected_date)
+        session.add(t)
+        session.commit()
+    return RedirectResponse("/trade/reports/cashflow-management", status_code=303)
 
 
 @router.get("/reports/customer-profitability", response_class=HTMLResponse)
@@ -2341,7 +2765,7 @@ async def reports_working_capital(
 @router.get("/reports/forecast", response_class=HTMLResponse)
 async def reports_forecast(request: Request, session: Session = Depends(get_session)):
     from services.analytics import bank_position_forecast
-    r = bank_position_forecast(session, DEFAULT_USER_ID)
+    r = bank_position_forecast(session, DEFAULT_USER_ID, net_prepaid=True)
     return templates.TemplateResponse("trade_report_forecast.html", _ctx(request, report=r))
 
 
@@ -2478,6 +2902,15 @@ async def reports_aging(request: Request, session: Session = Depends(get_session
     )
 
 
+@router.get("/reports/ap-aging", response_class=HTMLResponse)
+async def reports_ap_aging(request: Request, session: Session = Depends(get_session)):
+    user_id = DEFAULT_USER_ID
+    report = TradeReportService.ap_aging_report(session, user_id)
+    return templates.TemplateResponse(
+        "trade_report_ap_aging.html", _ctx(request, report=report, today=date.today())
+    )
+
+
 @router.get("/reports/pending-receivables", response_class=HTMLResponse)
 async def reports_pending_receivables(request: Request, session: Session = Depends(get_session)):
     user_id = DEFAULT_USER_ID
@@ -2564,13 +2997,13 @@ async def reports_vendor_pending_pdf(vendor_id: int, session: Session = Depends(
         b_qty = Decimal("0")
         b_val = Decimal("0")
         for tr, ln, sm in by_brand[brand]:
-            size = sm.get("size") or "—"
-            other = " · ".join(f"{k}: {val}" for k, val in sm.items() if k not in ("brand", "size") and val)
-            size_html = f"<b><font size='10' color='#c2410c'>{size}</font></b>"
-            if other:
-                size_html += f"<br/><font color='#65675e' size='8'>{other}</font>"
+            # Item NAME in bold, full spec line (size, colours, micron…) beneath.
+            specs_line = " · ".join(f"{k}: {val}" for k, val in sm.items() if k != "brand" and val)
+            item_html = f"<b><font size='9.5'>{ln['item_name']}</font></b>"
+            if specs_line:
+                item_html += f"<br/><font color='#65675e' size='8'>{specs_line}</font>"
             rows.append([
-                size_html,
+                item_html,
                 tr["trade_date"].strftime("%d-%b-%Y") if tr["trade_date"] else "—",
                 qty(ln["ordered_qty"]),
                 qty(ln["received_qty"]),
@@ -2582,9 +3015,9 @@ async def reports_vendor_pending_pdf(vendor_id: int, session: Session = Depends(
             b_val += Decimal(ln["pending_value"])
         sections.append(SectionTitle(f"Brand: {brand}", keep_with_next=True))
         sections.append(TableSpec(
-            headers=["Size", "Order Date", "Ordered", "Received", "Pending", "Rate", "Pending Value"],
+            headers=["Item", "Order Date", "Ordered", "Received", "Pending", "Rate", "Pending Value"],
             rows=rows,
-            col_widths=[95, 70, 60, 60, 60, 55, 85],
+            col_widths=[150, 62, 52, 55, 52, 48, 78],
             num_cols={2, 3, 4, 5, 6},
             totals_row=["", "", "", "", qty(b_qty), "Subtotal", pkr(b_val)],
         ))
@@ -2606,6 +3039,288 @@ async def reports_vendor_pending_pdf(vendor_id: int, session: Session = Depends(
         brand="IBRAHIM TRADERS",
     ))
     fname = f"Pending-Goods-{vendor.name.replace(' ','_')}.pdf"
+    return Response(content=buf.getvalue(), media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{fname}"'})
+
+
+@router.get("/reports/customer-pending", response_class=HTMLResponse)
+async def reports_customer_pending(
+    request: Request, customer_id: Optional[int] = Query(None),
+    item_id: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
+):
+    """Goods we still owe to DELIVER to a single customer — pick a customer (and
+    optionally an item), then export a delivery-pending list."""
+    user_id = DEFAULT_USER_ID
+    item_id = int(item_id) if (item_id and str(item_id).strip().isdigit()) else None
+    customers = PartyService.list_customers(session, user_id)
+    selected = None
+    items = []
+    if customer_id:
+        report = TradeReportService.customer_pending_goods(session, user_id)
+        selected = next((c for c in report["customers"] if c["customer_id"] == customer_id), None)
+        if selected is None:
+            c = PartyService.get(session, user_id, customer_id)
+            selected = {"customer_id": customer_id, "customer_name": c.name if c else "—",
+                        "trades": [], "pending_value": Decimal("0"), "pending_qty": Decimal("0"),
+                        "trade_count": 0}
+        else:
+            # distinct items in this customer's pending goods (for the item filter)
+            seen = {}
+            for tr in selected["trades"]:
+                for ln in tr["lines"]:
+                    if ln.get("item_id") and ln["item_id"] not in seen:
+                        seen[ln["item_id"]] = ln["item_name"]
+            items = sorted(({"id": k, "name": v} for k, v in seen.items()), key=lambda x: x["name"])
+            if item_id:
+                selected = _filter_pending_by_item(selected, item_id)
+    return templates.TemplateResponse(
+        "trade_report_customer_pending.html",
+        _ctx(request, customers=customers, selected=selected, items=items,
+             selected_id=customer_id, selected_item=item_id, today=date.today()),
+    )
+
+
+def _filter_pending_by_item(selected: dict, item_id: int) -> dict:
+    """Keep only lines for the given item; recompute per-trade and customer totals."""
+    trades = []
+    tot_val = Decimal("0")
+    tot_qty = Decimal("0")
+    for tr in selected["trades"]:
+        lines = [ln for ln in tr["lines"] if ln.get("item_id") == item_id]
+        if not lines:
+            continue
+        pv = sum((Decimal(ln["pending_value"]) for ln in lines), Decimal("0"))
+        pq = sum((Decimal(ln["pending_qty"]) for ln in lines), Decimal("0"))
+        trades.append({**tr, "lines": lines,
+                       "pending_value": pv.quantize(Decimal("0.01")),
+                       "pending_qty": pq.quantize(Decimal("0.001"))})
+        tot_val += pv
+        tot_qty += pq
+    return {**selected, "trades": trades,
+            "pending_value": tot_val.quantize(Decimal("0.01")),
+            "pending_qty": tot_qty.quantize(Decimal("0.001")),
+            "trade_count": len(trades)}
+
+
+@router.get("/reports/customer-pending/{customer_id}.pdf")
+async def reports_customer_pending_pdf(
+    customer_id: int, item_id: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
+):
+    from io import BytesIO
+    from services.pdf_helper import (
+        render_report_pdf, ReportSpec, KpiSpec, TableSpec, SectionTitle, ParagraphBlock, CalloutCard,
+    )
+    user_id = DEFAULT_USER_ID
+    customer = PartyService.get(session, user_id, customer_id)
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    report = TradeReportService.customer_pending_goods(session, user_id)
+    c = next((x for x in report["customers"] if x["customer_id"] == customer_id), None)
+    _iid = int(item_id) if (item_id and str(item_id).strip().isdigit()) else None
+    if c and _iid:
+        c = _filter_pending_by_item(c, _iid)
+
+    def pkr(x):
+        try: return f"Rs. {Decimal(str(x)):,.2f}"
+        except Exception: return f"Rs. {x}"
+
+    def qty(x):
+        return f"{float(x):,g}"
+
+    # Group every pending line by BRAND (from its spec map), same as the vendor
+    # statement, so a delivery/packing list reads brand-by-brand.
+    by_brand: dict[str, list] = {}
+    total_qty = Decimal("0")
+    total_val = Decimal("0")
+    if c:
+        for tr in c["trades"]:
+            for ln in tr["lines"]:
+                sm = ln.get("specs_map", {})
+                brand = sm.get("brand") or customer.name or "Unspecified brand"
+                by_brand.setdefault(brand, []).append((tr, ln, sm))
+                total_qty += Decimal(ln["pending_qty"])
+                total_val += Decimal(ln["pending_value"])
+
+    sections = [
+        SectionTitle("Deliver To"),
+        ParagraphBlock("<br/>".join(filter(None, [
+            f"<b>{customer.name}</b>",
+            customer.contact_person or "",
+            (f"Phone: {customer.phone}" if customer.phone else ""),
+            (customer.city or ""),
+        ]))),
+        SectionTitle("Goods Still To Be Delivered — by Brand"),
+    ]
+    if not by_brand:
+        sections.append(ParagraphBlock("<i>Nothing pending for this customer — everything ordered has been delivered.</i>"))
+    for brand in sorted(by_brand):
+        rows = []
+        b_qty = Decimal("0")
+        b_val = Decimal("0")
+        for tr, ln, sm in by_brand[brand]:
+            # Item NAME in bold, with the full spec line (size, colours, micron…)
+            # underneath — this statement goes to the customer, who ordered by
+            # product name.
+            specs_line = " · ".join(f"{k}: {val}" for k, val in sm.items() if k != "brand" and val)
+            item_html = f"<b><font size='9.5'>{ln['item_name']}</font></b>"
+            if specs_line:
+                item_html += f"<br/><font color='#65675e' size='8'>{specs_line}</font>"
+            rows.append([
+                item_html,
+                tr["trade_date"].strftime("%d-%b-%Y") if tr["trade_date"] else "—",
+                qty(ln["ordered_qty"]),
+                qty(ln["received_qty"]),
+                qty(ln["pending_qty"]),
+                pkr(ln["unit_price"]),
+                pkr(ln["pending_value"]),
+            ])
+            b_qty += Decimal(ln["pending_qty"])
+            b_val += Decimal(ln["pending_value"])
+        sections.append(SectionTitle(f"Brand: {brand}", keep_with_next=True))
+        sections.append(TableSpec(
+            headers=["Item", "Order Date", "Ordered", "Delivered", "Pending", "Rate", "Pending Value"],
+            rows=rows,
+            col_widths=[150, 62, 52, 55, 52, 48, 78],
+            num_cols={2, 3, 4, 5, 6},
+            totals_row=["", "", "", "", qty(b_qty), "Subtotal", pkr(b_val)],
+        ))
+    sections.append(CalloutCard(label="Total Pending Value", value=pkr(total_val),
+                                suffix="The goods above are yet to be dispatched to you — we'll deliver them shortly."))
+
+    buf = BytesIO()
+    render_report_pdf(buf, ReportSpec(
+        title="Pending Deliveries",
+        subtitle_parts=[f"Customer: {customer.name}", f"As of {date.today().strftime('%B %d, %Y')}"],
+        kpis=[
+            KpiSpec("Pending Value", pkr(total_val)),
+            KpiSpec("Pending Qty", f"{qty(total_qty)} pcs"),
+            KpiSpec("Open Trades", str(len(c["trades"]) if c else 0)),
+        ],
+        sections=sections,
+        footer_subtitle="Ibrahim Traders · pending deliveries",
+        generated_label="As of",
+        brand="IBRAHIM TRADERS",
+    ))
+    fname = f"Pending-Deliveries-{customer.name.replace(' ','_')}.pdf"
+    return Response(content=buf.getvalue(), media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{fname}"'})
+
+
+@router.get("/reports/goods-sent", response_class=HTMLResponse)
+async def reports_goods_sent(
+    request: Request, customer_id: Optional[int] = Query(None),
+    date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
+):
+    """Dated goods-sent (dispatch) statement for a customer, grouped by PO (trade)."""
+    user_id = DEFAULT_USER_ID
+    customers = PartyService.list_customers(session, user_id)
+    report = None
+    if customer_id:
+        report = TradeReportService.goods_sent_report(
+            session, user_id, customer_id,
+            from_date=_parse_date(date_from), to_date=_parse_date(date_to))
+    return templates.TemplateResponse(
+        "trade_report_goods_sent.html",
+        _ctx(request, customers=customers, report=report,
+             selected_id=customer_id, date_from=date_from or "", date_to=date_to or "",
+             today=date.today()),
+    )
+
+
+@router.get("/reports/goods-sent/{customer_id}.pdf")
+async def reports_goods_sent_pdf(
+    customer_id: int, date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
+):
+    from io import BytesIO
+    from services.pdf_helper import (
+        render_report_pdf, ReportSpec, KpiSpec, TableSpec, SectionTitle, ParagraphBlock, CalloutCard,
+    )
+    user_id = DEFAULT_USER_ID
+    customer = PartyService.get(session, user_id, customer_id)
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    df = _parse_date(date_from); dt = _parse_date(date_to)
+    report = TradeReportService.goods_sent_report(session, user_id, customer_id, from_date=df, to_date=dt)
+
+    def qty(x):
+        return f"{float(x):,g}"
+
+    period = "All dates"
+    if df or dt:
+        period = f"{df.strftime('%d-%b-%Y') if df else '…'} → {dt.strftime('%d-%b-%Y') if dt else '…'}"
+
+    sections = [
+        SectionTitle("Sent To"),
+        ParagraphBlock("<br/>".join(filter(None, [
+            f"<b>{customer.name}</b>",
+            customer.contact_person or "",
+            (f"Phone: {customer.phone}" if customer.phone else ""),
+            (customer.city or ""),
+        ]))),
+        SectionTitle("Order vs Delivery — by PO"),
+    ]
+    if not report["pos"]:
+        sections.append(ParagraphBlock("<i>No goods dispatched to this customer in the selected period.</i>"))
+    for po in report["pos"]:
+        po_bits = [f"ordered {qty(po['ordered'])}", f"sent {qty(po['sent'])}"]
+        if po["pending"] > 0:
+            po_bits.append(f"pending {qty(po['pending'])}")
+        if po["overflow"] > 0:
+            po_bits.append(f"over {qty(po['overflow'])}")
+        po_title = (f"PO #{po['po_no']} — ordered "
+                    f"{po['trade_date'].strftime('%d-%b-%Y') if po['trade_date'] else '—'}"
+                    f"   ({' · '.join(po_bits)})")
+        sections.append(SectionTitle(po_title, keep_with_next=True))
+        for it in po["items"]:
+            hdr = (f"<b><font size='9.5'>{it['item_name']}</font></b>"
+                   f" &nbsp;<font color='#4338ca' size='8.5'>Ordered {qty(it['ordered'])} {it['unit']}</font>")
+            if it["specs"]:
+                hdr += f"<br/><font color='#65675e' size='8'>{it['specs']}</font>"
+            sections.append(ParagraphBlock(hdr))
+            rows = []
+            if it["prior_count"]:
+                rows.append([f"{it['prior_count']} earlier (before period)", "", f"-{qty(it['prior_qty'])}"])
+            for dv in it["deliveries"]:
+                rows.append([dv["date"].strftime("%d-%b-%Y"), qty(dv["qty"]), qty(dv["remaining"])])
+            if it["pending"] > 0:
+                close = f"Pending {qty(it['pending'])}"
+            elif it["overflow"] > 0:
+                close = f"Over-delivered {qty(it['overflow'])}"
+            else:
+                close = "Complete"
+            sections.append(TableSpec(
+                headers=["Sent On", "Quantity", "Remaining"],
+                rows=rows, col_widths=[170, 120, 120], num_cols={1, 2},
+                totals_row=[f"Delivered {qty(it['delivered'])}", "", close],
+            ))
+    sections.append(CalloutCard(
+        label="For the period",
+        value=f"{qty(report['total_qty'])} pcs sent",
+        suffix=(f"of {qty(report['total_ordered'])} pcs ordered · "
+                f"{qty(report['total_pending'])} pcs still to deliver"
+                + (f" · {qty(report['total_overflow'])} pcs over-delivered" if report['total_overflow'] > 0 else "")
+                + ".")))
+
+    buf = BytesIO()
+    render_report_pdf(buf, ReportSpec(
+        title="Goods Sent Statement",
+        subtitle_parts=[f"Customer: {customer.name}", f"Period: {period}"],
+        kpis=[
+            KpiSpec("Ordered", f"{qty(report['total_ordered'])} pcs"),
+            KpiSpec("Sent", f"{qty(report['total_qty'])} pcs"),
+            KpiSpec("Pending", f"{qty(report['total_pending'])} pcs"),
+            KpiSpec("Over-delivered", f"{qty(report['total_overflow'])} pcs"),
+        ],
+        sections=sections,
+        footer_subtitle="Ibrahim Traders · goods sent",
+        generated_label="Generated",
+        brand="IBRAHIM TRADERS",
+    ))
+    fname = f"Goods-Sent-{customer.name.replace(' ', '_')}.pdf"
     return Response(content=buf.getvalue(), media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="{fname}"'})
 
@@ -3112,7 +3827,9 @@ def _serve_trade_doc(kind: str, trade_id: int, session: Session):
         date_label = date.today().strftime("%b-%d-%Y")
         filename = f"{safe_customer}-{date_label}.pdf"
     else:
-        filename = f"{kind}-{trade.reference}.pdf"
+        # numeric part only — keep our internal "TRD-" scheme off shared files
+        ref_num = (trade.reference or "").split("-")[-1] or (trade.reference or "")
+        filename = f"{kind}-{ref_num}.pdf"
     return Response(
         content=pdf, media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{filename}"'},

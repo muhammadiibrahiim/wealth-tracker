@@ -65,8 +65,9 @@
           <td class="text-right tabular-nums font-bold text-orange-900">{{ currency }} {{ '{:,.2f}'.format(g.totals.credit) }}</td>
         </tr>
         {% for r in g.rows %}
-        <tr>
-          <td class="font-mono text-xs text-gray-600 pl-8">{{ r.account.code }}</td>
+        <tr class="hover:bg-indigo-50 transition" style="cursor:pointer;"
+            {% if r.account.id %}onclick="window.location='/trade/reports/general-ledger?account_id={{ r.account.id }}'"{% endif %}>
+          <td class="font-mono text-xs pl-8">{% if r.account.id %}<a href="/trade/reports/general-ledger?account_id={{ r.account.id }}" class="text-indigo-600 hover:underline" onclick="event.stopPropagation()">{{ r.account.code }}</a>{% else %}<span class="text-gray-600">{{ r.account.code }}</span>{% endif %}</td>
           <td class="text-gray-900">{{ r.account.name }}</td>
           <td class="text-right tabular-nums">{% if r.debit > 0 %}<span class="text-gray-900 font-medium">{{ currency }} {{ '{:,.2f}'.format(r.debit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
           <td class="text-right tabular-nums">{% if r.credit > 0 %}<span class="text-gray-900 font-medium">{{ currency }} {{ '{:,.2f}'.format(r.credit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}</td>

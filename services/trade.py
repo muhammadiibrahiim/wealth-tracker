@@ -630,6 +630,24 @@ class TradeService:
         return sum((Decimal(ln.debit) - Decimal(ln.credit) for ln in rows), ZERO)
 
     @staticmethod
+    def _trade_vendor_ap_owed(session: Session, trade: Trade, vendor_acct_id: int) -> Decimal:
+        """What this trade currently owes the vendor on the A/P ledger =
+        credits − debits on the vendor account for this trade (un-reversed).
+        Positive = we still owe (delivered/invoiced goods); ≤0 = fully paid.
+        Drives the payment split: a payment reduces this owed balance first,
+        and only the EXCESS becomes a prepaid Advance-to-Vendors asset."""
+        rows = session.exec(
+            select(JournalLine).join(
+                JournalEntry, JournalLine.journal_entry_id == JournalEntry.id
+            ).where(
+                JournalEntry.trade_id == trade.id,
+                JournalEntry.is_reversed == False,  # noqa: E712
+                JournalLine.account_id == vendor_acct_id,
+            )
+        ).all()
+        return sum((Decimal(ln.credit) - Decimal(ln.debit) for ln in rows), ZERO)
+
+    @staticmethod
     def _purge_advance_accrual(session: Session, trade: Trade) -> None:
         """Hard-delete the vendor-advance accrual entry (+ any reversals) so
         re-deriving the advance leaves no correction clutter."""
@@ -663,50 +681,19 @@ class TradeService:
 
     @staticmethod
     def _post_advance_accrual(session: Session, trade: Trade) -> None:
-        """(Re)post the vendor-advance accrual so it matches the trade's current
-        advance amount. Idempotent: if it already matches, no-op; if the amount
-        changed (or dropped to 0), purge and repost. Posts as a JOURNAL entry so
-        it is never confused with a delivery PURCHASE by the event-posting
-        idempotency/legacy checks."""
-        from services.posting import PostingEngine
-        from services import account_setup
-        if trade.status == TradeStatus.CANCELLED or not trade.vendor_id:
-            return
-        target = TradeService._vendor_advance_amount(trade)
-        existing = session.exec(
-            select(JournalEntry).where(
-                JournalEntry.user_id == trade.user_id,
-                JournalEntry.trade_id == trade.id,
-                JournalEntry.is_reversed == False,  # noqa: E712
-                JournalEntry.description.contains(TradeService.ADVANCE_TAG),
-            )
-        ).first()
-        current = sum((Decimal(ln.debit) for ln in existing.lines), ZERO) if existing else ZERO
-        if existing and abs(current - target) <= Decimal("0.005"):
-            return
-        if existing:
+        """RECONCILIATION-CLEAN MODEL — vendor advances are NO LONGER accrued at
+        trade open. Accruing DR Advance / CR Vendor A/P inflated the vendor's A/P
+        before they invoiced us, so our ledger never tied to the vendor's own
+        statement until delivery. Now an advance is recognised only when it is
+        actually PAID (the vendor payment routes the pre-delivery portion into the
+        'Advance to Vendors' asset — see PaymentService._post_payment_journal), so
+        Vendor A/P holds ONLY invoiced/delivered balances and reconciles with the
+        party. This method now just clears any legacy accrual so old data heals on
+        the next repost; the call sites are kept as a no-op safety net."""
+        try:
             TradeService._purge_advance_accrual(session, trade)
-        if target <= Decimal("0.005"):
-            return
-        vendor = session.get(Party, trade.vendor_id)
-        adv_acct = TradeService._advance_to_vendors_acct(session, trade.user_id)
-        vendor_acct = account_setup.sync_party_account(session, trade.user_id, vendor)
-        if not adv_acct or not vendor_acct:
-            return
-        PostingEngine.post(
-            session, trade.user_id, entry_date=trade.trade_date,
-            entry_type=JournalEntryType.JOURNAL,
-            description=f"Vendor advance accrual — {vendor.name} ({trade.reference}) {TradeService.ADVANCE_TAG}",
-            lines=[
-                {"account_id": adv_acct.id, "debit": target, "credit": 0,
-                 "description": f"Advance committed to {vendor.name} ({trade.reference})",
-                 "party_id": vendor.id},
-                {"account_id": vendor_acct.id, "debit": 0, "credit": target,
-                 "description": f"Advance payable to {vendor.name} ({trade.reference})",
-                 "party_id": vendor.id},
-            ],
-            trade_id=trade.id,
-        )
+        except Exception:
+            pass
 
     @staticmethod
     def payment_schedule(trade: Trade, side: str, total=None, delivery_date=None) -> list:
@@ -1017,7 +1004,10 @@ class TradeService:
         """Hard-delete a delivery event's sale/purchase/profit-close journals
         (and any reversals already chained off them) — used when a receipt is
         edited or deleted, so corrections leave NO reversal clutter in the
-        ledger. Bilty entries (tagged differently) are untouched.
+        ledger. Bilty entries (its EXPENSE *and* its "cost close" JV) are managed
+        by the bilty flow and MUST be excluded here — the close description also
+        contains ` · {date}`, so without this guard a re-post would delete it and
+        strand the bilty expense unclosed in the P&L A/C.
         """
         event_tag = f" · {event_date.isoformat()}"
         entries = list(session.exec(
@@ -1025,6 +1015,7 @@ class TradeService:
                 JournalEntry.user_id == trade.user_id,
                 JournalEntry.trade_id == trade.id,
                 JournalEntry.description.contains(event_tag),
+                ~JournalEntry.description.contains("[bilty"),   # keep bilty + its close
             )
         ).all())
         if not entries:
@@ -1197,6 +1188,41 @@ class TradeService:
         return True
 
     @staticmethod
+    def trade_costs_total(session: Session, user_id: int, trade: Trade) -> Decimal:
+        """Direct costs of executing a trade — Record Cost entries + bilty — on
+        the SAME basis as the trade-detail net-profit card, so list and detail
+        agree. net_profit = total_sale − total_cost − trade_costs_total."""
+        from models import Account
+        pl = session.exec(select(Account).where(
+            Account.user_id == user_id, Account.code == "3903")).first()
+        capital = session.exec(select(Account).where(
+            Account.user_id == user_id, Account.name == "Capital A/C")).first()
+        skip = {a.id for a in (pl, capital) if a}
+        total = ZERO
+        # Record Cost entries ("{ref} cost:") — the payee credit (not P&L/Capital).
+        for e in session.exec(select(JournalEntry).where(
+                JournalEntry.user_id == user_id, JournalEntry.trade_id == trade.id,
+                JournalEntry.entry_type.in_([JournalEntryType.JOURNAL, JournalEntryType.EXPENSE]),
+                JournalEntry.is_reversed == False,  # noqa: E712
+                JournalEntry.description.like(f"{trade.reference} cost:%"))).all():
+            for ln in e.lines:
+                if ln.account_id not in skip and Decimal(ln.credit or 0) > 0:
+                    total += Decimal(ln.credit)
+                    break
+        # Bilty ("[bilty-for:]") — the P&L (3903) debit.
+        if pl:
+            for e in session.exec(select(JournalEntry).where(
+                    JournalEntry.user_id == user_id, JournalEntry.trade_id == trade.id,
+                    JournalEntry.entry_type == JournalEntryType.EXPENSE,
+                    JournalEntry.is_reversed == False,  # noqa: E712
+                    JournalEntry.description.like("%[bilty-for:%"))).all():
+                for ln in e.lines:
+                    if ln.account_id == pl.id and Decimal(ln.debit or 0) > 0:
+                        total += Decimal(ln.debit)
+                        break
+        return total.quantize(Decimal("0.01"))
+
+    @staticmethod
     def _recompute_totals(trade: Trade) -> None:
         cost = ZERO
         sale = ZERO
@@ -1308,14 +1334,30 @@ class TradeService:
         if session is not None:
             settled += TradeService._customer_credits(session, trade)
 
+        fully_delivered = (
+            trade.delivered_at is not None or TradeService._fully_received(trade)
+        )
         if trade.total_sale > ZERO and settled >= Decimal(trade.total_sale):
-            trade.status = TradeStatus.PAID
+            # Fully paid AND fully delivered → the whole cycle is done.
+            trade.status = TradeStatus.COMPLETED if fully_delivered else TradeStatus.PAID
         elif settled > ZERO:
             trade.status = TradeStatus.PARTIALLY_PAID
         elif trade.delivered_at is not None:
             trade.status = TradeStatus.DELIVERED
         else:
             trade.status = TradeStatus.OPEN
+
+    @staticmethod
+    def _fully_received(trade: Trade) -> bool:
+        """True when every ordered line has been fully received (goods all in).
+        Used, alongside delivered_at, to mark a paid trade COMPLETED."""
+        if not trade.lines:
+            return False
+        for ln in trade.lines:
+            received = sum((Decimal(r.received_qty) for r in (ln.receipts or [])), ZERO)
+            if received < Decimal(ln.quantity):
+                return False
+        return True
 
     @staticmethod
     def customer_outstanding(session: Session, trade: Trade) -> Decimal:
@@ -1596,6 +1638,150 @@ class ReceiptService:
         return True
 
 
+# ─────────────────────── Master Receive Voucher ───────────────────────
+
+
+class MasterReceiveService:
+    """One vendor delivery spanning MANY trades / items / purchase rates, with a
+    single bilty split across them by weight.
+
+    Each row = {trade_id, line_id, qty, rate, kg}. Two rows for the same line at
+    different rates stay as two PURCHASE batches (weighted-avg cost), but collapse
+    into ONE receipt line (so the customer sees a single delivery). The one bilty
+    total is allocated across trades in proportion to kg, then posted as each
+    trade's bilty (P&L → Capital, same as the per-trade bilty flow).
+    """
+
+    @staticmethod
+    def _post_bilty(session, user_id, trade, d, amount, kgs, terminal_name, paid_from_id,
+                    customer_paid=False):
+        """Post a bilty EXPENSE (Dr 3903 / Cr cash — OR Cr the customer's A/R when
+        the customer paid it on our behalf) + close-to-Capital + TradeBilty meta,
+        matching the existing bilty format so all readers pick it up."""
+        from models import (Account, JournalEntryType as _JET, TradeBilty, TradeTerminal, Party)
+        from services.posting import PostingEngine
+        from services import account_setup
+        if amount is None or amount <= 0:
+            return
+        pl = session.exec(select(Account).where(Account.user_id == user_id, Account.code == "3903")).first()
+        capital = session.exec(select(Account).where(Account.user_id == user_id, Account.name == "Capital A/C")).first()
+        di = d.isoformat()
+        desc = f"Bilty for delivery on {di}"
+        if customer_paid:
+            # customer covered the freight → their receivable reduces
+            purchaser = session.get(Party, trade.purchaser_id) if trade.purchaser_id else None
+            cr = account_setup.sync_party_account(session, user_id, purchaser) if purchaser else None
+            cr_party = purchaser.id if purchaser else None
+            tag_suffix = " [paid-by-customer]"
+            cr_desc = desc + " (paid by customer)"
+        else:
+            cr = session.get(Account, paid_from_id) if paid_from_id else None
+            if cr is None:
+                cr = session.exec(select(Account).where(Account.user_id == user_id, Account.code == "1101")).first()
+            if cr is None:   # fall back to CEO/funding float
+                cr = next((a for a in session.exec(select(Account).where(Account.user_id == user_id)).all()
+                           if (a.name or "").strip().lower() in ("ibrahim (ceo)", "ceo", "funding")), None)
+            cr_party = None
+            tag_suffix = ""
+            cr_desc = desc
+        if not (pl and capital and cr):
+            return
+        full_desc = f"{trade.reference} {desc} [bilty-for:{di}]{tag_suffix}"
+        je = PostingEngine.post(
+            session, user_id, entry_date=d, entry_type=_JET.EXPENSE, description=full_desc,
+            lines=[
+                {"account_id": pl.id, "debit": amount, "credit": 0, "description": desc, "party_id": None},
+                {"account_id": cr.id, "debit": 0, "credit": amount, "description": cr_desc, "party_id": cr_party},
+            ], trade_id=trade.id,
+        )
+        PostingEngine.post(
+            session, user_id, entry_date=d, entry_type=_JET.JOURNAL,
+            description=f"Bilty cost close — {trade.reference} · {di} (closes {je.reference}) [bilty-close-for:{di}]",
+            lines=[
+                {"account_id": capital.id, "debit": amount, "credit": 0, "description": f"Bilty → Capital ({trade.reference} · {di})"},
+                {"account_id": pl.id, "debit": 0, "credit": amount, "description": f"Close P&L A/C — bilty for {di}"},
+            ], trade_id=trade.id,
+        )
+        term_id = None
+        if terminal_name:
+            term = session.exec(select(TradeTerminal).where(
+                TradeTerminal.user_id == user_id, TradeTerminal.name == terminal_name)).first()
+            if not term:
+                term = TradeTerminal(user_id=user_id, name=terminal_name)
+                session.add(term); session.flush()
+            term_id = term.id
+        session.add(TradeBilty(
+            user_id=user_id, trade_id=trade.id, delivery_date=d, journal_entry_id=je.id,
+            weight_kgs=(Decimal(str(kgs)) if kgs else None), terminal_id=term_id,
+            paid_by_customer=customer_paid))
+        session.commit()
+
+    @staticmethod
+    def record(session: Session, user_id: int, received_on: date, rows: list,
+               bilty_total: Decimal = ZERO, terminal_name: str = "",
+               paid_from_id: Optional[int] = None, notes: Optional[str] = None,
+               invoice_path: Optional[str] = None, bilty_by_customer: bool = False) -> list:
+        """rows: [{trade_id, line_id, qty, rate, kg}]. Returns the affected trade ids."""
+        from collections import defaultdict
+        by_trade: dict = defaultdict(list)
+        for r in rows:
+            by_trade[int(r["trade_id"])].append(r)
+
+        affected = []
+        for trade_id, trows in by_trade.items():
+            trade = TradeService.get(session, user_id, trade_id)
+            if not trade or trade.status == TradeStatus.CANCELLED:
+                continue
+            line_qty: dict = defaultdict(lambda: ZERO)
+            for r in trows:
+                line = session.get(TradeLine, int(r["line_id"]))
+                if not line or line.trade_id != trade_id:
+                    continue
+                q = Decimal(str(r.get("qty") or "0"))
+                rate = Decimal(str(r.get("rate") or "0"))
+                if q <= 0:
+                    continue
+                # one PURCHASE batch per row (keeps the vendor's two rates distinct)
+                session.add(TradePurchase(
+                    trade_id=trade_id, line_id=line.id, quantity=q, unit_cost=rate,
+                    purchased_on=received_on, vendor_invoice_path=invoice_path))
+                line_qty[line.id] += q
+            session.commit()
+            # weighted-average cost from the batches
+            for lid in list(line_qty.keys()):
+                PurchaseService.recompute_line_cost(session, session.get(TradeLine, lid))
+            session.commit()
+            # one RECEIPT per line (aggregated qty) — single delivery line for the customer
+            for lid, q in line_qty.items():
+                session.add(TradeLineReceipt(
+                    line_id=lid, received_qty=q, received_on=received_on,
+                    vendor_invoice_path=invoice_path, notes=notes))
+            session.commit()
+            session.refresh(trade)
+            TradeService._repost_cost(session, trade)   # totals + event journals at weighted cost
+            affected.append(trade_id)
+
+        # bilty split across trades by kg (last trade gets the remainder → no drift)
+        total_kg = sum((Decimal(str(r.get("kg") or 0)) for r in rows), ZERO)
+        bilty_total = Decimal(str(bilty_total or 0))
+        if bilty_total > 0 and total_kg > 0:
+            trade_kg: dict = defaultdict(lambda: ZERO)
+            for r in rows:
+                trade_kg[int(r["trade_id"])] += Decimal(str(r.get("kg") or 0))
+            items = [(tid, kg) for tid, kg in trade_kg.items() if tid in affected]
+            allocated = ZERO
+            for i, (tid, kg) in enumerate(items):
+                share = (bilty_total - allocated) if i == len(items) - 1 \
+                    else (bilty_total * kg / total_kg).quantize(Decimal("0.01"))
+                allocated += share
+                trade = TradeService.get(session, user_id, tid)
+                if trade and share > 0:
+                    MasterReceiveService._post_bilty(
+                        session, user_id, trade, received_on, share, kg, terminal_name,
+                        paid_from_id, customer_paid=bilty_by_customer)
+        return affected
+
+
 # ─────────────────────────── Payments ───────────────────────────
 
 
@@ -1613,6 +1799,7 @@ class PaymentService:
         reference: Optional[str] = None,
         notes: Optional[str] = None,
         gl_account_id: Optional[int] = None,
+        proof_path: Optional[str] = None,
     ) -> Optional[TradePayment]:
         trade = TradeService.get(session, user_id, trade_id)
         if not trade:
@@ -1659,6 +1846,7 @@ class PaymentService:
             method=method,
             reference=reference,
             notes=notes,
+            proof_path=proof_path,
         )
         session.add(p)
         session.flush()
@@ -1671,7 +1859,6 @@ class PaymentService:
 
         # Post the money-side journal entry against the chosen ledger account.
         if gl_account is not None or account.kind != "capital":
-            from services.posting import PostingEngine
             from services import account_setup
             cash_acct = gl_account if gl_account is not None else account_setup.sync_cash_account(session, user_id, account)
             party = session.get(
@@ -1679,37 +1866,61 @@ class PaymentService:
                 trade.purchaser_id if direction == PaymentDirection.INBOUND else trade.vendor_id,
             )
             if party is not None:
-                party_acct = account_setup.sync_party_account(session, user_id, party)
-                method_tag = f" via {p.method}" if p.method else ""
-                if direction == PaymentDirection.INBOUND:
-                    PostingEngine.post(
-                        session, user_id, entry_date=p.paid_on,
-                        entry_type=JournalEntryType.CUSTOMER_RECEIPT,
-                        description=f"Receipt from {party.name} for {trade.reference}",
-                        lines=[
-                            {"account_id": cash_acct.id, "debit": Decimal(p.amount), "credit": 0,
-                             "description": f"Cash received from {party.name} for {trade.reference}{method_tag}"},
-                            {"account_id": party_acct.id, "debit": 0, "credit": Decimal(p.amount),
-                             "description": f"Receipt from {party.name} for {trade.reference}{method_tag}",
-                             "party_id": party.id},
-                        ],
-                        trade_id=trade.id, payment_id=p.id,
-                    )
-                else:
-                    PostingEngine.post(
-                        session, user_id, entry_date=p.paid_on,
-                        entry_type=JournalEntryType.VENDOR_PAYMENT,
-                        description=f"Payment to {party.name} for {trade.reference}",
-                        lines=[
-                            {"account_id": party_acct.id, "debit": Decimal(p.amount), "credit": 0,
-                             "description": f"Payment to {party.name} for {trade.reference}{method_tag}",
-                             "party_id": party.id},
-                            {"account_id": cash_acct.id, "debit": 0, "credit": Decimal(p.amount),
-                             "description": f"Cash paid to {party.name} for {trade.reference}{method_tag}"},
-                        ],
-                        trade_id=trade.id, payment_id=p.id,
-                    )
+                PaymentService._post_payment_journal(session, user_id, trade, p, cash_acct, party)
         return p
+
+    @staticmethod
+    def _post_payment_journal(session, user_id, trade, p, cash_acct, party) -> None:
+        """Post the money-side journal for one payment.
+
+        INBOUND  (customer receipt): DR cash / CR customer A/R.
+        OUTBOUND (vendor payment):   CR cash, and DR is SPLIT —
+          • the part that settles what we currently OWE (delivered/invoiced
+            goods) hits Vendor A/P, and
+          • any EXCESS (a pre-delivery prepayment) hits 'Advance to Vendors'
+            (an asset), NOT Vendor A/P.
+        That keeps Vendor A/P holding only invoiced balances so it ties to the
+        vendor's own statement; the advance sits as an asset until goods arrive,
+        where the delivery posting consumes it (see _post_event_journals)."""
+        from services.posting import PostingEngine
+        from services import account_setup
+        party_acct = account_setup.sync_party_account(session, user_id, party)
+        method_tag = f" via {p.method}" if p.method else ""
+        amount = Decimal(p.amount)
+        if p.direction == PaymentDirection.INBOUND:
+            PostingEngine.post(
+                session, user_id, entry_date=p.paid_on,
+                entry_type=JournalEntryType.CUSTOMER_RECEIPT,
+                description=f"Receipt from {party.name} for {trade.reference}",
+                lines=[
+                    {"account_id": cash_acct.id, "debit": amount, "credit": 0,
+                     "description": f"Cash received from {party.name} for {trade.reference}{method_tag}"},
+                    {"account_id": party_acct.id, "debit": 0, "credit": amount,
+                     "description": f"Receipt from {party.name} for {trade.reference}{method_tag}",
+                     "party_id": party.id},
+                ],
+                trade_id=trade.id, payment_id=p.id,
+            )
+            return
+        # OUTBOUND vendor payment: DR Vendor A/P / CR cash — one running account
+        # per vendor. Paying before the vendor has invoiced simply leaves a DEBIT
+        # (prepaid / advance) balance on the VENDOR'S OWN ledger — no separate
+        # account — so the party ledger always shows the true position (a DR
+        # balance = you've prepaid / they owe you goods). Delivery later credits
+        # A/P and nets against it. Simple and reconciles with the vendor.
+        PostingEngine.post(
+            session, user_id, entry_date=p.paid_on,
+            entry_type=JournalEntryType.VENDOR_PAYMENT,
+            description=f"Payment to {party.name} for {trade.reference}",
+            lines=[
+                {"account_id": party_acct.id, "debit": amount, "credit": 0,
+                 "description": f"Payment to {party.name} for {trade.reference}{method_tag}",
+                 "party_id": party.id},
+                {"account_id": cash_acct.id, "debit": 0, "credit": amount,
+                 "description": f"Cash paid to {party.name} for {trade.reference}{method_tag}"},
+            ],
+            trade_id=trade.id, payment_id=p.id,
+        )
 
     @staticmethod
     def delete(session: Session, user_id: int, payment_id: int) -> bool:
@@ -1736,6 +1947,121 @@ class PaymentService:
             session.add(trade)
         session.commit()
         return True
+
+
+class MasterReceiptService:
+    """Receive ONE lump customer payment and auto-apply it, OLDEST-DUE-FIRST,
+    across that customer's outstanding trades — so a Rs 100,000 receipt clears a
+    Rs 5,100 residue on the oldest trade, then rolls onto the next, and each
+    covered trade flips to Paid. One voucher, allocated across trades."""
+
+    @staticmethod
+    def preview(session: Session, user_id: int, customer_id: int, amount: Decimal) -> dict:
+        """Dry-run the allocation so the modal can show what will be cleared."""
+        customer = PartyService.get(session, user_id, customer_id)
+        if not customer:
+            return {"customer": None, "rows": [], "allocated": ZERO, "leftover": amount}
+        amount = Decimal(str(amount or 0))
+        rows = []
+        remaining = amount
+        for t in MasterReceiptService._open_trades(session, user_id, customer_id):
+            out = TradeService.customer_outstanding(session, t)
+            if out <= ZERO:
+                continue
+            alloc = out if out < remaining else remaining
+            if alloc < 0:
+                alloc = ZERO
+            rows.append({
+                "trade_id": t.id, "reference": t.reference, "trade_date": t.trade_date,
+                "due": t.customer_due_date, "outstanding": out.quantize(Decimal("0.01")),
+                "apply": alloc.quantize(Decimal("0.01")),
+                "fully_paid": (alloc >= out - Decimal("0.01")) and alloc > 0,
+            })
+            remaining -= alloc
+            if remaining <= Decimal("0.01"):
+                # still list the rest as untouched (apply 0) for context
+                pass
+        return {"customer": customer, "rows": rows,
+                "allocated": (amount - remaining).quantize(Decimal("0.01")),
+                "leftover": remaining.quantize(Decimal("0.01"))}
+
+    @staticmethod
+    def _open_trades(session: Session, user_id: int, customer_id: int) -> list:
+        trades = list(session.exec(
+            select(Trade).where(
+                Trade.user_id == user_id,
+                Trade.purchaser_id == customer_id,
+                Trade.status != TradeStatus.CANCELLED,
+            )
+        ).all())
+        # oldest due first (fall back to trade date, then id)
+        trades.sort(key=lambda t: (t.customer_due_date or t.trade_date or date.max, t.trade_date or date.max, t.id))
+        return [t for t in trades if TradeService.customer_outstanding(session, t) > Decimal("0.01")]
+
+    @staticmethod
+    def record(
+        session: Session, user_id: int, customer_id: int, amount: Decimal,
+        received_on: Optional[date] = None, cash_account_id: Optional[int] = None,
+        gl_account_id: Optional[int] = None, method: Optional[str] = None,
+        reference: Optional[str] = None, notes: Optional[str] = None,
+        proof_path: Optional[str] = None,
+    ) -> dict:
+        """Apply the receipt FIFO. Creates one INBOUND payment per covered trade
+        (so each trade's status updates and the ledger shows the split), oldest
+        due first. Any excess over everything owed is applied to the newest trade
+        as an advance so no cash is lost. Returns the allocation."""
+        customer = PartyService.get(session, user_id, customer_id)
+        if not customer:
+            return {"ok": False, "error": "Customer not found", "allocations": []}
+        amount = Decimal(str(amount or 0))
+        if amount <= 0:
+            return {"ok": False, "error": "Amount must be greater than zero", "allocations": []}
+        received_on = received_on or date.today()
+        open_trades = MasterReceiptService._open_trades(session, user_id, customer_id)
+        if not open_trades:
+            return {"ok": False, "error": f"{customer.name} has no outstanding trades to apply this to.", "allocations": []}
+
+        remaining = amount
+        allocations = []
+        for t in open_trades:
+            if remaining <= Decimal("0.01"):
+                break
+            out = TradeService.customer_outstanding(session, t)
+            if out <= ZERO:
+                continue
+            alloc = out if out < remaining else remaining
+            if alloc <= 0:
+                continue
+            PaymentService.record(
+                session, user_id, trade_id=t.id,
+                cash_account_id=cash_account_id, gl_account_id=gl_account_id,
+                direction=PaymentDirection.INBOUND, amount=alloc, paid_on=received_on,
+                method=method, reference=reference, notes=notes, proof_path=proof_path,
+            )
+            remaining -= alloc
+            session.refresh(t)
+            allocations.append({
+                "trade_id": t.id, "reference": t.reference, "applied": alloc.quantize(Decimal("0.01")),
+                "fully_paid": TradeService.customer_outstanding(session, t) <= Decimal("0.01"),
+            })
+        # Excess (customer paid more than everything they owed) → advance on the
+        # newest trade so the cash is fully recorded.
+        if remaining > Decimal("0.01") and open_trades:
+            newest = max(open_trades, key=lambda t: (t.trade_date or date.min, t.id))
+            PaymentService.record(
+                session, user_id, trade_id=newest.id,
+                cash_account_id=cash_account_id, gl_account_id=gl_account_id,
+                direction=PaymentDirection.INBOUND, amount=remaining, paid_on=received_on,
+                method=method, reference=reference,
+                notes=(notes or "") + " [advance / overpayment]", proof_path=proof_path,
+            )
+            allocations.append({"trade_id": newest.id, "reference": newest.reference,
+                                "applied": remaining.quantize(Decimal("0.01")),
+                                "fully_paid": False, "advance": True})
+            remaining = ZERO
+        session.commit()
+        return {"ok": True, "customer": customer, "allocations": allocations,
+                "allocated": (amount - remaining).quantize(Decimal("0.01"))}
 
 
 # ─────────────────────────── Quotations ─────────────────────────
@@ -2090,6 +2416,7 @@ class TradeReportService:
                 "debit": r["debit"],
                 "credit": r["credit"],
                 "balance": r["balance"],
+                "proof_path": r.get("proof_path"),
             })
         return {"party": party, "entries": entries,
                 "balance": led["closing_balance"],
@@ -2442,6 +2769,149 @@ class TradeReportService:
         }
 
     @staticmethod
+    def ap_aging_report(session: Session, user_id: int) -> dict:
+        """Accounts-Payable aging — the mirror of AR aging, for what WE owe vendors.
+
+        Reads each vendor's A/P ledger: purchases/charges are invoices (credits =
+        we owe), payments are debits. Payments are FIFO-matched to the oldest
+        invoice. Each still-unpaid invoice is aged by (invoice date + that trade's
+        vendor terms, or the vendor default) and dropped into a bucket. A vendor
+        we've PRE-paid (net debit balance) simply produces no rows.
+        """
+        from collections import deque
+        from datetime import timedelta
+        from models import JournalEntry, JournalLine, JournalEntryType
+        today = date.today()
+        BUCKET_NAMES = ("not_due", "1_30", "31_60", "61_90", "90_plus")
+        buckets = {k: ZERO for k in BUCKET_NAMES}
+        bucket_count = {k: 0 for k in BUCKET_NAMES}
+
+        def _bucket_for(days_over: int) -> str:
+            if days_over <= 0:  return "not_due"
+            if days_over <= 30: return "1_30"
+            if days_over <= 60: return "31_60"
+            if days_over <= 90: return "61_90"
+            return "90_plus"
+
+        # Internal funding/equity "parties" (CEO, Capital) aren't trade vendors —
+        # exclude their accounts so they don't inflate what we owe suppliers.
+        internal_acct_ids = set()
+        for a in session.exec(select(Account).where(Account.user_id == user_id)).all():
+            nm = (a.name or "").strip().lower()
+            if a.code in ("2102", "2103") or nm in (
+                "ibrahim (ceo)", "ceo", "funding", "capital a/c", "capital account", "capital"):
+                if a.id:
+                    internal_acct_ids.add(a.id)
+
+        rows: list[dict] = []
+        for v in PartyService.list_vendors(session, user_id):
+            if not v.account_id or v.account_id in internal_acct_ids:
+                continue
+            lines = session.exec(
+                select(JournalLine, JournalEntry)
+                .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+                .where(
+                    JournalLine.account_id == v.account_id,
+                    JournalEntry.is_reversed == False,  # noqa: E712
+                    JournalEntry.entry_type != JournalEntryType.REVERSAL,
+                )
+                .order_by(JournalEntry.entry_date, JournalEntry.id)
+            ).all()
+            inv_q: deque = deque()   # unpaid invoices, oldest first
+            prepaid = ZERO           # payments made AHEAD of invoices (advances)
+            for ln, e in lines:
+                cr = Decimal(ln.credit or 0)   # we owe more (an invoice / charge)
+                dr = Decimal(ln.debit or 0)    # we paid
+                if cr > 0:
+                    amt = cr
+                    if prepaid > Decimal("0.005"):   # settle against any advance first
+                        take = prepaid if prepaid < amt else amt
+                        prepaid -= take
+                        amt -= take
+                    if amt > Decimal("0.005"):
+                        terms = int(v.default_vendor_terms_days or 0)
+                        if e.trade_id:
+                            t = session.get(Trade, e.trade_id)
+                            if t:
+                                terms = int(t.vendor_terms_days or 0)
+                        inv_q.append({"date": e.entry_date, "amt": amt, "trade_id": e.trade_id,
+                                      "terms": terms, "desc": ln.description or e.description})
+                if dr > 0:
+                    pay = dr
+                    while pay > Decimal("0.005") and inv_q:
+                        head = inv_q[0]
+                        take = pay if pay < head["amt"] else head["amt"]
+                        head["amt"] -= take
+                        pay -= take
+                        if head["amt"] <= Decimal("0.005"):
+                            inv_q.popleft()
+                    if pay > Decimal("0.005"):
+                        prepaid += pay   # advance — carry forward to future invoices
+
+            # ── Unpaid ADVANCE obligations on trades still ON ORDER ──────────
+            # A trade placed on advance terms owes that advance NOW (at order),
+            # before the goods arrive. Book each on-order trade's advance % (on the
+            # still-undelivered value) as a payable, settle it against any advance
+            # already paid (the leftover prepaid above), and age the unpaid
+            # remainder from the order date. The on-delivery / credit portions are
+            # NOT booked here — they become payable only when goods are received.
+            for t in session.exec(
+                select(Trade).where(Trade.user_id == user_id, Trade.vendor_id == v.id,
+                                    Trade.status != TradeStatus.CANCELLED)
+                .order_by(Trade.trade_date, Trade.id)).all():
+                if t.delivered_at is not None:
+                    continue
+                adv_pct = Decimal(t.vend_advance_pct or 0)
+                if adv_pct <= 0:
+                    continue
+                undel_cost = ZERO
+                for ln in t.lines:
+                    rq = sum((Decimal(r.received_qty) for r in (ln.receipts or [])), ZERO)
+                    uq = Decimal(ln.quantity) - rq
+                    if uq > 0:
+                        undel_cost += uq * Decimal(ln.unit_cost)
+                adv_due = (undel_cost * adv_pct / Decimal(100))
+                if adv_due <= Decimal("0.005"):
+                    continue
+                if prepaid > Decimal("0.005"):      # advance already paid settles it first
+                    take = prepaid if prepaid < adv_due else adv_due
+                    prepaid -= take
+                    adv_due -= take
+                if adv_due > Decimal("0.005"):
+                    inv_q.append({
+                        "date": t.trade_date, "amt": adv_due, "trade_id": t.id, "terms": 0,
+                        "desc": f"Advance due ({int(adv_pct)}% on order) — {t.reference}"})
+
+            for inv in inv_q:
+                if inv["amt"] <= Decimal("0.005"):
+                    continue
+                due = inv["date"] + timedelta(days=inv["terms"])
+                days_over = max(0, (today - due).days)
+                bucket = _bucket_for(days_over)
+                buckets[bucket] += inv["amt"]
+                bucket_count[bucket] += 1
+                tref = None
+                if inv["trade_id"]:
+                    t = session.get(Trade, inv["trade_id"])
+                    tref = t.reference if t else None
+                rows.append({
+                    "vendor": v.name, "vendor_city": v.city,
+                    "trade_id": inv["trade_id"], "trade_ref": tref,
+                    "invoice_date": inv["date"], "due_date": due, "days_over": days_over,
+                    "outstanding": inv["amt"].quantize(Decimal("0.01")),
+                    "bucket": bucket, "desc": inv["desc"],
+                })
+        rows.sort(key=lambda r: r["due_date"])
+        total_outstanding = sum((r["outstanding"] for r in rows), ZERO).quantize(Decimal("0.01"))
+        return {
+            "rows": rows,
+            "buckets": {k: v.quantize(Decimal("0.01")) for k, v in buckets.items()},
+            "bucket_count": bucket_count,
+            "total_outstanding": total_outstanding,
+            "today": today,
+        }
+
+    @staticmethod
     def pending_receivables(session: Session, user_id: int) -> dict:
         """Pending receivable QUANTITY from each vendor, broken down per trade.
 
@@ -2506,7 +2976,22 @@ class TradeReportService:
                 # to the line cost so the value is never understated.
                 purchases = PurchaseService.list_for_line(session, ln.id)
                 batches = []   # (batch_ordered, batch_received, batch_pending, rate)
-                if purchases:
+                # Distinct rates across this line (purchase batches + any uncovered
+                # remainder at the line rate). The batch split is only meaningful
+                # when the vendor quoted DIFFERENT rates; if it's all one rate, show
+                # a single row with the LINE's real ordered / received / pending so
+                # it matches the trade (no phantom "uncovered" chunk).
+                rates = set()
+                covered0 = ZERO
+                for pu in purchases:
+                    covered0 += Decimal(pu.quantity)
+                    rates.add(Decimal(pu.unit_cost) if Decimal(pu.unit_cost) > 0 else Decimal(ln.unit_cost))
+                if ordered - covered0 > 0 or not purchases:
+                    rates.add(Decimal(ln.unit_cost))
+                if len(rates) <= 1:
+                    one_rate = rates.pop() if rates else Decimal(ln.unit_cost)
+                    batches.append((ordered, Decimal(received), pending, one_rate))
+                else:
                     rem = Decimal(received)
                     covered = ZERO
                     for pu in purchases:
@@ -2524,8 +3009,6 @@ class TradeReportService:
                         bp = uncovered - br
                         if bp > 0:
                             batches.append((uncovered, br, bp, Decimal(ln.unit_cost)))
-                else:
-                    batches.append((ordered, Decimal(received), pending, Decimal(ln.unit_cost)))
 
                 for bo, br, bp, rate in batches:
                     pending_value = (bp * rate).quantize(Decimal("0.01"))
@@ -2586,4 +3069,242 @@ class TradeReportService:
             "trade_count": trade_count,
             "line_count": line_count,
             "vendor_count": len(vendors),
+        }
+
+    @staticmethod
+    def customer_pending_goods(session: Session, user_id: int) -> dict:
+        """Goods we still owe to DELIVER to each customer, broken down per trade.
+
+        The mirror of pending_receivables, on the SALE side: for every active
+        trade (not CANCELLED / CLOSED, not yet fully delivered) list each line
+        where ordered qty > qty already flowed through (received), valued at the
+        AGREED SALE rate. Grouped by customer → trade → line so the user can see,
+        customer by customer, what still has to go out the door.
+        """
+        today = date.today()
+        trades = session.exec(
+            select(Trade).where(Trade.user_id == user_id).order_by(Trade.trade_date)
+        ).all()
+
+        by_customer: dict[int, dict] = {}
+        total_pending_value = ZERO
+        total_pending_qty = ZERO
+        trade_count = 0
+        line_count = 0
+
+        for t in trades:
+            if t.status in (TradeStatus.CANCELLED, TradeStatus.CLOSED):
+                continue
+            if t.delivered_at is not None:
+                continue  # Mark Complete posted the residual → nothing still owed
+            customer = session.get(Party, t.purchaser_id) if t.purchaser_id else None
+            vendor = session.get(Party, t.vendor_id) if t.vendor_id else None
+            if customer is None:
+                continue
+
+            line_rows = []
+            trade_pending_value = ZERO
+            trade_pending_qty = ZERO
+            for ln in t.lines:
+                received = sum(
+                    (Decimal(r.received_qty) for r in (ln.receipts or [])), ZERO
+                )
+                ordered = Decimal(ln.quantity)
+                pending = ordered - received
+                if pending <= 0:
+                    continue
+                specs_parts = [
+                    f"{(sp.label or '').strip()}: {(sp.value or '').strip()}"
+                    for sp in (ln.specs or [])
+                    if (sp.label or sp.value)
+                ]
+                specs_map = {
+                    (sp.label or "").strip().lower(): (sp.value or "").strip()
+                    for sp in (ln.specs or []) if (sp.label or "").strip()
+                }
+                rate = Decimal(ln.unit_price)
+                pending_value = (pending * rate).quantize(Decimal("0.01"))
+                line_rows.append({
+                    "item_id": ln.item_id,
+                    "item_name": ln.item_name,
+                    "specs": " · ".join(specs_parts),
+                    "specs_map": specs_map,
+                    "unit": ln.unit or "pcs",
+                    "ordered_qty": ordered.quantize(Decimal("0.001")),
+                    "received_qty": received.quantize(Decimal("0.001")),
+                    "pending_qty": pending.quantize(Decimal("0.001")),
+                    "unit_price": rate.quantize(Decimal("0.01")),
+                    "pending_value": pending_value,
+                })
+                trade_pending_value += pending_value
+                trade_pending_qty += pending
+                line_count += 1
+
+            if not line_rows:
+                continue
+            trade_count += 1
+            total_pending_value += trade_pending_value
+            total_pending_qty += trade_pending_qty
+
+            days_open = (today - t.trade_date).days if t.trade_date else 0
+            c_bucket = by_customer.setdefault(customer.id, {
+                "customer_id": customer.id,
+                "customer_name": customer.name,
+                "trades": [],
+                "pending_value": ZERO,
+                "pending_qty": ZERO,
+            })
+            c_bucket["trades"].append({
+                "trade_id": t.id,
+                "trade_ref": t.reference,
+                "trade_date": t.trade_date,
+                "status": t.status.value if hasattr(t.status, "value") else t.status,
+                "vendor_name": vendor.name if vendor else "—",
+                "customer_due_date": t.customer_due_date,
+                "days_open": days_open,
+                "lines": line_rows,
+                "pending_value": trade_pending_value.quantize(Decimal("0.01")),
+                "pending_qty": trade_pending_qty.quantize(Decimal("0.001")),
+            })
+            c_bucket["pending_value"] += trade_pending_value
+            c_bucket["pending_qty"] += trade_pending_qty
+
+        customers = sorted(by_customer.values(), key=lambda c: -c["pending_value"])
+        for c in customers:
+            c["pending_value"] = c["pending_value"].quantize(Decimal("0.01"))
+            c["pending_qty"] = c["pending_qty"].quantize(Decimal("0.001"))
+            c["trade_count"] = len(c["trades"])
+
+        return {
+            "today": today,
+            "customers": customers,
+            "total_pending_value": total_pending_value.quantize(Decimal("0.01")),
+            "total_pending_qty": total_pending_qty.quantize(Decimal("0.001")),
+            "trade_count": trade_count,
+            "line_count": line_count,
+            "customer_count": len(customers),
+        }
+
+    @staticmethod
+    def goods_sent_report(session: Session, user_id: int, customer_id: int,
+                          from_date=None, to_date=None) -> dict:
+        """Order-vs-delivery reconciliation statement for ONE customer.
+
+        Grouped by PO (a trade — shown to the customer as a sequential "PO #N +
+        order date", NEVER our internal TRD reference), then per item: the ordered
+        quantity, each delivery in the window with the running remaining balance
+        after it, and the closing position — Pending (short) or Overflow (over).
+
+        Remaining/overflow are computed over the item's FULL delivery history so
+        the numbers are truthful; only deliveries inside [from_date, to_date] are
+        listed (a note flags any dispatched earlier). A PO with no delivery in the
+        window is omitted. "Ordered" is the line's current agreed quantity.
+        """
+        Q3 = Decimal("0.001")
+        today = date.today()
+        customer = session.get(Party, customer_id) if customer_id else None
+        pos = []
+        total_ordered = ZERO
+        total_sent = ZERO
+        total_pending = ZERO
+        total_overflow = ZERO
+        dispatch_count = 0
+        if customer:
+            trades = session.exec(
+                select(Trade).where(
+                    Trade.user_id == user_id,
+                    Trade.purchaser_id == customer_id,
+                    Trade.status != TradeStatus.CANCELLED,
+                ).order_by(Trade.trade_date, Trade.reference)
+            ).all()
+            po_no = 0
+            for t in trades:
+                items = []
+                po_ordered = po_sent = po_pending = po_overflow = ZERO
+                for ln in t.lines:
+                    ordered = Decimal(ln.quantity)
+                    specs = " · ".join(
+                        f"{(sp.label or '').strip()}: {(sp.value or '').strip()}"
+                        for sp in (ln.specs or []) if (sp.label or sp.value)
+                    )
+                    recs = sorted((ln.receipts or []),
+                                  key=lambda r: (r.received_on, r.id or 0))
+                    cumulative = ZERO
+                    delivered_total = ZERO
+                    prior_qty = ZERO
+                    prior_count = 0
+                    deliveries = []
+                    for r in recs:
+                        q = Decimal(r.received_qty)
+                        if q <= 0:
+                            continue
+                        cumulative += q
+                        delivered_total += q
+                        in_range = not ((from_date and r.received_on < from_date)
+                                        or (to_date and r.received_on > to_date))
+                        if in_range:
+                            deliveries.append({
+                                "date": r.received_on,
+                                "qty": q.quantize(Q3),
+                                "remaining": (ordered - cumulative).quantize(Q3),
+                            })
+                            dispatch_count += 1
+                        elif from_date and r.received_on < from_date:
+                            prior_count += 1
+                            prior_qty += q
+                    if not deliveries:
+                        continue
+                    pending = ordered - delivered_total
+                    overflow = ZERO
+                    if pending < 0:
+                        overflow = -pending
+                        pending = ZERO
+                    items.append({
+                        "item_id": ln.item_id,
+                        "item_name": ln.item_name,
+                        "specs": specs,
+                        "unit": ln.unit or "pcs",
+                        "ordered": ordered.quantize(Q3),
+                        "delivered": delivered_total.quantize(Q3),
+                        "deliveries": deliveries,
+                        "pending": pending.quantize(Q3),
+                        "overflow": overflow.quantize(Q3),
+                        "prior_count": prior_count,
+                        "prior_qty": prior_qty.quantize(Q3),
+                    })
+                    po_ordered += ordered
+                    po_sent += delivered_total
+                    po_pending += pending
+                    po_overflow += overflow
+                if not items:
+                    continue
+                po_no += 1
+                pos.append({
+                    "trade_id": t.id,
+                    "po_no": po_no,
+                    "trade_date": t.trade_date,
+                    "items": items,
+                    "ordered": po_ordered.quantize(Q3),
+                    "sent": po_sent.quantize(Q3),
+                    "pending": po_pending.quantize(Q3),
+                    "overflow": po_overflow.quantize(Q3),
+                })
+                total_ordered += po_ordered
+                total_sent += po_sent
+                total_pending += po_pending
+                total_overflow += po_overflow
+        return {
+            "today": today,
+            "customer_id": customer_id,
+            "customer_name": customer.name if customer else None,
+            "customer": customer,
+            "from_date": from_date,
+            "to_date": to_date,
+            "pos": pos,
+            "po_count": len(pos),
+            "dispatch_count": dispatch_count,
+            "total_ordered": total_ordered.quantize(Q3),
+            "total_qty": total_sent.quantize(Q3),
+            "total_pending": total_pending.quantize(Q3),
+            "total_overflow": total_overflow.quantize(Q3),
         }

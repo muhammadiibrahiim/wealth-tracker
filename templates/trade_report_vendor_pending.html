@@ -15,7 +15,7 @@
     <form method="get" class="flex items-end gap-4 flex-wrap">
       <div>
         <label class="field-label field-label-required">Vendor</label>
-        <select name="vendor_id" class="px-3 py-2.5" style="min-width:260px;">
+        <select name="vendor_id" class="px-3 py-2.5" style="min-width:260px;" onchange="if(this.value) this.form.submit();">
           <option value="">— Select vendor —</option>
           {% for v in vendors %}<option value="{{ v.id }}" {% if selected_id == v.id %}selected{% endif %}>{{ v.name }}</option>{% endfor %}
         </select>

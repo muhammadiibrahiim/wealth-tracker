@@ -3325,6 +3325,22 @@ async def reports_goods_sent_pdf(
                     headers={"Content-Disposition": f'inline; filename="{fname}"'})
 
 
+@router.get("/reports/expenses", response_class=HTMLResponse)
+async def reports_expenses(
+    request: Request,
+    date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
+):
+    """All expense vouchers except bilties, dated, with a per-category summary."""
+    user_id = DEFAULT_USER_ID
+    report = TradeReportService.expenses_report(
+        session, user_id, from_date=_parse_date(date_from), to_date=_parse_date(date_to))
+    return templates.TemplateResponse(
+        "trade_report_expenses.html",
+        _ctx(request, report=report, date_from=date_from or "", date_to=date_to or ""),
+    )
+
+
 @router.get("/reports/bilty", response_class=HTMLResponse)
 async def reports_bilty(
     request: Request,

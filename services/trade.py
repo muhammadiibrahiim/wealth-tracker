@@ -3308,3 +3308,85 @@ class TradeReportService:
             "total_pending": total_pending.quantize(Q3),
             "total_overflow": total_overflow.quantize(Q3),
         }
+
+    @staticmethod
+    def expenses_report(session: Session, user_id: int,
+                        from_date=None, to_date=None) -> dict:
+        """All EXPENSE vouchers EXCEPT bilties, dated.
+
+        Bilty/freight entries are also entry_type=expense, but they're linked to a
+        TradeBilty row and have their own Bilty report — so they're excluded here.
+        Each row is one voucher: what it was for (description + the debited expense
+        account = category), what it was paid via (the credited account), the trade
+        it belongs to (if any), and the amount.
+        """
+        from models import (JournalEntry, JournalLine, JournalEntryType,
+                            Account, TradeBilty)
+        today = date.today()
+        bilty_jes = {b.journal_entry_id for b in session.exec(
+            select(TradeBilty).where(TradeBilty.user_id == user_id)).all()}
+
+        q = select(JournalEntry).where(
+            JournalEntry.user_id == user_id,
+            JournalEntry.entry_type == JournalEntryType.EXPENSE,
+            JournalEntry.is_reversed == False,  # noqa: E712
+        )
+        if from_date:
+            q = q.where(JournalEntry.entry_date >= from_date)
+        if to_date:
+            q = q.where(JournalEntry.entry_date <= to_date)
+        q = q.order_by(JournalEntry.entry_date.desc(), JournalEntry.id.desc())
+
+        acct_cache: dict[int, Account] = {}
+        def _acct_name(aid):
+            if aid not in acct_cache:
+                acct_cache[aid] = session.get(Account, aid)
+            a = acct_cache[aid]
+            return a.name if a else "—"
+
+        rows = []
+        total = ZERO
+        by_category: dict[str, Decimal] = {}
+        for e in session.exec(q).all():
+            if e.id in bilty_jes:
+                continue
+            lines = list(session.exec(
+                select(JournalLine).where(JournalLine.journal_entry_id == e.id)).all())
+            amount = sum((Decimal(ln.debit or 0) for ln in lines), ZERO)
+            if amount <= 0:
+                continue
+            dr_names = list(dict.fromkeys(
+                _acct_name(ln.account_id) for ln in lines if Decimal(ln.debit or 0) > 0))
+            cr_names = list(dict.fromkeys(
+                _acct_name(ln.account_id) for ln in lines if Decimal(ln.credit or 0) > 0))
+            category = " / ".join(dr_names) or "—"
+            paid_via = " / ".join(cr_names) or "—"
+            tref = None
+            if e.trade_id:
+                t = session.get(Trade, e.trade_id)
+                tref = t.reference if t else None
+            rows.append({
+                "date": e.entry_date,
+                "reference": e.reference,
+                "description": e.description or "",
+                "category": category,
+                "paid_via": paid_via,
+                "trade_id": e.trade_id,
+                "trade_ref": tref,
+                "amount": amount.quantize(Decimal("0.01")),
+            })
+            total += amount
+            by_category[category] = by_category.get(category, ZERO) + amount
+
+        categories = sorted(
+            ({"category": k, "amount": v.quantize(Decimal("0.01"))} for k, v in by_category.items()),
+            key=lambda x: -x["amount"])
+        return {
+            "today": today,
+            "from_date": from_date,
+            "to_date": to_date,
+            "rows": rows,
+            "count": len(rows),
+            "total": total.quantize(Decimal("0.01")),
+            "categories": categories,
+        }

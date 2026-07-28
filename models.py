@@ -318,6 +318,10 @@ class Party(SQLModel, table=True):
     tax_id: Optional[str] = Field(default=None, max_length=60)
     default_customer_terms_days: int = Field(default=30)  # used when this party is purchaser
     default_vendor_terms_days: int = Field(default=7)  # used when this party is vendor
+    # Max extra days we can stretch a payment to this VENDOR beyond its due date
+    # before cash MUST be found (from collections or a capital injection). Cash
+    # Flow Management defers this vendor's payables to due_date + this many days.
+    max_payment_delay_days: int = Field(default=1)
     # Opening ledger balance carried from before the system started.
     # Positive = they owe us (receivable). Negative = we owe them (payable).
     opening_balance: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 2)))
@@ -383,6 +387,7 @@ class TradeStatus(str, Enum):
     DELIVERED = "delivered"
     PARTIALLY_PAID = "partially_paid"
     PAID = "paid"
+    COMPLETED = "completed"   # fully delivered AND fully paid — the cycle is done
     CLOSED = "closed"
     CANCELLED = "cancelled"
 
@@ -417,6 +422,10 @@ class Trade(SQLModel, table=True):
     delivered_at: Optional[date] = Field(default=None, sa_column=Column(Date))
     customer_due_date: Optional[date] = Field(default=None, sa_column=Column(Date))
     vendor_due_date: Optional[date] = Field(default=None, sa_column=Column(Date))
+    # Owner-set expected arrival date for goods still ON ORDER. When set, Cash
+    # Flow Management schedules this trade's supply payment (and the resulting
+    # customer collection) from THIS date instead of guessing from vendor history.
+    expected_delivery_date: Optional[date] = Field(default=None, sa_column=Column(Date))
 
     # Cached totals (recomputed on line changes)
     total_cost: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 2)))
@@ -752,6 +761,9 @@ class TradePayment(SQLModel, table=True):
     method: Optional[str] = Field(default=None, max_length=40)  # cash, transfer, cheque, ...
     reference: Optional[str] = Field(default=None, max_length=120)  # cheque#, txn id
     notes: Optional[str] = Field(default=None, max_length=500)
+    # Uploaded proof-of-payment image (bank screenshot, receipt) — served path
+    # under /static/uploads/payments/. Shown on the trade and in party ledgers.
+    proof_path: Optional[str] = Field(default=None, max_length=300)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     trade: Optional[Trade] = Relationship(back_populates="payments")

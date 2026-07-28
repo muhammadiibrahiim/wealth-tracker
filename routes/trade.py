@@ -3371,6 +3371,7 @@ async def reports_bilty(
     total_amount = Decimal("0")
     total_kgs = Decimal("0")
     total_by_cust = Decimal("0")
+    total_pieces = Decimal("0")
     for b in bilties:
         je = session.get(JournalEntry, b.journal_entry_id)
         if not je or je.is_reversed:
@@ -3379,6 +3380,14 @@ async def reports_bilty(
         trade = session.get(Trade, b.trade_id)
         purchaser = session.get(Party, trade.purchaser_id) if trade else None
         term = session.get(TradeTerminal, b.terminal_id) if b.terminal_id else None
+        # Pieces this bilty covers = qty delivered for this trade on this date.
+        pieces = Decimal("0")
+        if trade:
+            for ln in trade.lines:
+                for r in (ln.receipts or []):
+                    if r.received_on == b.delivery_date:
+                        pieces += Decimal(r.received_qty)
+        per_pc = (amt / pieces) if pieces > 0 else None
         rows.append({
             "delivery_date": b.delivery_date,
             "trade_ref": trade.reference if trade else "—",
@@ -3388,13 +3397,17 @@ async def reports_bilty(
             "terminal": term.name if term else None,
             "weight_kgs": b.weight_kgs,
             "amount": amt,
+            "pieces": pieces,
+            "per_pc": per_pc.quantize(Decimal("0.0001")) if per_pc is not None else None,
             "paid_by_customer": b.paid_by_customer,
             "ref": je.reference,
         })
         total_amount += amt
         if b.weight_kgs: total_kgs += Decimal(b.weight_kgs)
         if b.paid_by_customer: total_by_cust += amt
+        total_pieces += pieces
 
+    avg_per_pc = (total_amount / total_pieces).quantize(Decimal("0.0001")) if total_pieces > 0 else None
     return templates.TemplateResponse(
         "trade_report_bilty.html",
         _ctx(
@@ -3403,6 +3416,8 @@ async def reports_bilty(
             total_amount=total_amount.quantize(Decimal("0.01")),
             total_kgs=total_kgs,
             total_by_cust=total_by_cust.quantize(Decimal("0.01")),
+            total_pieces=total_pieces,
+            avg_per_pc=avg_per_pc,
             date_from=date_from or "",
             date_to=date_to or "",
         ),

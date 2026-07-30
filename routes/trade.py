@@ -1763,6 +1763,86 @@ async def parties_list(request: Request, session: Session = Depends(get_session)
     return templates.TemplateResponse("trade_parties.html", _ctx(request, parties=parties))
 
 
+# ── Partners (equity) ────────────────────────────────────────────────────
+@router.get("/partners", response_class=HTMLResponse)
+async def partners_page(request: Request, session: Session = Depends(get_session)):
+    user_id = DEFAULT_USER_ID
+    from services import partners as PS
+    from models import Account
+    # Auto-run any due monthly allocations (idempotent — catches up missed months).
+    PS.run_due_allocations(session, user_id)
+    cap = PS.cap_table(session, user_id)
+    history = PS.allocation_history(session, user_id)
+    # "received into" options for an optional opening contribution
+    funding = []
+    for a in CashAccountService.list(session, user_id, active_only=True):
+        if getattr(a, "account_id", None):
+            funding.append({"account_id": a.account_id, "label": a.name})
+    ceo = session.exec(select(Account).where(Account.user_id == user_id, Account.code == "2103")).first()
+    if ceo:
+        funding.append({"account_id": ceo.id, "label": "Owner funding (CEO)"})
+    return templates.TemplateResponse(
+        "trade_partners.html",
+        _ctx(request, cap=cap, history=history, funding=funding, today=date.today()),
+    )
+
+
+@router.post("/partners")
+async def partner_add(
+    request: Request,
+    name: str = Form(...),
+    pct: str = Form(...),
+    joined_on: Optional[str] = Form(None),
+    contribution: Optional[str] = Form(None),
+    contribution_account_id: Optional[str] = Form(None),
+    notes: Optional[str] = Form(None),
+    session: Session = Depends(get_session),
+):
+    from services import partners as PS
+    try:
+        pctd = Decimal(str(pct))
+    except Exception:
+        pctd = Decimal("0")
+    contrib = Decimal(str(contribution)) if (contribution and str(contribution).strip()) else Decimal("0")
+    caid = int(contribution_account_id) if (contribution_account_id and str(contribution_account_id).strip().isdigit()) else None
+    if name and name.strip():
+        PS.add_partner(session, DEFAULT_USER_ID, name.strip(), pctd,
+                       joined_on=_parse_date(joined_on),
+                       contribution=contrib, contribution_account_id=caid,
+                       notes=(notes.strip() if notes else None))
+    return RedirectResponse("/trade/partners", status_code=303)
+
+
+@router.post("/partners/{partner_id}")
+async def partner_update(
+    partner_id: int,
+    pct: Optional[str] = Form(None),
+    name: Optional[str] = Form(None),
+    is_active: Optional[str] = Form(None),
+    session: Session = Depends(get_session),
+):
+    from services import partners as PS
+    kwargs = {}
+    if pct is not None and str(pct).strip():
+        try:
+            kwargs["pct"] = Decimal(str(pct))
+        except Exception:
+            pass
+    if name is not None and str(name).strip():
+        kwargs["name"] = name.strip()
+    if is_active is not None:
+        kwargs["is_active"] = str(is_active).lower() in ("1", "true", "on", "yes")
+    PS.update_partner(session, DEFAULT_USER_ID, partner_id, **kwargs)
+    return RedirectResponse("/trade/partners", status_code=303)
+
+
+@router.post("/partners/allocate")
+async def partners_allocate(session: Session = Depends(get_session)):
+    from services import partners as PS
+    PS.run_due_allocations(session, DEFAULT_USER_ID)
+    return RedirectResponse("/trade/partners", status_code=303)
+
+
 @router.get("/parties/new", response_class=HTMLResponse)
 async def party_new_modal(request: Request):
     from services.pk_cities import PK_CITIES

@@ -1,60 +1,59 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Chart of Accounts{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Chart of Accounts</h1>
-      <p class="page-subtitle">Every monetary item the business tracks, auto-numbered within its subclass.</p>
-    </div>
-    <button class="btn-primary" hx-get="/trade/coa/new" hx-target="#modal-container">+ New Account</button>
-  </div>
+  {{ page_header('Chart of A/Cs',
+      'Every ledger account, grouped by class.',
+      [{'label': '+ New account', 'primary': True, 'button': True,
+        'attrs': 'hx-get="/trade/coa/new" hx-target="#modal-container"'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <table class="min-w-full">
+  <div class="wt-panel">
+    {{ report_toolbar('tbl-coa') }}
+    {{ sortable_table_open('tbl-coa', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left" style="width: 100px;">Code</th>
-          <th class="text-left">Name</th>
-          <th class="text-right">Balance</th>
+          <th>Code</th>
+          <th>Name</th>
+          <th class="num">Balance</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {% for g in groups %}
-        <tr style="background: #fef3e8;">
+        <tr>
           <td class="font-mono text-xs font-bold text-orange-900">{{ g['class'].code }}</td>
           <td class="font-bold text-orange-900 text-base">{{ g['class'].name }}</td>
           <td colspan="2"></td>
         </tr>
         {% for sb in g['subclasses'] %}
-        <tr style="background: #fafaf9;">
-          <td class="font-mono text-xs text-gray-600 pl-8">{{ sb['subclass'].code }}</td>
-          <td class="text-gray-700 font-medium">{{ sb['subclass'].name }}</td>
+        <tr>
+          <td class="font-mono text-xs wt-mute pl-8">{{ sb['subclass'].code }}</td>
+          <td class="wt-body font-medium">{{ sb['subclass'].name }}</td>
           <td colspan="2"></td>
         </tr>
         {% for a in sb['accounts'] %}
         <tr>
-          <td class="font-mono text-xs text-gray-700 pl-12">{{ a.code }}</td>
+          <td class="font-mono text-xs wt-body pl-12">{{ a.code }}</td>
           <td>
-            <a class="text-indigo-600 hover:text-indigo-900 font-medium" href="/trade/reports/general-ledger?account_id={{ a.id }}">{{ a.name }}</a>
-            {% if a.is_system %}<span class="ml-2 text-xs text-gray-400">(system)</span>{% endif %}
-            {% if not a.is_active %}<span class="ml-2 text-xs" style="color: #c2410c;">disabled</span>{% endif %}
+            <a class="wt-drill font-medium" href="/trade/reports/general-ledger?account_id={{ a.id }}">{{ a.name }}</a>
+            {% if a.is_system %}<span class="ml-2 text-xs wt-ash">(system)</span>{% endif %}
+            {% if not a.is_active %}<span class="ml-2 text-xs" class="wt-neg">disabled</span>{% endif %}
           </td>
-          <td class="text-right tabular-nums">
+          <td class="num">
             {% set b = balances.get(a.id, 0) %}
-            {% if b == 0 %}<span class="text-gray-400">—</span>
-            {% elif b > 0 %}<span class="font-medium text-gray-900">{{ currency }} {{ '{:,.2f}'.format(b) }}</span> <span class="pill-dr ml-1">DR</span>
-            {% else %}<span class="font-medium" style="color: #c2410c;">{{ currency }} {{ '{:,.2f}'.format(-b) }}</span> <span class="pill-cr ml-1">CR</span>
+            {% if b == 0 %}<span class="wt-ash">—</span>
+            {% elif b > 0 %}<span class="font-medium wt-ink">{{ currency }} {{ '{:,.2f}'.format(b) }}</span> <span class="pill-dr ml-1">DR</span>
+            {% else %}<span class="font-medium" class="wt-neg">{{ currency }} {{ '{:,.2f}'.format(-b) }}</span> <span class="pill-cr ml-1">CR</span>
             {% endif %}
           </td>
           <td class="text-right whitespace-nowrap">
             {% if not a.is_system %}
-              <button class="text-indigo-600 text-xs hover:underline font-medium" hx-get="/trade/coa/{{ a.id }}/edit" hx-target="#modal-container">Edit</button>
+              <button class="wt-info text-xs hover:underline font-medium" hx-get="/trade/coa/{{ a.id }}/edit" hx-target="#modal-container">Edit</button>
               {% if a.is_active %}
               <form class="inline" hx-post="/trade/coa/{{ a.id }}/delete" hx-confirm="Disable this account?">
-                <button class="text-red-600 text-xs hover:underline ml-3 font-medium">Disable</button>
+                <button class="wt-neg text-xs hover:underline ml-3 font-medium">Disable</button>
               </form>
               {% endif %}
             {% endif %}
@@ -64,7 +63,7 @@
         {% endfor %}
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
   </div>
 </div>
 

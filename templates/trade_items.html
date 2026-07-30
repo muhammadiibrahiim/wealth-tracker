@@ -1,55 +1,54 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Items{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Items</h1>
-      <p class="page-subtitle">Reusable catalog with customizable spec fields per item.</p>
-    </div>
-    <button class="btn-primary" hx-get="/trade/items/new" hx-target="#modal-container">+ New Item</button>
-  </div>
+  {{ page_header('Items',
+      'The items you trade, with their spec fields.',
+      [{'label': '+ New item', 'primary': True, 'button': True,
+        'attrs': 'hx-get="/trade/items/new" hx-target="#modal-container"'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+  <div class="wt-panel overflow-x-auto">
     {% if items %}
-    <table class="min-w-full">
+    {{ report_toolbar('tbl-items-master') }}
+    {{ sortable_table_open('tbl-items-master', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Name</th>
-          <th class="text-left">SKU</th>
-          <th class="text-left">Unit</th>
-          <th class="text-right">Default Cost</th>
-          <th class="text-right">Default Price</th>
-          <th class="text-left">Spec Fields</th>
+          <th>Name</th>
+          <th>SKU</th>
+          <th>Unit</th>
+          <th class="num">Default Cost</th>
+          <th class="num">Default Price</th>
+          <th>Spec Fields</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {% for i in items %}
         <tr>
-          <td class="font-medium text-gray-900">{{ i.name }}</td>
-          <td class="text-gray-700">{{ i.sku or '—' }}</td>
-          <td class="text-gray-700">{{ i.unit }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(i.default_cost) }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(i.default_price) }}</td>
-          <td class="text-gray-700">
+          <td class="font-medium wt-ink">{{ i.name }}</td>
+          <td class="wt-body">{{ i.sku or '—' }}</td>
+          <td class="wt-body">{{ i.unit }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(i.default_cost) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(i.default_price) }}</td>
+          <td class="wt-body">
             {% if i.spec_fields %}
-              {% for f in i.spec_fields %}<span class="inline-block bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded mr-1 mb-1">{{ f.label }}</span>{% endfor %}
-            {% else %}<span class="text-gray-400 text-xs">— none —</span>{% endif %}
+              {% for f in i.spec_fields %}<span class="inline-block bg-gray-100 wt-body text-xs px-2 py-0.5 rounded mr-1 mb-1">{{ f.label }}</span>{% endfor %}
+            {% else %}<span class="wt-ash text-xs">— none —</span>{% endif %}
           </td>
           <td class="text-right whitespace-nowrap">
-            <button class="text-indigo-600 text-xs hover:underline font-medium" hx-get="/trade/items/{{ i.id }}/edit" hx-target="#modal-container">Edit</button>
+            <button class="wt-info text-xs hover:underline font-medium" hx-get="/trade/items/{{ i.id }}/edit" hx-target="#modal-container">Edit</button>
             <form class="inline" hx-post="/trade/items/{{ i.id }}/delete" hx-confirm="Disable this item?">
-              <button class="text-red-600 text-xs hover:underline ml-3 font-medium">Disable</button>
+              <button class="wt-neg text-xs hover:underline ml-3 font-medium">Disable</button>
             </form>
           </td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
     {% else %}
-    <div class="px-6 py-16 text-center text-sm text-gray-500">No items yet.</div>
+    <div class=" text-center text-sm wt-mute">No items yet.</div>
     {% endif %}
   </div>
 </div>

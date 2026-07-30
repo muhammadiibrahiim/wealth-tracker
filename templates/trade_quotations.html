@@ -1,24 +1,18 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Quotations{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Quotations</h1>
-      <p class="page-subtitle">Proposals sent to prospective customers. Accept one → it becomes a trade.</p>
-    </div>
-    <div class="flex gap-2">
-      <button class="btn-primary" hx-get="/trade/quotations/new" hx-target="#modal-container">+ New Quotation</button>
-    </div>
-  </div>
+  {{ page_header('Quotations', 'Price offers to customers, by status.',
+      [{'label': '+ New Quotation', 'primary': True, 'button': True, 'attrs': 'hx-get="/trade/quotations/new" hx-target="#modal-container"'}]) }}
 
   <!-- Status filter -->
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
+  <div class="wt-panel p-6">
     <form method="get" class="flex items-end gap-4 flex-wrap">
       <div>
         <label class="field-label">Status</label>
-        <select name="status" class="px-3 py-2.5">
+        <select name="status">
           <option value="">All statuses</option>
           {% for s in statuses %}<option value="{{ s }}" {% if current_status == s %}selected{% endif %}>{{ s.replace('_',' ').title() }}</option>{% endfor %}
         </select>
@@ -29,17 +23,18 @@
   </div>
 
   <!-- List -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+  <div class="wt-panel overflow-x-auto">
     {% if quotations %}
-    <table class="min-w-full">
+    {{ report_toolbar('tbl-quotations') }}
+    {{ sortable_table_open('tbl-quotations', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Ref</th>
-          <th class="text-left">Date</th>
-          <th class="text-left">Vendor → Purchaser</th>
-          <th class="text-right">Total</th>
-          <th class="text-left">Valid Until</th>
-          <th class="text-left">Status</th>
+          <th>Ref</th>
+          <th>Date</th>
+          <th>Vendor → Purchaser</th>
+          <th class="num">Total</th>
+          <th>Valid Until</th>
+          <th>Status</th>
         </tr>
       </thead>
       <tbody>
@@ -48,34 +43,34 @@
         {% set c = parties_by_id.get(q.purchaser_id) %}
         {% set _st = q.status.value if q.status.value is defined else q.status %}
         <tr>
-          <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/quotations/{{ q.id }}">{{ q.reference }}</a></td>
-          <td class="text-gray-700 whitespace-nowrap">{{ q.quote_date }}</td>
-          <td class="text-gray-700 text-sm">
-            <span class="text-gray-400 text-xs">V:</span> {{ v.name if v else '—' }} <span class="text-gray-400">→</span>
-            <span class="text-gray-400 text-xs">C:</span> {{ c.name if c else '—' }}
+          <td><a class="wt-drill font-medium font-mono text-xs" href="/trade/quotations/{{ q.id }}">{{ q.reference }}</a></td>
+          <td class="wt-body whitespace-nowrap">{{ q.quote_date }}</td>
+          <td class="wt-body text-sm">
+            <span class="wt-ash text-xs">V:</span> {{ v.name if v else '—' }} <span class="wt-ash">→</span>
+            <span class="wt-ash text-xs">C:</span> {{ c.name if c else '—' }}
           </td>
-          <td class="text-right tabular-nums font-medium">{{ currency }} {{ '{:,.2f}'.format(q.total_sale) }}</td>
-          <td class="text-gray-700 whitespace-nowrap text-sm">
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(q.total_sale) }}</td>
+          <td class="wt-body whitespace-nowrap text-sm">
             {% if q.valid_until %}
               {% if q.valid_until < today and _st in ('draft','sent') %}
-                <span class="text-orange-700 font-semibold">{{ q.valid_until }} · expired</span>
+                <span class="wt-neg font-semibold">{{ q.valid_until }} · expired</span>
               {% else %}{{ q.valid_until }}{% endif %}
-            {% else %}<span class="text-gray-400">—</span>{% endif %}
+            {% else %}<span class="wt-ash">—</span>{% endif %}
           </td>
           <td>
             {% if _st == 'draft' %}<span class="pill-dr">Draft</span>
-            {% elif _st == 'sent' %}<span style="background:#dbeafe;color:#1e40af" class="inline-block text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded">Sent</span>
-            {% elif _st == 'accepted' %}<span style="background:#dcfce7;color:#166534" class="inline-block text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded">Accepted</span>
+            {% elif _st == 'sent' %}<span class="wt-pill wt-pill-info">Sent</span>
+            {% elif _st == 'accepted' %}<span class="wt-pill wt-pill-pos">Accepted</span>
             {% elif _st == 'rejected' %}<span class="pill-cr">Rejected</span>
-            {% elif _st == 'expired' %}<span style="background:#fef3c7;color:#92400e" class="inline-block text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded">Expired</span>
+            {% elif _st == 'expired' %}<span class="wt-pill wt-pill-warn">Expired</span>
             {% endif %}
           </td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
     {% else %}
-    <div class="px-6 py-16 text-center text-sm text-gray-500">
+    <div class=" text-center text-sm wt-mute">
       No quotations yet. Click <strong>+ New Quotation</strong> to create one.
     </div>
     {% endif %}

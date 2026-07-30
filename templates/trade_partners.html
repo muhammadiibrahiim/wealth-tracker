@@ -1,31 +1,26 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Partners{% endblock %}
 {% block content %}
 {% set cur = currency %}
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Partners</h1>
-      <p class="page-subtitle">Equity partners and their capital. You're the remainder — all existing capital stays yours; only profit earned <b>going forward</b> is split. On the 1st of each month, last month's profit is divided into partner capital accounts by their %.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Partners', 'Capital contributed, share of profit, and what each partner has drawn.') }}
 
   {% if cap.over_allocated %}
-  <div class="accent-card" style="border-left-color:#b91c1c; background:#fef2f2;">
-    <div class="text-sm font-semibold" style="color:#991b1b;">⚠ Partners add up to {{ '{:g}'.format(cap.partner_total_pct) }}% — more than 100%. Fix the percentages below.</div>
+  <div class="accent-card wt-card-neg wt-neg-bg">
+    <div class="text-sm font-semibold" class="wt-neg">⚠ Partners add up to {{ '{:g}'.format(cap.partner_total_pct) }}% — more than 100%. Fix the percentages below.</div>
   </div>
   {% endif %}
 
   {% if not cap.owner_is_setup %}
-  <div class="accent-card" style="border-left-color:#4f46e5; background:#eef2ff;">
+  <div class="accent-card wt-card-info wt-info-bg">
     <div class="stat-label mb-1">Set up your capital account</div>
-    <p class="text-xs text-gray-600 mb-3">Create your own named capital account and move today's retained capital ({{ cur }} {{ '{:,.0f}'.format(cap.owner_capital) }}) into it. The main Capital A/C then starts empty as the shared pool — profit from here on is split among all partners (your share routes to this account). These entries are hidden from the dashboard.</p>
+    <p class="text-xs wt-mute mb-3">Create your own named capital account and move today's retained capital ({{ cur }} {{ '{:,.0f}'.format(cap.owner_capital) }}) into it. The main Capital A/C then starts empty as the shared pool — profit from here on is split among all partners (your share routes to this account). These entries are hidden from the dashboard.</p>
     <form method="post" action="/trade/partners/setup-owner" class="flex items-end gap-3 flex-wrap"
           onsubmit="return confirm('Create this capital account and move {{ cur }} {{ '{:,.0f}'.format(cap.owner_capital) }} into it? The main Capital A/C will become 0.');">
       <div>
         <label class="field-label field-label-required">Your capital account name</label>
-        <input name="name" required class="px-3 py-2.5" style="min-width:220px;" placeholder="e.g. Ibrahim Capital">
+        <input name="name" required class="min-w-[220px]" placeholder="e.g. Ibrahim Capital">
       </div>
       <button type="submit" class="btn-primary">Create & move capital</button>
     </form>
@@ -33,66 +28,67 @@
   {% endif %}
 
   <!-- Cap table -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
-    <div class="px-6 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2" style="background:#fafaf9;">
+  <div class="wt-panel overflow-x-auto">
+    <div class=" border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
       <div class="stat-label">Cap table</div>
-      <div class="text-sm text-gray-600">Total capital <b>{{ cur }} {{ '{:,.0f}'.format(cap.total_capital) }}</b> · as of {{ cap.as_of.strftime('%d %b %Y') }}</div>
+      <div class="text-sm wt-mute">Total capital <b>{{ cur }} {{ '{:,.0f}'.format(cap.total_capital) }}</b> · as of {{ cap.as_of.strftime('%d %b %Y') }}</div>
     </div>
-    <table class="min-w-full">
+    {{ report_toolbar('tbl-partners') }}
+    {{ sortable_table_open('tbl-partners', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Partner</th>
-          <th class="text-right">Ownership</th>
-          <th class="text-right">Capital account</th>
-          <th class="text-left">Since</th>
-          <th class="text-right"></th>
+          <th>Partner</th>
+          <th class="num">Ownership</th>
+          <th class="num">Capital account</th>
+          <th>Since</th>
+          <th class="num"></th>
         </tr>
       </thead>
       <tbody>
-        <tr style="background:#eef2ff;">
-          <td class="font-bold text-gray-900">{{ cap.owner_name }} <span class="text-xs font-normal text-gray-500">(owner · remainder)</span></td>
-          <td class="text-right tabular-nums font-bold">{{ '{:g}'.format(cap.owner_pct) }}%</td>
-          <td class="text-right tabular-nums font-bold">{{ cur }} {{ '{:,.2f}'.format(cap.owner_capital) }}<div class="text-xs font-normal text-gray-400">retained profit</div></td>
-          <td class="text-gray-400 text-sm">—</td>
+        <tr class="wt-group">
+          <td class="font-bold wt-ink">{{ cap.owner_name }} <span class="text-xs font-normal wt-mute">(owner · remainder)</span></td>
+          <td class="num">{{ '{:g}'.format(cap.owner_pct) }}%</td>
+          <td class="num">{{ cur }} {{ '{:,.2f}'.format(cap.owner_capital) }}<div class="text-xs font-normal wt-ash">retained profit</div></td>
+          <td class="wt-ash text-sm">—</td>
           <td></td>
         </tr>
         {% for p in cap.partners %}
         <tr>
-          <td class="font-medium text-gray-900">{{ p.name }}</td>
-          <td class="text-right tabular-nums" style="color:#4338ca;">{{ '{:g}'.format(p.pct) }}%</td>
-          <td class="text-right tabular-nums font-semibold">{{ cur }} {{ '{:,.2f}'.format(p.capital) }}</td>
-          <td class="text-gray-600 text-sm">{{ p.joined_on.strftime('%d %b %Y') if p.joined_on else '—' }}</td>
+          <td class="font-medium wt-ink">{{ p.name }}</td>
+          <td class="num" class="wt-info">{{ '{:g}'.format(p.pct) }}%</td>
+          <td class="num">{{ cur }} {{ '{:,.2f}'.format(p.capital) }}</td>
+          <td class="wt-mute text-sm">{{ p.joined_on.strftime('%d %b %Y') if p.joined_on else '—' }}</td>
           <td class="text-right">
             <form method="post" action="/trade/partners/{{ p.id }}" class="inline-flex items-center gap-1">
-              <input type="number" step="0.01" min="0" name="pct" value="{{ '{:g}'.format(p.pct) }}" style="width:70px; padding:3px 6px; border:1px solid #d1d5db; border-radius:5px;" class="text-right tabular-nums">
-              <button type="submit" class="btn-secondary" style="padding:3px 10px; font-size:12px;">Set %</button>
+              <input type="number" step="0.01" min="0" name="pct" value="{{ '{:g}'.format(p.pct) }}" class="w-20" class="num">
+              <button type="submit" class="btn-secondary btn-sm">Set %</button>
             </form>
             <form method="post" action="/trade/partners/{{ p.id }}" class="inline" onsubmit="return confirm('Remove {{ p.name }} as an active partner? (Their capital account stays for the record.)');">
               <input type="hidden" name="is_active" value="0">
-              <button type="submit" class="text-xs text-gray-400 hover:text-red-600 ml-1">remove</button>
+              <button type="submit" class="text-xs wt-ash hover:wt-neg ml-1">remove</button>
             </form>
           </td>
         </tr>
         {% endfor %}
       </tbody>
-      <tfoot style="background:#fafaf9;">
+      <tfoot>
         <tr>
-          <td class="text-right text-xs uppercase tracking-widest font-bold text-gray-700">Total</td>
-          <td class="text-right tabular-nums font-bold">100%</td>
-          <td class="text-right tabular-nums font-bold">{{ cur }} {{ '{:,.2f}'.format(cap.total_capital) }}</td>
+          <td class="text-right text-xs uppercase tracking-widest font-bold wt-body">Total</td>
+          <td class="num">100%</td>
+          <td class="num">{{ cur }} {{ '{:,.2f}'.format(cap.total_capital) }}</td>
           <td colspan="2"></td>
         </tr>
       </tfoot>
-    </table>
+    {{ table_close() }}
   </div>
 
-  <p class="text-xs text-gray-500 -mt-3">
+  <p class="text-xs wt-mute -mt-3">
     Your <b>funding / current account</b> (CEO) holds {{ cur }} {{ '{:,.0f}'.format(cap.owner_funding) }} — money you push in and pull out for cashflow. It fluctuates, so it's <b>not counted as capital</b> here. "Capital" = retained profit + partner contributions + each partner's allocated profit.
   </p>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <!-- Add partner -->
-    <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <div class="wt-panel p-6">
       <div class="stat-label mb-3">Add a partner</div>
       <form method="post" action="/trade/partners" class="space-y-3">
         <div>
@@ -107,7 +103,7 @@
           <div class="flex-1">
             <label class="field-label">Partner since</label>
             <input name="joined_on" type="date" value="{{ today.isoformat() }}" class="w-full px-3 py-2.5">
-            <div class="text-xs text-gray-400 mt-1">They share the profit of trades <b>opened on/after this date</b> only — not trades already running.</div>
+            <div class="text-xs wt-ash mt-1">They share the profit of trades <b>opened on/after this date</b> only — not trades already running.</div>
           </div>
         </div>
         <div class="flex gap-3">
@@ -125,7 +121,7 @@
               </optgroup>
               {% endfor %}
             </select>
-            <div class="text-xs text-gray-400 mt-1">No cash/bank account? Add one under <a href="/trade/accounts" class="text-indigo-600 hover:underline">Cash Accounts</a>.</div>
+            <div class="text-xs wt-ash mt-1">No cash/bank account? Add one under <a href="/trade/accounts" class="wt-info hover:underline">Cash Accounts</a>.</div>
           </div>
         </div>
         <button type="submit" class="btn-primary">Add partner</button>
@@ -133,28 +129,28 @@
     </div>
 
     <!-- Allocation history -->
-    <div class="bg-white border border-gray-200 rounded-lg p-6">
+    <div class="wt-panel p-6">
       <div class="flex items-center justify-between mb-3">
         <div class="stat-label">Monthly profit allocations</div>
-        <form method="post" action="/trade/partners/allocate"><button type="submit" class="btn-secondary" style="padding:5px 12px; font-size:12px;">Run now</button></form>
+        <form method="post" action="/trade/partners/allocate"><button type="submit" class="btn-secondary btn-sm">Run now</button></form>
       </div>
       {% if history %}
       <table class="min-w-full text-sm">
-        <thead><tr class="text-gray-500" style="font-size:11px; text-transform:uppercase;"><th class="text-left py-1">Month</th><th class="text-right py-1">Profit</th><th class="text-right py-1">Posted</th></tr></thead>
+        <thead><tr class="wt-group"><th class="text-left py-1">Month</th><th class="text-right py-1">Profit</th><th class="text-right py-1">Posted</th></tr></thead>
         <tbody>
           {% for h in history %}
           <tr class="border-t border-gray-50">
-            <td class="py-1.5 text-gray-800">{{ h.period.strftime('%b %Y') }}</td>
-            <td class="py-1.5 text-right tabular-nums {% if h.profit < 0 %}text-red-600{% endif %}">{{ cur }} {{ '{:,.2f}'.format(h.profit) }}</td>
-            <td class="py-1.5 text-right text-xs">{% if h.je_id %}<span class="text-green-700">✓ split</span>{% else %}<span class="text-gray-400">— (no partners / nil)</span>{% endif %}</td>
+            <td class="py-1.5 wt-body">{{ h.period.strftime('%b %Y') }}</td>
+            <td class="py-1.5 text-right tabular-nums {% if h.profit < 0 %}wt-neg{% endif %}">{{ cur }} {{ '{:,.2f}'.format(h.profit) }}</td>
+            <td class="py-1.5 text-right text-xs">{% if h.je_id %}<span class="wt-pos">✓ split</span>{% else %}<span class="wt-ash">— (no partners / nil)</span>{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
       {% else %}
-      <p class="text-sm text-gray-400">No allocations yet. The first runs automatically after the first full month with a partner completes.</p>
+      <p class="text-sm wt-ash">No allocations yet. The first runs automatically after the first full month with a partner completes.</p>
       {% endif %}
-      <p class="text-xs text-gray-400 mt-3">Runs automatically when you open this page after a month ends (idempotent — never double-posts). It reclassifies each partner's share of that month's profit into their capital account; the money stays working in the business.</p>
+      <p class="text-xs wt-ash mt-3">Runs automatically when you open this page after a month ends (idempotent — never double-posts). It reclassifies each partner's share of that month's profit into their capital account; the money stays working in the business.</p>
     </div>
   </div>
 </div>

@@ -1,48 +1,42 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Trades{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Trades</h1>
-      <p class="page-subtitle">Every back-to-back vendor → customer transaction.</p>
-    </div>
-    <div class="flex gap-2">
-      <button class="btn-secondary" hx-get="/trade/payments/receive/new" hx-target="#modal-container" title="Receive one customer payment and auto-apply it oldest-due-first across their trades">💰 Receive Payment</button>
-      <button class="btn-secondary" hx-get="/trade/trades/receive/new" hx-target="#modal-container" title="Record one vendor delivery across many trades/items, with a single bilty split by weight">📦 Receive Goods</button>
-      <button class="btn-primary" hx-get="/trade/trades/new" hx-target="#modal-container">+ New Trade</button>
-    </div>
-  </div>
+  {{ page_header('Trades', 'Every trade, newest first.',
+      [{'label': '💰 Receive Payment', 'button': True, 'attrs': 'hx-get="/trade/payments/receive/new" hx-target="#modal-container"'},
+       {'label': '📦 Receive Goods', 'button': True, 'attrs': 'hx-get="/trade/trades/receive/new" hx-target="#modal-container"'},
+       {'label': '+ New Trade', 'button': True, 'primary': True, 'attrs': 'hx-get="/trade/trades/new" hx-target="#modal-container"'}]) }}
 
   <!-- Tabs -->
   {% set qs = ('&party_id=' ~ current_party) if current_party else '' %}
   {% set qs = qs ~ (('&status=' ~ current_status) if current_status else '') %}
   <div class="flex items-center gap-1 border-b border-gray-200">
     <a href="/trade/trades?tab=all{{ qs }}"
-       class="px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition {% if current_tab != 'pending' %}border-indigo-600 text-indigo-700{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
-      All <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full {% if current_tab != 'pending' %}bg-indigo-100 text-indigo-700{% else %}bg-gray-100 text-gray-500{% endif %}">{{ all_count }}</span>
+       class="px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition {% if current_tab != 'pending' %}border-indigo-600 wt-info{% else %}border-transparent wt-mute hover:wt-body{% endif %}">
+      All <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full {% if current_tab != 'pending' %}bg-indigo-100 wt-info{% else %}bg-gray-100 wt-mute{% endif %}">{{ all_count }}</span>
     </a>
     <a href="/trade/trades?tab=pending{{ qs }}"
-       class="px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition {% if current_tab == 'pending' %}border-indigo-600 text-indigo-700{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
-      Pending <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full {% if current_tab == 'pending' %}bg-indigo-100 text-indigo-700{% else %}bg-gray-100 text-gray-500{% endif %}">{{ pending_count }}</span>
+       class="px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition {% if current_tab == 'pending' %}border-indigo-600 wt-info{% else %}border-transparent wt-mute hover:wt-body{% endif %}">
+      Pending <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full {% if current_tab == 'pending' %}bg-indigo-100 wt-info{% else %}bg-gray-100 wt-mute{% endif %}">{{ pending_count }}</span>
     </a>
   </div>
 
   <!-- Filter -->
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
+  <div class="wt-panel p-6">
     <form method="get" class="flex items-end gap-4 flex-wrap">
       <input type="hidden" name="tab" value="{{ current_tab }}">
       <div>
         <label class="field-label">Status</label>
-        <select name="status" class="px-3 py-2.5">
+        <select name="status">
           <option value="">All</option>
           {% for s in statuses %}<option value="{{ s }}" {% if current_status == s %}selected{% endif %}>{{ s.replace('_',' ').title() }}</option>{% endfor %}
         </select>
       </div>
       <div>
         <label class="field-label">Party</label>
-        <select name="party_id" class="px-3 py-2.5">
+        <select name="party_id">
           <option value="">All</option>
           {% for p in parties %}<option value="{{ p.id }}" {% if current_party == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
         </select>
@@ -52,56 +46,57 @@
     </form>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+  <div class="wt-panel overflow-x-auto">
     {% if trades %}
-    <table class="min-w-full">
+    {{ report_toolbar('tbl-trades') }}
+    {{ sortable_table_open('tbl-trades', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Ref</th>
-          <th class="text-left">Date</th>
-          <th class="text-left">Vendor</th>
-          <th class="text-left">Purchaser</th>
-          <th class="text-right">Cost</th>
-          <th class="text-right">Sale</th>
-          <th class="text-right">Net Profit</th>
-          <th class="text-right">ROI</th>
-          <th class="text-left">Status</th>
-          <th class="text-left">Due</th>
+          <th>Ref</th>
+          <th>Date</th>
+          <th>Vendor</th>
+          <th>Purchaser</th>
+          <th class="num">Cost</th>
+          <th class="num">Sale</th>
+          <th class="num">Net Profit</th>
+          <th class="num">ROI</th>
+          <th>Status</th>
+          <th>Due</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {% for t in trades %}
         <tr>
-          <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/trades/{{ t.id }}">{{ t.reference }}</a></td>
-          <td class="text-gray-700 whitespace-nowrap">{{ t.trade_date }}</td>
-          <td class="text-gray-800">{{ party_map[t.vendor_id].name if party_map.get(t.vendor_id) else '—' }}</td>
-          <td class="text-gray-800">{{ party_map[t.purchaser_id].name if party_map.get(t.purchaser_id) else '—' }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(t.total_cost) }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(t.total_sale) }}</td>
+          <td><a class="wt-drill font-medium font-mono text-xs" href="/trade/trades/{{ t.id }}">{{ t.reference }}</a></td>
+          <td class="wt-body whitespace-nowrap">{{ t.trade_date }}</td>
+          <td class="wt-body">{{ party_map[t.vendor_id].name if party_map.get(t.vendor_id) else '—' }}</td>
+          <td class="wt-body">{{ party_map[t.purchaser_id].name if party_map.get(t.purchaser_id) else '—' }}</td>
+          <td class="num">{{ currency }} {{ '{:,.0f}'.format(t.total_cost) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.0f}'.format(t.total_sale) }}</td>
           {% set m = trade_metrics.get(t.id) if trade_metrics else None %}
-          <td class="text-right tabular-nums font-semibold" style="color: {% if m and m.net_profit >= 0 %}#15803d{% else %}#c2410c{% endif %};" title="Net of bilty &amp; trade costs">
+          <td class="num" class=\"{{ 'wt-pos' if m and m.net_profit >= 0 else 'wt-neg' }}\" title="Net of bilty &amp; trade costs">
             {{ currency }} {{ '{:,.0f}'.format(m.net_profit if m else (t.total_sale - t.total_cost)) }}
           </td>
-          <td class="text-right tabular-nums" style="color:#4338ca;" title="Net profit ÷ money invested (cost + trade costs)">{% if m and m.roi is not none %}{{ '{:,.1f}'.format(m.roi) }}%{% else %}—{% endif %}</td>
+          <td class="num" class="wt-info" title="Net profit ÷ money invested (cost + trade costs)">{% if m and m.roi is not none %}{{ '{:,.1f}'.format(m.roi) }}%{% else %}—{% endif %}</td>
           <td>{% include "partials/trade_status_badge.html" %}</td>
-          <td class="text-gray-600 whitespace-nowrap">
+          <td class="wt-mute whitespace-nowrap">
             {% if t.customer_due_date %}
               {{ t.customer_due_date }}
               {% if t.customer_due_date < today and (t.total_sale - t.paid_by_customer) > 0 %}<span class="pill-cr ml-1">OVERDUE</span>{% endif %}
-            {% else %}<span class="text-gray-400">—</span>{% endif %}
+            {% else %}<span class="wt-ash">—</span>{% endif %}
           </td>
           <td class="text-right whitespace-nowrap">
             <form class="inline" hx-post="/trade/trades/{{ t.id }}/delete" hx-confirm="Permanently delete {{ t.reference }}? Linked journals will be reversed.">
-              <button class="text-red-600 text-xs hover:underline font-medium">Delete</button>
+              <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
             </form>
           </td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
     {% else %}
-    <div class="px-6 py-16 text-center text-sm text-gray-500">No trades match the current filter.</div>
+    <div class=" text-center text-sm wt-mute">No trades match the current filter.</div>
     {% endif %}
   </div>
 </div>

@@ -1,36 +1,35 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Cash & Capital Accounts{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Cash & Capital Accounts</h1>
-      <p class="page-subtitle">Where money sits — bank, cash drawer, and owner's equity.</p>
-    </div>
-    <button class="btn-primary" hx-get="/trade/accounts/new" hx-target="#modal-container">+ New Account</button>
-  </div>
+  {{ page_header('Cash Accounts',
+      'Cash and bank accounts money moves through.',
+      [{'label': '+ New account', 'primary': True, 'button': True,
+        'attrs': 'hx-get="/trade/accounts/new" hx-target="#modal-container"'}]) }}
 
   {% macro section(title, blurb, rows, show_bank) -%}
   <div>
     <div class="flex items-baseline justify-between mb-3">
       <div>
         <h2>{{ title }}</h2>
-        <p class="text-xs text-gray-500 mt-1">{{ blurb }}</p>
+        <p class="text-xs wt-mute mt-1">{{ blurb }}</p>
       </div>
     </div>
-    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+    <div class="wt-panel overflow-x-auto">
       {% if rows %}
-      <table class="min-w-full">
+      {{ report_toolbar('tbl-cash-accounts') }}
+    {{ sortable_table_open('tbl-cash-accounts', dense=True) }}
         <thead>
           <tr>
-            <th class="text-left">Name</th>
-            <th class="text-left">Type</th>
-            {% if show_bank %}<th class="text-left">Bank</th>
-            <th class="text-left">Account #</th>{% endif %}
-            <th class="text-right">Opening</th>
-            <th class="text-right">Current Balance</th>
-            <th class="text-left">Status</th>
+            <th>Name</th>
+            <th>Type</th>
+            {% if show_bank %}<th>Bank</th>
+            <th>Account #</th>{% endif %}
+            <th class="num">Opening</th>
+            <th class="num">Current Balance</th>
+            <th>Status</th>
             <th></th>
           </tr>
         </thead>
@@ -38,25 +37,25 @@
           {% for r in rows %}
           {% set a = r.account %}
           <tr>
-            <td class="font-medium text-gray-900">{{ a.name }}</td>
-            <td class="text-gray-700 capitalize">{{ a.kind.replace('_',' ') }}</td>
-            {% if show_bank %}<td class="text-gray-700">{{ a.bank_name or '—' }}</td>
-            <td class="text-gray-700">{{ a.account_number or '—' }}</td>{% endif %}
-            <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(a.opening_balance) }}</td>
-            <td class="text-right tabular-nums font-semibold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(r.balance) }}</td>
+            <td class="font-medium wt-ink">{{ a.name }}</td>
+            <td class="wt-body capitalize">{{ a.kind.replace('_',' ') }}</td>
+            {% if show_bank %}<td class="wt-body">{{ a.bank_name or '—' }}</td>
+            <td class="wt-body">{{ a.account_number or '—' }}</td>{% endif %}
+            <td class="num">{{ currency }} {{ '{:,.2f}'.format(a.opening_balance) }}</td>
+            <td class="num">{{ currency }} {{ '{:,.2f}'.format(r.balance) }}</td>
             <td>{% if a.is_active %}<span class="pill-dr">Active</span>{% else %}<span class="pill-cr">Disabled</span>{% endif %}</td>
             <td class="text-right whitespace-nowrap">
-              <button class="text-indigo-600 text-xs hover:underline font-medium" hx-get="/trade/accounts/{{ a.id }}/edit" hx-target="#modal-container">Edit</button>
+              <button class="wt-info text-xs hover:underline font-medium" hx-get="/trade/accounts/{{ a.id }}/edit" hx-target="#modal-container">Edit</button>
               <form class="inline" hx-post="/trade/accounts/{{ a.id }}/delete" hx-confirm="Disable this account?">
-                <button class="text-red-600 text-xs hover:underline ml-3 font-medium">Disable</button>
+                <button class="wt-neg text-xs hover:underline ml-3 font-medium">Disable</button>
               </form>
             </td>
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      {{ table_close() }}
       {% else %}
-      <div class="px-6 py-10 text-center text-sm text-gray-400">— none —</div>
+      <div class=" text-center text-sm wt-ash">— none —</div>
       {% endif %}
     </div>
   </div>

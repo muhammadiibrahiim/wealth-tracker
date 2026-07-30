@@ -1,38 +1,34 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Goods Received{% endblock %}
 {% block content %}
 {% set cur = currency %}
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Goods Received</h1>
-      <p class="page-subtitle">Every delivery that came in — grouped by vendor &amp; date, with items, rates and the bilty. This is the combined view of your Master Receive vouchers and partial deliveries.</p>
-    </div>
-    <button class="btn-primary" hx-get="/trade/trades/receive/new" hx-target="#modal-container">📦 Receive Goods</button>
-  </div>
+  {{ page_header('Goods Received', 'What vendors have delivered against your open trades.',
+      [{'label': '📦 Receive Goods', 'primary': True, 'button': True, 'attrs': 'hx-get="/trade/trades/receive/new" hx-target="#modal-container"'}]) }}
 
   {% for d in deliveries %}
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2" style="background:#fafaf9;">
+  <div class="wt-panel">
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
       <div class="text-sm">
-        <span class="font-bold text-gray-900">{{ d.date.strftime('%a, %d %b %Y') }}</span>
-        <span class="text-gray-500">· from <b>{{ d.vendor }}</b></span>
-        <span class="text-gray-400">· {{ d.lines|length }} line{{ 's' if d.lines|length != 1 }} · {{ d.trade_count }} trade{{ 's' if d.trade_count != 1 }}</span>
+        <span class="font-bold wt-ink">{{ d.date.strftime('%a, %d %b %Y') }}</span>
+        <span class="wt-mute">· from <b>{{ d.vendor }}</b></span>
+        <span class="wt-ash">· {{ d.lines|length }} line{{ 's' if d.lines|length != 1 }} · {{ d.trade_count }} trade{{ 's' if d.trade_count != 1 }}</span>
       </div>
       <div class="text-sm flex items-center gap-3">
         {% if d.bilty_total > 0 %}
         <span title="Bilty for this delivery{% if d.terminals %} · {{ d.terminals|join(', ') }}{% endif %}{% if d.bilty_kg %} · {{ '{:g}'.format(d.bilty_kg) }} kg{% endif %}">
-          🚚 <b>{{ cur }} {{ '{:,.0f}'.format(d.bilty_total) }}</b>{% if d.bilty_kg %} <span class="text-gray-400">/ {{ '{:g}'.format(d.bilty_kg) }}kg</span>{% endif %}
-          {% if d.paid_by_customer %}<span style="background:#fef3c7; color:#92400e; font-size:10px; font-weight:700; padding:1px 6px; border-radius:999px; margin-left:4px;">PAID BY CUSTOMER</span>{% endif %}
+          🚚 <b>{{ cur }} {{ '{:,.0f}'.format(d.bilty_total) }}</b>{% if d.bilty_kg %} <span class="wt-ash">/ {{ '{:g}'.format(d.bilty_kg) }}kg</span>{% endif %}
+          {% if d.paid_by_customer %}<span class="wt-pill wt-pill-warn">PAID BY CUSTOMER</span>{% endif %}
         </span>
-        {% else %}<span class="text-gray-300 text-xs">no bilty</span>{% endif %}
-        {% if d.invoice %}<a href="{{ d.invoice }}" target="_blank" class="text-indigo-600 hover:underline text-xs">📄 invoice</a>{% endif %}
+        {% else %}<span class="wt-ash text-xs">no bilty</span>{% endif %}
+        {% if d.invoice %}<a href="{{ d.invoice }}" target="_blank" class="wt-info hover:underline text-xs">📄 invoice</a>{% endif %}
       </div>
     </div>
-    <div style="overflow-x:auto;">
+    <div class="wt-table-scroll">
     <table class="min-w-full text-sm">
       <thead>
-        <tr class="text-left" style="color:#6b7280; font-size:11px; text-transform:uppercase;">
+        <tr class="wt-group">
           <th class="px-5 py-2">Trade → Customer</th>
           <th class="px-5 py-2">Item</th>
           <th class="px-5 py-2 text-right">Qty received</th>
@@ -42,27 +38,27 @@
       <tbody>
         {% for ln in d.lines %}
         <tr class="border-t border-gray-100">
-          <td class="px-5 py-2"><a class="text-indigo-600 hover:underline" href="/trade/trades/{{ ln.trade_id }}">{{ ln.trade_ref }}</a> <span class="text-gray-400">→ {{ ln.customer }}</span></td>
-          <td class="px-5 py-2 font-medium text-gray-800">{{ ln.item }}</td>
-          <td class="px-5 py-2 text-right tabular-nums">{{ '{:,.0f}'.format(ln.qty) }} <span class="text-gray-400 text-xs">{{ ln.unit }}</span></td>
-          <td class="px-5 py-2 text-gray-600">
-            {% if ln.batches %}{% for b in ln.batches %}{{ '{:,.0f}'.format(b.qty) }} @ {{ cur }} {{ '{:g}'.format(b.rate) }}{% if not loop.last %} · {% endif %}{% endfor %}{% else %}<span class="text-gray-300">—</span>{% endif %}
+          <td class="px-5 py-2"><a class="wt-info hover:underline" href="/trade/trades/{{ ln.trade_id }}">{{ ln.trade_ref }}</a> <span class="wt-ash">→ {{ ln.customer }}</span></td>
+          <td class="px-5 py-2 font-medium wt-body">{{ ln.item }}</td>
+          <td class="px-5 py-2 text-right tabular-nums">{{ '{:,.0f}'.format(ln.qty) }} <span class="wt-ash text-xs">{{ ln.unit }}</span></td>
+          <td class="px-5 py-2 wt-mute">
+            {% if ln.batches %}{% for b in ln.batches %}{{ '{:,.0f}'.format(b.qty) }} @ {{ cur }} {{ '{:g}'.format(b.rate) }}{% if not loop.last %} · {% endif %}{% endfor %}{% else %}<span class="wt-ash">—</span>{% endif %}
           </td>
         </tr>
         {% endfor %}
       </tbody>
       <tfoot>
-        <tr class="border-t border-gray-200" style="background:#fafaf9;">
-          <td class="px-5 py-2 text-xs text-gray-500" colspan="2">{% if d.notes %}📝 {{ d.notes|join('; ') }}{% endif %}</td>
+        <tr class="border-t border-gray-200">
+          <td class="px-5 py-2 text-xs wt-mute" colspan="2">{% if d.notes %}📝 {{ d.notes|join('; ') }}{% endif %}</td>
           <td class="px-5 py-2 text-right font-bold tabular-nums">{{ '{:,.0f}'.format(d.total_qty) }}</td>
           <td class="px-5 py-2"></td>
         </tr>
       </tfoot>
-    </table>
+    {{ table_close() }}
     </div>
   </div>
   {% else %}
-  <div class="bg-white border border-gray-200 rounded-lg p-12 text-center text-gray-400">
+  <div class="wt-panel p-12 text-center wt-ash">
     No goods received yet. Click <b>📦 Receive Goods</b> to record a vendor delivery.
   </div>
   {% endfor %}

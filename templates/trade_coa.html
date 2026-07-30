@@ -39,13 +39,13 @@
           <td>
             <a class="wt-drill font-medium" href="/trade/reports/general-ledger?account_id={{ a.id }}">{{ a.name }}</a>
             {% if a.is_system %}<span class="ml-2 text-xs wt-ash">(system)</span>{% endif %}
-            {% if not a.is_active %}<span class="ml-2 text-xs" class="wt-neg">disabled</span>{% endif %}
+            {% if not a.is_active %}<span class="ml-2 text-xs wt-neg">disabled</span>{% endif %}
           </td>
           <td class="num">
             {% set b = balances.get(a.id, 0) %}
             {% if b == 0 %}<span class="wt-ash">—</span>
             {% elif b > 0 %}<span class="font-medium wt-ink">{{ currency }} {{ '{:,.2f}'.format(b) }}</span> <span class="pill-dr ml-1">DR</span>
-            {% else %}<span class="font-medium" class="wt-neg">{{ currency }} {{ '{:,.2f}'.format(-b) }}</span> <span class="pill-cr ml-1">CR</span>
+            {% else %}<span class="font-medium wt-neg">{{ currency }} {{ '{:,.2f}'.format(-b) }}</span> <span class="pill-cr ml-1">CR</span>
             {% endif %}
           </td>
           <td class="text-right whitespace-nowrap">

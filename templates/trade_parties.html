@@ -44,7 +44,7 @@
               <span class="font-medium wt-ink">{{ currency }} {{ '{:,.2f}'.format(p.opening_balance) }}</span>
               <div class="text-xs wt-mute">they owe us</div>
             {% elif p.opening_balance < 0 %}
-              <span class="font-medium" class="wt-neg">{{ currency }} {{ '{:,.2f}'.format(-p.opening_balance) }}</span>
+              <span class="font-medium wt-neg">{{ currency }} {{ '{:,.2f}'.format(-p.opening_balance) }}</span>
               <div class="text-xs wt-mute">we owe them</div>
             {% else %}
               <span class="wt-ash">—</span>

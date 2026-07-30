@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Voucher {{ entry.reference }}{% endblock %}
 {% block content %}
 
@@ -12,7 +13,7 @@
       <p class="page-subtitle">
         {{ entry.entry_date }} · {{ (entry.entry_type.value if entry.entry_type.value is defined else entry.entry_type).replace('_',' ').title() }}
       </p>
-      <p class="mt-3 text-gray-800">{{ entry.description }}</p>
+      <p class="mt-3 wt-body">{{ entry.description }}</p>
     </div>
     <div class="flex gap-2">
       {% set _et = entry.entry_type.value if entry.entry_type.value is defined else entry.entry_type %}
@@ -24,21 +25,21 @@
       {% if not entry.is_reversed and not entry.reversal_of_id %}
       <form hx-post="/trade/vouchers/{{ entry.id }}/reverse" hx-confirm="Reverse this voucher?">
         <input type="hidden" name="reason" value="Reversed by user">
-        <button class="btn-secondary" style="color: #b91c1c;">Reverse</button>
+        <button class="btn-secondary wt-neg">Reverse</button>
       </form>
       {% endif %}
       <a href="/trade/vouchers" class="btn-secondary">← Back</a>
     </div>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <table class="min-w-full">
+  <div class="wt-panel">
+    {{ table_open(dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Account</th>
-          <th class="text-left">Description</th>
-          <th class="text-right">Debit</th>
-          <th class="text-right">Credit</th>
+          <th>Account</th>
+          <th>Description</th>
+          <th class="num">Debit</th>
+          <th class="num">Credit</th>
         </tr>
       </thead>
       <tbody>
@@ -47,23 +48,23 @@
         {% for ln in lines %}
         <tr>
           <td>
-            {% if ln.account %}<span class="font-mono text-xs text-gray-500">{{ ln.account.code }}</span> <span class="text-gray-900">{{ ln.account.name }}</span>
+            {% if ln.account %}<span class="font-mono text-xs wt-mute">{{ ln.account.code }}</span> <span class="wt-ink">{{ ln.account.name }}</span>
             {% else %}—{% endif %}
           </td>
-          <td class="text-gray-700">{{ ln.line.description or '' }}</td>
-          <td class="text-right tabular-nums">{% if ln.line.debit > 0 %}<span class="font-medium text-gray-900">{{ currency }} {{ '{:,.2f}'.format(ln.line.debit) }}</span>{% endif %}</td>
-          <td class="text-right tabular-nums">{% if ln.line.credit > 0 %}<span class="font-medium text-gray-900">{{ currency }} {{ '{:,.2f}'.format(ln.line.credit) }}</span>{% endif %}</td>
+          <td class="wt-body">{{ ln.line.description or '' }}</td>
+          <td class="num">{% if ln.line.debit > 0 %}<span class="font-medium wt-ink">{{ currency }} {{ '{:,.2f}'.format(ln.line.debit) }}</span>{% endif %}</td>
+          <td class="num">{% if ln.line.credit > 0 %}<span class="font-medium wt-ink">{{ currency }} {{ '{:,.2f}'.format(ln.line.credit) }}</span>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
       <tfoot class="bg-gray-50 border-t-2 border-gray-200">
         <tr>
-          <td colspan="2" class="text-xs uppercase tracking-widest font-bold text-gray-700">Totals</td>
-          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(total_dr) }}</td>
-          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(total_cr) }}</td>
+          <td colspan="2" class="text-xs uppercase tracking-widest font-bold wt-body">Totals</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(total_dr) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(total_cr) }}</td>
         </tr>
       </tfoot>
-    </table>
+    {{ table_close() }}
   </div>
 </div>
 

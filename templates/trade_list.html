@@ -78,7 +78,7 @@
           <td class="num" class=\"{{ 'wt-pos' if m and m.net_profit >= 0 else 'wt-neg' }}\" title="Net of bilty &amp; trade costs">
             {{ currency }} {{ '{:,.0f}'.format(m.net_profit if m else (t.total_sale - t.total_cost)) }}
           </td>
-          <td class="num" class="wt-info" title="Net profit ÷ money invested (cost + trade costs)">{% if m and m.roi is not none %}{{ '{:,.1f}'.format(m.roi) }}%{% else %}—{% endif %}</td>
+          <td class="num wt-info" title="Net profit ÷ money invested (cost + trade costs)">{% if m and m.roi is not none %}{{ '{:,.1f}'.format(m.roi) }}%{% else %}—{% endif %}</td>
           <td>{% include "partials/trade_status_badge.html" %}</td>
           <td class="wt-mute whitespace-nowrap">
             {% if t.customer_due_date %}

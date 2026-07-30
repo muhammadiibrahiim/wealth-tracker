@@ -80,7 +80,7 @@ class="flex items-end gap-4 flex-wrap">
         <div><span class="font-semibold wt-ink">{{ it.item_name }}</span>{% if it.specs %}<span class="text-xs wt-mute ml-2">{{ it.specs }}</span>{% endif %}</div>
         <div class="text-sm wt-mute">Ordered <b class="wt-ink">{{ '{:,.0f}'.format(it.ordered) }} {{ it.unit }}</b></div>
       </div>
-      <table class="min-w-full text-sm">
+      <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
         <thead>
           <tr class="wt-group">
             <th class="text-left py-1">Sent On</th>

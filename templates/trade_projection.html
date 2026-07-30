@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Order Projection{% endblock %}
 {% block content %}
 
@@ -42,17 +43,17 @@
   <!-- Editable order lines -->
   <form id="proj-form" hx-post="/trade/projection" hx-target="#proj-tiles" hx-swap="innerHTML"
         hx-trigger="input changed delay:600ms, change delay:150ms"
-        class="bg-white border border-gray-200 rounded-lg p-5">
+        class="wt-panel p-5">
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-3">
-        <h2 class="text-base font-bold text-gray-900">Planned Orders</h2>
+        <h2 class="text-base font-bold wt-ink">Planned Orders</h2>
         <span class="htmx-indicator text-xs text-indigo-500">saving…</span>
-        <span id="proj-saved" class="text-xs text-green-600" style="display:none;">✓ updated</span>
+        <span id="proj-saved" class="text-xs wt-pos" style="display:none;">✓ updated</span>
       </div>
-      <button type="button" class="text-indigo-600 hover:text-indigo-900 text-sm font-medium" onclick="addProjRow()">+ Add product</button>
+      <button type="button" class="wt-drill text-sm font-medium" onclick="addProjRow()">+ Add product</button>
     </div>
     <div style="overflow-x:auto;">
-      <table class="min-w-full text-sm" id="proj-table">
+      {{ table_open(dense=True, id='proj-table') }}
         <thead>
           <tr class="text-left" style="color:#6b7280; font-size:11px; text-transform:uppercase;">
             <th class="py-1 pr-2">On?<span class="tip-i" data-tip="Include this product in the projection. Uncheck to leave it out of the numbers without deleting the row.">i</span></th>
@@ -69,15 +70,15 @@
             <th class="py-1 pr-2 text-right" style="background:#f0fdf4;">Net/pc<span class="tip-i" data-tip="Net profit per piece = Sale rate − Buy rate − (Dye/Block + Bilty) ÷ Qty. Calculated — you can't edit it.">i</span></th>
             <th class="py-1 pr-2 text-right">Lead d<span class="tip-i" data-tip="Lead days — from placing the order until you receive the goods.">i</span></th>
             <th class="py-1 pr-2 text-right">Collect d<span class="tip-i" data-tip="Collection days — from delivering to the customer until they actually pay you.">i</span></th>
-            <th class="py-1 pr-2 text-right" style="color:#c2410c;">Adv %<span class="tip-i" data-tip="Share of the vendor payment paid IN ADVANCE, on the order date.">i</span></th>
-            <th class="py-1 pr-2 text-right" style="color:#c2410c;">Deliv %<span class="tip-i" data-tip="Share of the vendor payment paid ON DELIVERY (order date + lead days).">i</span></th>
-            <th class="py-1 pr-2 text-right" style="color:#c2410c;">Credit %<span class="tip-i" data-tip="Share of the vendor payment paid ON CREDIT, some days after delivery. Adv + Deliv + Credit should total 100 (auto-normalised if not).">i</span></th>
+            <th class="py-1 pr-2 text-right wt-neg">Adv %<span class="tip-i" data-tip="Share of the vendor payment paid IN ADVANCE, on the order date.">i</span></th>
+            <th class="py-1 pr-2 text-right wt-neg">Deliv %<span class="tip-i" data-tip="Share of the vendor payment paid ON DELIVERY (order date + lead days).">i</span></th>
+            <th class="py-1 pr-2 text-right wt-neg">Credit %<span class="tip-i" data-tip="Share of the vendor payment paid ON CREDIT, some days after delivery. Adv + Deliv + Credit should total 100 (auto-normalised if not).">i</span></th>
             <th class="py-1 pr-2 text-right">Credit d<span class="tip-i" data-tip="Days after delivery you pay the credit portion of the vendor payment.">i</span></th>
             <th class="py-1"></th>
           </tr>
         </thead>
         <tbody id="proj-rows"></tbody>
-      </table>
+      {{ table_close() }}
     </div>
   </form>
 
@@ -85,7 +86,7 @@
   <div id="proj-daytable">
     {% include 'trade_projection_daytable.html' %}
   </div>
-  <p class="text-sm text-gray-500">The <b>Running</b> column is your cash if you started with nothing. Where it goes red you're short; <b>Peak Cash Needed</b> is the most you'd have to put in, and <b>Cash Recovered By</b> is when collections bring you back to positive. Ignores any funding you already have — this is the standalone cash the batch demands.</p>
+  <p class="text-sm wt-mute">The <b>Running</b> column is your cash if you started with nothing. Where it goes red you're short; <b>Peak Cash Needed</b> is the most you'd have to put in, and <b>Cash Recovered By</b> is when collections bring you back to positive. Ignores any funding you already have — this is the standalone cash the batch demands.</p>
 </div>
 
 <script>
@@ -121,7 +122,7 @@
     tr.innerHTML = `<td colspan="18" style="padding:12px 8px 4px;">
         <div style="display:flex; align-items:center; gap:12px;">
           <span style="font-weight:700; color:#334155; font-size:12px; text-transform:uppercase; letter-spacing:.05em;">${name}</span>
-          <button type="button" class="text-indigo-600 hover:text-indigo-900 text-xs font-medium"
+          <button type="button" class="wt-drill text-xs font-medium"
                   onclick="addProjRow({grp:'${name}'})">+ Add ${name.toLowerCase()} item</button>
         </div></td>`;
     return tr;
@@ -151,7 +152,7 @@
           <input name="pline_${i}_dye_block_cost" oninput="projCalc(${i})" value="${nz(v.dye)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right dye-input" style="width:90px; box-sizing:border-box;">
         </div></td>
       <td class="py-1 pr-2"><input name="pline_${i}_bilty" oninput="projCalc(${i})" value="${nz(v.bilty)}" type="number" step="0.01" class="px-2 py-1.5 text-sm text-right" style="width:95px; box-sizing:border-box;"></td>
-      <td class="py-1 pr-2 text-right tabular-nums" style="background:#f1f5f9;"><span id="cost_pc_${i}" class="font-medium text-gray-700" title="Locked — calculated">—</span></td>
+      <td class="py-1 pr-2 text-right tabular-nums" style="background:#f1f5f9;"><span id="cost_pc_${i}" class="font-medium wt-body" title="Locked — calculated">—</span></td>
       <td class="py-1 pr-2 text-right tabular-nums" style="background:#f0fdf4;"><span id="net_pc_${i}" class="font-semibold" title="Locked — calculated">—</span></td>
       <td class="py-1 pr-2"><input name="pline_${i}_lead_days" value="${v.lead}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:70px; box-sizing:border-box;"></td>
       <td class="py-1 pr-2"><input name="pline_${i}_collection_lag_days" value="${v.collect}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:70px; box-sizing:border-box;"></td>
@@ -159,7 +160,7 @@
       <td class="py-1 pr-2"><input name="pline_${i}_pct_on_delivery" value="${nz(v.dely)}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:65px; box-sizing:border-box;"></td>
       <td class="py-1 pr-2"><input name="pline_${i}_pct_credit" value="${nz(v.cred)}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:65px; box-sizing:border-box;"></td>
       <td class="py-1 pr-2"><input name="pline_${i}_credit_days" value="${v.creditd}" type="number" step="1" class="px-2 py-1.5 text-sm text-right" style="width:70px; box-sizing:border-box;"></td>
-      <td class="py-1 text-right"><button type="button" class="text-gray-400 hover:text-red-600 text-xs" onclick="delProjRow(this)">✕</button></td>
+      <td class="py-1 text-right"><button type="button" class="wt-ash hover:wt-neg text-xs" onclick="delProjRow(this)">✕</button></td>
     `;
     insertIntoGroup(tr, group);
     if (window.htmx) htmx.process(tr);

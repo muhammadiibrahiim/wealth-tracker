@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Quotation {{ quotation.reference }}{% endblock %}
 {% block content %}
 
@@ -34,7 +35,7 @@
         ✓ Accept → Create Trade
       </button>
       <form hx-post="/trade/quotations/{{ quotation.id }}/reject" hx-confirm="Mark this quotation as rejected?">
-        <button class="btn-secondary" style="color: #b91c1c;">Reject</button>
+        <button class="btn-secondary wt-neg">Reject</button>
       </form>
       {% endif %}
       {% if _st == 'accepted' and quotation.trade_id %}
@@ -52,71 +53,71 @@
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
     <div class="stat-card">
       <div class="stat-label">Vendor</div>
-      <div class="text-lg font-bold text-gray-900 mt-1">{{ vendor.name if vendor else '—' }}</div>
+      <div class="text-lg font-bold wt-ink mt-1">{{ vendor.name if vendor else '—' }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Purchaser (Customer)</div>
-      <div class="text-lg font-bold text-gray-900 mt-1">{{ purchaser.name if purchaser else '—' }}</div>
+      <div class="text-lg font-bold wt-ink mt-1">{{ purchaser.name if purchaser else '—' }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Quoted</div>
       <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(quotation.total_sale) }}</div>
     </div>
-    <div class="stat-card" style="border-color: #16a34a;">
+    <div class="stat-card wt-card-pos">
       <div class="stat-label">Indicative Profit</div>
-      <div class="stat-value" style="color: #15803d;">
+      <div class="stat-value wt-pos">
         <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(quotation.total_sale - quotation.total_cost) }}
       </div>
     </div>
   </div>
 
   <!-- Lines -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200" style="background: #fafaf9;"><h2>Line Items</h2></div>
-    <table class="min-w-full">
+  <div class="wt-panel">
+    <div class="wt-panel__head"><h2>Line Items</h2></div>
+    {{ table_open(dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Item</th>
-          <th class="text-left">Specs</th>
-          <th class="text-right">Qty</th>
-          <th class="text-right">Unit Cost</th>
-          <th class="text-right">Unit Price</th>
-          <th class="text-right">Line Sale</th>
+          <th>Item</th>
+          <th>Specs</th>
+          <th class="num">Qty</th>
+          <th class="num">Unit Cost</th>
+          <th class="num">Unit Price</th>
+          <th class="num">Line Sale</th>
         </tr>
       </thead>
       <tbody>
         {% for ln in quotation.lines %}
         <tr class="align-top">
           <td>
-            <div class="font-medium text-gray-900">{{ ln.item_name }}</div>
-            {% if ln.line_notes %}<div class="text-xs text-gray-500 mt-1">{{ ln.line_notes }}</div>{% endif %}
+            <div class="font-medium wt-ink">{{ ln.item_name }}</div>
+            {% if ln.line_notes %}<div class="text-xs wt-mute mt-1">{{ ln.line_notes }}</div>{% endif %}
           </td>
-          <td class="text-xs text-gray-700">
+          <td class="text-xs wt-body">
             {% if ln.specs %}
-              {% for s in ln.specs %}<div><span class="text-gray-400">{{ s.label }}:</span> {{ s.value }}</div>{% endfor %}
-            {% else %}<span class="text-gray-400">—</span>{% endif %}
+              {% for s in ln.specs %}<div><span class="wt-ash">{{ s.label }}:</span> {{ s.value }}</div>{% endfor %}
+            {% else %}<span class="wt-ash">—</span>{% endif %}
           </td>
-          <td class="text-right tabular-nums">{{ '{:g}'.format(ln.quantity) }} {{ ln.unit }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ln.unit_cost) }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ln.unit_price) }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ln.quantity * ln.unit_price) }}</td>
+          <td class="num">{{ '{:g}'.format(ln.quantity) }} {{ ln.unit }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.unit_cost) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.unit_price) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.quantity * ln.unit_price) }}</td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
   </div>
 
   {% if quotation.terms_text %}
   <div class="accent-card" style="border-left-color: #ca8a04;">
     <div class="stat-label">Terms &amp; Conditions</div>
-    <p class="text-gray-800 mt-2 whitespace-pre-line text-sm">{{ quotation.terms_text }}</p>
+    <p class="wt-body mt-2 whitespace-pre-line text-sm">{{ quotation.terms_text }}</p>
   </div>
   {% endif %}
 
   {% if quotation.notes %}
   <div class="accent-card" style="border-left-color: #6b7280; background: #f4f5f8;">
     <div class="stat-label">Internal Notes</div>
-    <p class="text-gray-800 mt-2 whitespace-pre-line text-sm">{{ quotation.notes }}</p>
+    <p class="wt-body mt-2 whitespace-pre-line text-sm">{{ quotation.notes }}</p>
   </div>
   {% endif %}
 
@@ -124,7 +125,7 @@
   <div class="accent-card" style="border-left-color: #16a34a; background: #dcfce7;">
     <p class="text-sm">
       <strong>Converted to trade.</strong> This quotation was accepted on {{ quotation.accepted_at }}.
-      <a href="/trade/trades/{{ quotation.trade_id }}" class="text-indigo-600 hover:underline font-medium">Open the linked trade →</a>
+      <a href="/trade/trades/{{ quotation.trade_id }}" class="wt-info hover:underline font-medium">Open the linked trade →</a>
     </p>
   </div>
   {% endif %}

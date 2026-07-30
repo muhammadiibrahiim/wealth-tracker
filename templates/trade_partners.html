@@ -8,7 +8,7 @@
 
   {% if cap.over_allocated %}
   <div class="accent-card wt-card-neg wt-neg-bg">
-    <div class="text-sm font-semibold" class="wt-neg">⚠ Partners add up to {{ '{:g}'.format(cap.partner_total_pct) }}% — more than 100%. Fix the percentages below.</div>
+    <div class="text-sm font-semibold wt-neg">⚠ Partners add up to {{ '{:g}'.format(cap.partner_total_pct) }}% — more than 100%. Fix the percentages below.</div>
   </div>
   {% endif %}
 
@@ -55,12 +55,12 @@
         {% for p in cap.partners %}
         <tr>
           <td class="font-medium wt-ink">{{ p.name }}</td>
-          <td class="num" class="wt-info">{{ '{:g}'.format(p.pct) }}%</td>
+          <td class="num wt-info">{{ '{:g}'.format(p.pct) }}%</td>
           <td class="num">{{ cur }} {{ '{:,.2f}'.format(p.capital) }}</td>
           <td class="wt-mute text-sm">{{ p.joined_on.strftime('%d %b %Y') if p.joined_on else '—' }}</td>
           <td class="text-right">
             <form method="post" action="/trade/partners/{{ p.id }}" class="inline-flex items-center gap-1">
-              <input type="number" step="0.01" min="0" name="pct" value="{{ '{:g}'.format(p.pct) }}" class="w-20" class="num">
+              <input class="w-20 num" type="number" step="0.01" min="0" name="pct" value="{{ '{:g}'.format(p.pct) }}">
               <button type="submit" class="btn-secondary btn-sm">Set %</button>
             </form>
             <form method="post" action="/trade/partners/{{ p.id }}" class="inline" onsubmit="return confirm('Remove {{ p.name }} as an active partner? (Their capital account stays for the record.)');">

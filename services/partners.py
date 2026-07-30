@@ -6,10 +6,13 @@ Partners each own a fixed % of the business and hold an equity capital account
 going forward is split.
 
 Each completed month, `run_due_allocations` posts ONE idempotent journal entry
-that reclassifies the partners' share of that month's profit from the owner's
-retained-earnings pool (Capital A/C 2102) into their capital accounts (and the
-reverse in a loss month). It's a pure equity reallocation — no cash moves; the
-money stays working in the business until a partner actually withdraws.
+that reclassifies the realised trade profit from the pool (Capital A/C 2102)
+into partner capital accounts. Profit is split PER TRADE: each trade's profit
+goes only to the partners who were in when that trade OPENED (joined_on <=
+trade_date), so a partner shares trades started on/after they joined — never
+ones already running. The owner takes the residual of every trade. Only profit
+realised after the capital-setup epoch counts (earlier profit is the moved
+capital). It's a pure equity reallocation — no cash moves.
 """
 from __future__ import annotations
 
@@ -20,10 +23,9 @@ from typing import Optional
 from sqlmodel import Session, select
 
 from models import (Partner, PartnerAllocation, Account, JournalEntry,
-                    JournalLine, JournalEntryType)
+                    JournalLine, JournalEntryType, Trade)
 from services.posting import PostingEngine
 from services.account_setup import create_account
-from services.ledger import profit_and_loss
 
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
@@ -217,86 +219,121 @@ def setup_owner_capital(session, user_id, name, joined_on=None) -> Partner:
     return p
 
 
-# ── monthly allocation ───────────────────────────────────────────────────
-def _allocate_month(session, user_id, month_first, non_owner_active, owner_partner, pool) -> dict:
+# ── per-trade monthly allocation ─────────────────────────────────────────
+def _realized_by_trade(session, user_id, pool, month_first, month_last, epoch):
+    """Profit realized into the pool (2102) this month, per TRADE — from the
+    trade closing entries (DR P&L / CR Capital A/C). Only closings dated AFTER
+    the epoch (the capital-setup date) count, so the retained capital already
+    moved into the owner's account is never re-allocated. Returns {trade_id:
+    signed_profit}."""
+    from datetime import timedelta as _td
+    lo = month_first
+    if epoch and epoch >= month_first:
+        lo = epoch + _td(days=1)          # strictly after setup
+    if lo > month_last:
+        return {}
+    rows = session.exec(
+        select(JournalEntry.trade_id, JournalLine.debit, JournalLine.credit)
+        .select_from(JournalLine)
+        .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+        .where(JournalLine.account_id == pool.id,
+               JournalEntry.trade_id != None,   # noqa: E711
+               JournalEntry.is_reversed == False,  # noqa: E712
+               JournalEntry.entry_type != JournalEntryType.PARTNER_ALLOCATION,
+               JournalEntry.entry_date >= lo,
+               JournalEntry.entry_date <= month_last)).all()
+    realized = {}
+    for tid, dr, cr in rows:
+        realized[tid] = realized.get(tid, ZERO) + (Decimal(cr or 0) - Decimal(dr or 0))
+    return {t: v for t, v in realized.items() if v != 0}
+
+
+def _allocate_month(session, user_id, month_first, non_owner_active, owner_partner,
+                    pool, epoch) -> dict:
     month_last = _last_of_month(month_first)
-    # non-owner partners who owned for the WHOLE month (joined on/before the 1st)
-    parts = [p for p in non_owner_active if p.joined_on <= month_first]
-    include_owner = bool(owner_partner and owner_partner.account_id
-                         and owner_partner.joined_on <= month_first)
-    pl = profit_and_loss(session, user_id, from_date=month_first, to_date=month_last)
-    profit = Decimal(str(pl.get("net_income", 0) or 0))
+    realized = _realized_by_trade(session, user_id, pool, month_first, month_last, epoch)
+    total_profit = sum(realized.values(), ZERO)
+
+    # Split EACH trade's realised profit among the non-owner partners who were in
+    # when that TRADE OPENED (joined_on <= trade_date) — partners only share trades
+    # started on/after they joined. The owner takes the residual of every trade.
+    acct_amt: dict[int, Decimal] = {}
+    name_by_acct: dict[int, str] = {}
+    for tid, p_t in realized.items():
+        t = session.get(Trade, tid)
+        opened = t.trade_date if t else month_first
+        non_owner_share = ZERO
+        for p in non_owner_active:
+            if p.joined_on <= opened:
+                share = (p_t * Decimal(p.pct) / Decimal(100)).quantize(CENT)
+                if share != 0:
+                    acct_amt[p.account_id] = acct_amt.get(p.account_id, ZERO) + share
+                    name_by_acct[p.account_id] = p.name
+                    non_owner_share += share
+        if owner_partner and owner_partner.account_id:
+            owner_share = (p_t - non_owner_share).quantize(CENT)   # residual
+            if owner_share != 0:
+                acct_amt[owner_partner.account_id] = acct_amt.get(owner_partner.account_id, ZERO) + owner_share
+                name_by_acct[owner_partner.account_id] = owner_partner.name
 
     je_id = None
     breakdown = []
-    if (parts or include_owner) and abs(profit) > Decimal("0.005"):
-        lines = []
-        non_owner_total = ZERO
-        for p in parts:
-            share = (profit * Decimal(p.pct) / Decimal(100)).quantize(CENT)
-            if share == 0:
-                continue
-            non_owner_total += share
-            breakdown.append({"partner": p.name, "share": share})
-            if share > 0:      # profit → increase partner equity (CR)
-                lines.append({"account_id": p.account_id, "debit": 0, "credit": share})
-            else:              # loss → decrease partner equity (DR)
-                lines.append({"account_id": p.account_id, "debit": -share, "credit": 0})
-        # Owner (is_owner) takes the RESIDUAL so the split totals profit exactly and
-        # the pool empties. If no owner account is set up, the owner's share simply
-        # stays in the pool (only the investors' share moves out).
-        pool_move = non_owner_total
-        if include_owner:
-            owner_share = (profit - non_owner_total).quantize(CENT)
-            if owner_share != 0:
-                breakdown.append({"partner": owner_partner.name, "share": owner_share})
-                if owner_share > 0:
-                    lines.append({"account_id": owner_partner.account_id, "debit": 0, "credit": owner_share})
-                else:
-                    lines.append({"account_id": owner_partner.account_id, "debit": -owner_share, "credit": 0})
-            pool_move = non_owner_total + owner_share
-        if lines and pool_move != 0:
-            if pool_move > 0:   # balancing DR out of the retained-earnings pool
-                lines.append({"account_id": pool.id, "debit": pool_move, "credit": 0})
-            else:
-                lines.append({"account_id": pool.id, "debit": 0, "credit": -pool_move})
-            kind = "profit" if profit > 0 else "loss"
-            je = PostingEngine.post(
-                session, user_id, entry_date=month_last,
-                entry_type=JournalEntryType.PARTNER_ALLOCATION,
-                description=(f"Partner {kind} allocation · {month_first.strftime('%b %Y')} "
-                            f"· {kind} {abs(profit):,.2f}"),
-                lines=lines)
-            je_id = je.id
+    lines = []
+    pool_move = ZERO
+    for aid, amt in acct_amt.items():
+        amt = amt.quantize(CENT)
+        if amt == 0:
+            continue
+        if amt > 0:
+            lines.append({"account_id": aid, "debit": 0, "credit": amt})
+        else:
+            lines.append({"account_id": aid, "debit": -amt, "credit": 0})
+        pool_move += amt
+        breakdown.append({"partner": name_by_acct.get(aid, "?"), "share": amt})
+    if lines and pool_move != 0:
+        if pool_move > 0:      # balancing DR out of the retained-earnings pool
+            lines.append({"account_id": pool.id, "debit": pool_move, "credit": 0})
+        else:
+            lines.append({"account_id": pool.id, "debit": 0, "credit": -pool_move})
+        kind = "profit" if total_profit >= 0 else "loss"
+        je = PostingEngine.post(
+            session, user_id, entry_date=month_last,
+            entry_type=JournalEntryType.PARTNER_ALLOCATION,
+            description=(f"Partner {kind} allocation · {month_first.strftime('%b %Y')} "
+                        f"· {len(realized)} trade(s) · {kind} {abs(total_profit):,.2f}"),
+            lines=lines)
+        je_id = je.id
 
     alloc = PartnerAllocation(user_id=user_id, period=month_first,
-                              profit=profit.quantize(CENT), journal_entry_id=je_id)
+                              profit=Decimal(total_profit).quantize(CENT), journal_entry_id=je_id)
     session.add(alloc)
     session.commit()
-    return {"period": month_first, "profit": profit.quantize(CENT),
-            "je_id": je_id, "partner_count": len(parts) + (1 if include_owner else 0),
-            "breakdown": breakdown}
+    return {"period": month_first, "profit": Decimal(total_profit).quantize(CENT),
+            "je_id": je_id, "trade_count": len(realized), "breakdown": breakdown}
 
 
 def run_due_allocations(session, user_id, as_of=None) -> list[dict]:
-    """Idempotent catch-up: allocate every COMPLETED month from the earliest
-    partner's join month up to last month that hasn't been allocated yet.
-    Safe to call on every app open — the unique (user, period) row + the
-    'already-done' check mean it never double-posts."""
+    """Idempotent catch-up: for every COMPLETED month since the partnership began,
+    split that month's realised trade profit among partners (per trade, by the
+    partners in when each trade opened). Safe to call on every app open — the
+    unique (user, period) row + the 'already-done' check never double-post."""
     as_of = as_of or date.today()
     non_owner = [p for p in _non_owner_partners(session, user_id)
                  if Decimal(p.pct) > 0 and p.account_id]
     owner = _owner_partner(session, user_id)
-    starters = list(non_owner) + ([owner] if owner else [])
-    if not starters:
+    if not (non_owner or owner):
         return []
     pool = _account_by_code(session, user_id, POOL_CODE)
     if not pool:
         return []
+    # Epoch = the owner-capital setup date (2102 was zeroed then). Only profit
+    # realised after it is up for allocation; earlier profit is the moved capital.
+    epoch = owner.joined_on if owner else min(p.joined_on for p in non_owner)
     done = {a.period for a in session.exec(
         select(PartnerAllocation).where(PartnerAllocation.user_id == user_id)).all()}
 
-    earliest = _first_of_month(min(p.joined_on for p in starters))
+    earliest = _first_of_month(min([p.joined_on for p in non_owner]
+                                   + ([owner.joined_on] if owner else [])))
     current_month = _first_of_month(as_of)
     results = []
     m = earliest
@@ -304,7 +341,7 @@ def run_due_allocations(session, user_id, as_of=None) -> list[dict]:
     while m < current_month and guard < 120:
         guard += 1
         if m not in done:
-            results.append(_allocate_month(session, user_id, m, non_owner, owner, pool))
+            results.append(_allocate_month(session, user_id, m, non_owner, owner, pool, epoch))
         m = _next_month(m)
     return results
 

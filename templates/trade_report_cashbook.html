@@ -1,30 +1,27 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Cashbook{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Cashbook</h1>
-      <p class="page-subtitle">Every transaction touching a cash or bank account.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Cashbook',
+      'Every transaction touching a cash or bank account. Search to find any entry.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
-      <div><label class="field-label">Cash account</label>
-        <select name="account_id" class="px-3 py-2.5">
-          <option value="">All cash & bank</option>
-          {% for a in cash_accounts %}<option value="{{ a.id }}" {% if account_id == a.id %}selected{% endif %}>{{ a.code }} — {{ a.name }}</option>{% endfor %}
-        </select></div>
-      <div><label class="field-label">From</label>
-        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
-      <div><label class="field-label">To</label>
-        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
-      <button type="submit" class="btn-primary">Apply</button>
-    </form>
-  </div>
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
+    <div>
+      <label class="field-label" for="account_id">Cash account</label>
+      <select name="account_id" id="account_id">
+        <option value="">All cash accounts</option>
+        {% for a in cash_accounts %}<option value="{{ a.id }}" {% if account_id == a.id %}selected{% endif %}>{{ a.code }} — {{ a.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div><label class="field-label" for="date_from">From</label>
+      <input type="date" name="date_from" id="date_from" value="{{ date_from }}"></div>
+    <div><label class="field-label" for="date_to">To</label>
+      <input type="date" name="date_to" id="date_to" value="{{ date_to }}"></div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/cashbook') }}
 
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
     <div class="stat-card">
@@ -33,11 +30,11 @@
     </div>
     <div class="stat-card">
       <div class="stat-label">Total In</div>
-      <div class="stat-value" style="color: #15803d;"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.total_debit) }}</div>
+      <div class="stat-value" class="wt-pos"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.total_debit) }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Out</div>
-      <div class="stat-value" style="color: #b91c1c;"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.total_credit) }}</div>
+      <div class="stat-value" class="wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.total_credit) }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Closing Balance</div>
@@ -45,45 +42,47 @@
     </div>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <table class="min-w-full">
+  <div class="wt-panel">
+    {{ report_toolbar('tbl-cashbook', print_btn=True) }}
+    <p class="wt-meta mb-2">Sorted by date. Re-sorting by another column keeps the running balance in its original date order — read the Balance column only in date order.</p>
+    {{ sortable_table_open('tbl-cashbook', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Date</th>
-          <th class="text-left">Ref</th>
-          <th class="text-left">Particulars</th>
-          <th class="text-left">Account</th>
-          <th class="text-right">In</th>
-          <th class="text-right">Out</th>
-          <th class="text-right">Balance</th>
+          <th>Date</th>
+          <th>Ref</th>
+          <th>Particulars</th>
+          <th>Account</th>
+          <th class="num">In</th>
+          <th class="num">Out</th>
+          <th class="num">Balance</th>
         </tr>
       </thead>
       <tbody>
-        <tr style="background: #fafaf9;">
-          <td colspan="6" class="text-gray-500 text-sm"><em>Opening balance</em></td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(book.opening_balance) }}</td>
+        <tr>
+          <td colspan="6" class="wt-mute text-sm"><em>Opening balance</em></td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(book.opening_balance) }}</td>
         </tr>
         {% for r in book.lines %}
         <tr>
-          <td class="text-gray-700 whitespace-nowrap">{{ r.date }}</td>
-          <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/vouchers/{{ r.entry_id }}">{{ r.reference }}</a></td>
-          <td class="text-gray-900">{{ r.particulars }}</td>
-          <td class="text-gray-600">{{ r.account_name }}</td>
-          <td class="text-right tabular-nums font-medium" style="color: #15803d;">{% if r.debit > 0 %}{{ currency }} {{ '{:,.2f}'.format(r.debit) }}{% endif %}</td>
-          <td class="text-right tabular-nums font-medium" style="color: #b91c1c;">{% if r.credit > 0 %}{{ currency }} {{ '{:,.2f}'.format(r.credit) }}{% endif %}</td>
-          <td class="text-right tabular-nums font-semibold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(r.balance) }}</td>
+          <td class="wt-body whitespace-nowrap">{{ r.date }}</td>
+          <td><a class="wt-drill font-medium font-mono text-xs" href="/trade/vouchers/{{ r.entry_id }}">{{ r.reference }}</a></td>
+          <td class="wt-ink">{{ r.particulars }}</td>
+          <td class="wt-mute">{{ r.account_name }}</td>
+          <td class="num" class="wt-pos">{% if r.debit > 0 %}{{ currency }} {{ '{:,.2f}'.format(r.debit) }}{% endif %}</td>
+          <td class="num" class="wt-neg">{% if r.credit > 0 %}{{ currency }} {{ '{:,.2f}'.format(r.credit) }}{% endif %}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(r.balance) }}</td>
         </tr>
         {% endfor %}
       </tbody>
       <tfoot class="bg-gray-50 border-t-2 border-gray-200">
         <tr>
-          <td colspan="4" class="text-xs uppercase tracking-widest font-bold text-gray-700">Totals</td>
-          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(book.total_debit) }}</td>
-          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(book.total_credit) }}</td>
-          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(book.closing_balance) }}</td>
+          <td colspan="4" class="text-xs uppercase tracking-widest font-bold wt-body">Totals</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(book.total_debit) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(book.total_credit) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(book.closing_balance) }}</td>
         </tr>
       </tfoot>
-    </table>
+    {{ table_close() }}
   </div>
 </div>
 

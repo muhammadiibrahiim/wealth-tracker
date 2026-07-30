@@ -1,51 +1,46 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Day Book{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Day Book</h1>
-      <p class="page-subtitle">All journal entries posted on a single date — audit view.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Day Book',
+      'Every voucher posted on a single date — the audit view.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
-      <div><label class="field-label">Date</label>
-        <input type="date" name="on_date" value="{{ on_date }}" class="px-3 py-2.5"></div>
-      <button type="submit" class="btn-primary">Show</button>
-    </form>
-  </div>
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('on_date', mode='single') }}</div>
+    <div><label class="field-label" for="on_date">On date</label>
+      <input type="date" name="on_date" id="on_date" value="{{ on_date }}"></div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/day-book') }}
 
   {% if rows %}
     {% for r in rows %}
-    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between" style="background: #fafaf9;">
+    <div class="wt-panel">
+      <div class="wt-panel__head">
         <div>
-          <a class="text-indigo-600 hover:text-indigo-900 font-bold font-mono text-sm" href="/trade/vouchers/{{ r.entry.id }}">{{ r.entry.reference }}</a>
-          <span class="text-xs text-gray-500 ml-2">{{ (r.entry.entry_type.value if r.entry.entry_type.value is defined else r.entry.entry_type).replace('_',' ').title() }}</span>
+          <a class="wt-drill font-bold font-mono text-sm" href="/trade/vouchers/{{ r.entry.id }}">{{ r.entry.reference }}</a>
+          <span class="text-xs wt-mute ml-2">{{ (r.entry.entry_type.value if r.entry.entry_type.value is defined else r.entry.entry_type).replace('_',' ').title() }}</span>
           {% if r.entry.is_reversed %}<span class="pill-cr ml-2">Reversed</span>{% endif %}
         </div>
-        <span class="text-sm text-gray-700">{{ r.entry.description }}</span>
+        <span class="text-sm wt-body">{{ r.entry.description }}</span>
       </div>
-      <table class="min-w-full">
+      {{ table_open(dense=True) }}
         <tbody>
           {% for ln in r.lines %}
           <tr>
-            <td class="font-mono text-xs text-gray-500" style="width: 80px;">{{ ln.account.code if ln.account }}</td>
-            <td class="text-gray-900">{{ ln.account.name if ln.account else '' }}</td>
-            <td class="text-right tabular-nums" style="width: 140px;">{% if ln.debit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(ln.debit) }}</span>{% endif %}</td>
-            <td class="text-right tabular-nums" style="width: 140px;">{% if ln.credit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(ln.credit) }}</span>{% endif %}</td>
+            <td class="font-mono text-xs wt-mute">{{ ln.account.code if ln.account }}</td>
+            <td class="wt-ink">{{ ln.account.name if ln.account else '' }}</td>
+            <td class="num">{% if ln.debit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(ln.debit) }}</span>{% endif %}</td>
+            <td class="num">{% if ln.credit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(ln.credit) }}</span>{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      {{ table_close() }}
     </div>
     {% endfor %}
   {% else %}
-  <div class="bg-white border border-gray-200 rounded-lg px-6 py-16 text-center text-sm text-gray-500">No entries on {{ on_date }}.</div>
+  <div class="wt-panel text-center text-sm wt-mute">No entries on {{ on_date }}.</div>
   {% endif %}
 </div>
 

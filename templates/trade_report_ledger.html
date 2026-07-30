@@ -1,58 +1,47 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Party Ledger{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
 
   <!-- Page header — title left + actions right -->
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Party Ledger</h1>
-      <p class="page-subtitle">Party transaction history with running balance.</p>
-    </div>
-    <div class="flex gap-2">
-      <a href="/trade/reports" class="btn-secondary">← Reports</a>
-    </div>
-  </div>
+  {{ page_header('Party Ledger',
+      'Dated ledger for a customer or vendor. Search to find any transaction.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
   <!-- Filter card -->
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
-      <div class="flex-1 min-w-[260px]">
-        <label class="field-label field-label-required">Party</label>
-        <select name="party_id" required class="w-full px-4 py-2.5">
-          <option value="">— Select party —</option>
-          {% for p in parties %}<option value="{{ p.id }}" {% if party_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
-        </select>
-      </div>
-      <div>
-        <label class="field-label">From</label>
-        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5">
-      </div>
-      <div>
-        <label class="field-label">To</label>
-        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5">
-      </div>
-      <button type="submit" class="btn-primary">Generate Report</button>
-    </form>
-  </div>
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
+    <div class="flex-1 min-w-[240px]">
+      <label class="field-label field-label-required" for="party_id">Party</label>
+      <select name="party_id" id="party_id" required>
+        <option value="">— pick —</option>
+        {% for pp in parties %}<option value="{{ pp.id }}" {% if party_id == pp.id %}selected{% endif %}>{{ pp.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div><label class="field-label" for="date_from">From</label>
+      <input type="date" name="date_from" id="date_from" value="{{ date_from }}"></div>
+    <div><label class="field-label" for="date_to">To</label>
+      <input type="date" name="date_to" id="date_to" value="{{ date_to }}"></div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/ledger') }}
 
   {% if ledger and ledger.party %}
   <!-- Account header card with orange accent -->
   <div class="accent-card flex items-start justify-between flex-wrap gap-4">
     <div>
       <div class="stat-label">Party</div>
-      <h2 class="text-2xl font-bold text-gray-900 tracking-tight mt-1">{{ ledger.party.name }}</h2>
+      <h2 class="text-2xl font-bold wt-ink tracking-tight mt-1">{{ ledger.party.name }}</h2>
     </div>
     <div class="text-right">
       <div class="stat-label">Net Balance</div>
       <div class="mt-1 flex items-baseline gap-3 justify-end">
-        <span class="text-3xl font-bold tabular-nums {% if ledger.balance < 0 %}text-orange-700{% else %}text-gray-900{% endif %}">
-          <span class="text-xl text-gray-500 font-semibold mr-1">{{ currency }}</span>{{ '{:,.2f}'.format(ledger.balance|abs) }}
+        <span class="text-3xl font-bold tabular-nums {% if ledger.balance < 0 %}wt-neg{% else %}wt-ink{% endif %}">
+          <span class="text-xl wt-mute font-semibold mr-1">{{ currency }}</span>{{ '{:,.2f}'.format(ledger.balance|abs) }}
         </span>
         {% if ledger.balance < 0 %}<span class="pill-cr">CR</span>{% else %}<span class="pill-dr">DR</span>{% endif %}
       </div>
-      <div class="text-xs text-gray-500 mt-1">
+      <div class="text-xs wt-mute mt-1">
         {% if ledger.balance < 0 %}
           You owe them {{ currency }} {{ '{:,.0f}'.format(ledger.balance|abs) }}{% if ledger.party.is_customer and not ledger.party.is_vendor %} (advance received){% endif %}
         {% elif ledger.balance > 0 %}
@@ -87,34 +76,36 @@
   </div>
 
   <!-- Ledger table -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+  <div class="wt-panel">
     {% if ledger.entries %}
-    <table class="min-w-full">
+    {{ report_toolbar('tbl-party-ledger', print_btn=True) }}
+    <p class="wt-meta mb-2">Sorted by date. Re-sorting by another column keeps the running balance in its original date order — read the Balance column only in date order.</p>
+    {{ sortable_table_open('tbl-party-ledger', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Date</th>
-          <th class="text-left">Voucher</th>
-          <th class="text-left">Description</th>
-          <th class="text-right">Debit</th>
-          <th class="text-right">Credit</th>
-          <th class="text-right">Balance</th>
+          <th>Date</th>
+          <th>Voucher</th>
+          <th>Description</th>
+          <th class="num">Debit</th>
+          <th class="num">Credit</th>
+          <th class="num">Balance</th>
         </tr>
       </thead>
       <tbody>
         {% for e in ledger.entries %}
         <tr>
-          <td class="whitespace-nowrap text-gray-700">{{ e.date }}</td>
+          <td class="whitespace-nowrap wt-body">{{ e.date }}</td>
           <td class="whitespace-nowrap">
-            <a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/vouchers/{{ e.trade_id }}">{{ e.ref }}</a>
+            <a class="wt-drill font-medium font-mono text-xs" href="/trade/vouchers/{{ e.trade_id }}">{{ e.ref }}</a>
           </td>
-          <td class="text-gray-800">{{ e.kind }}{% if e.proof_path %} <a href="{{ e.proof_path }}" target="_blank" title="View payment proof" class="text-indigo-600 hover:underline">📎 proof</a>{% endif %}</td>
+          <td class="wt-body">{{ e.kind }}{% if e.proof_path %} <a href="{{ e.proof_path }}" target="_blank" title="View payment proof" class="wt-info hover:underline">📎 proof</a>{% endif %}</td>
           <td class="whitespace-nowrap text-right tabular-nums">
-            {% if e.debit > 0 %}<span class="font-medium text-gray-900">{{ currency }} {{ '{:,.2f}'.format(e.debit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}
+            {% if e.debit > 0 %}<span class="font-medium wt-ink">{{ currency }} {{ '{:,.2f}'.format(e.debit) }}</span>{% else %}<span class="wt-ash">—</span>{% endif %}
           </td>
           <td class="whitespace-nowrap text-right tabular-nums">
-            {% if e.credit > 0 %}<span class="font-medium text-gray-900">{{ currency }} {{ '{:,.2f}'.format(e.credit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}
+            {% if e.credit > 0 %}<span class="font-medium wt-ink">{{ currency }} {{ '{:,.2f}'.format(e.credit) }}</span>{% else %}<span class="wt-ash">—</span>{% endif %}
           </td>
-          <td class="whitespace-nowrap text-right tabular-nums font-semibold {% if e.balance < 0 %}text-orange-700{% else %}text-gray-900{% endif %}">
+          <td class="whitespace-nowrap text-right tabular-nums font-semibold {% if e.balance < 0 %}wt-neg{% else %}wt-ink{% endif %}">
             {{ currency }} {{ '{:,.2f}'.format(e.balance|abs) }}
             {% if e.balance < 0 %}<span class="pill-cr ml-2">CR</span>{% else %}<span class="pill-dr ml-2">DR</span>{% endif %}
           </td>
@@ -123,20 +114,20 @@
       </tbody>
       <tfoot class="bg-gray-50 border-t-2 border-gray-200">
         <tr>
-          <td colspan="3" class="text-right font-semibold text-gray-700">Totals</td>
-          <td class="text-right tabular-nums font-bold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(total_dr) }}</td>
-          <td class="text-right tabular-nums font-bold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(total_cr) }}</td>
-          <td class="text-right tabular-nums font-bold {% if ledger.balance < 0 %}text-orange-700{% else %}text-gray-900{% endif %}">
+          <td colspan="3" class="text-right font-semibold wt-body">Totals</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(total_dr) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(total_cr) }}</td>
+          <td class="num">
             {{ currency }} {{ '{:,.2f}'.format(ledger.balance|abs) }}
             {% if ledger.balance < 0 %}<span class="pill-cr ml-2">CR</span>{% else %}<span class="pill-dr ml-2">DR</span>{% endif %}
           </td>
         </tr>
       </tfoot>
-    </table>
+    {{ table_close() }}
     {% else %}
-    <div class="px-6 py-16 text-center">
-      <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-      <p class="mt-4 text-sm text-gray-500">No transactions in the selected period.</p>
+    <div class=" text-center">
+      <svg class="mx-auto h-12 w-12 wt-ash" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      <p class="mt-4 text-sm wt-mute">No transactions in the selected period.</p>
     </div>
     {% endif %}
   </div>
@@ -145,8 +136,8 @@
   <div class="accent-card flex items-center justify-between">
     <div class="stat-label">Closing Balance</div>
     <div class="flex items-baseline gap-3">
-      <span class="text-4xl font-bold tabular-nums {% if ledger.balance < 0 %}text-orange-700{% else %}text-gray-900{% endif %}">
-        <span class="text-2xl text-gray-500 font-semibold mr-1">{{ currency }}</span>{{ '{:,.2f}'.format(ledger.balance|abs) }}
+      <span class="text-4xl font-bold tabular-nums {% if ledger.balance < 0 %}wt-neg{% else %}wt-ink{% endif %}">
+        <span class="text-2xl wt-mute font-semibold mr-1">{{ currency }}</span>{{ '{:,.2f}'.format(ledger.balance|abs) }}
       </span>
       {% if ledger.balance < 0 %}<span class="pill-cr">CR</span>{% else %}<span class="pill-dr">DR</span>{% endif %}
     </div>
@@ -154,11 +145,11 @@
 
   {% elif party_id %}
   <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-    <p class="text-sm text-yellow-700">Party not found.</p>
+    <p class="text-sm wt-warn">Party not found.</p>
   </div>
   {% else %}
   <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-    <p class="text-sm text-blue-700">Select a party above to generate the ledger.</p>
+    <p class="text-sm wt-info">Select a party above to generate the ledger.</p>
   </div>
   {% endif %}
 </div>

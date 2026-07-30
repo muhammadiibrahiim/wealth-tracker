@@ -1,44 +1,39 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}General Ledger{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">General Ledger</h1>
-      <p class="page-subtitle">Per-account transaction history with running balance.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('General Ledger',
+      'Per-account transaction history with running balance. Search to find any voucher.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
-      <div class="flex-1 min-w-[260px]">
-        <label class="field-label field-label-required">Account</label>
-        <select name="account_id" required class="w-full px-4 py-2.5">
-          <option value="">— pick —</option>
-          {% for a in accounts %}<option value="{{ a.id }}" {% if account_id == a.id %}selected{% endif %}>{{ a.code }} — {{ a.name }}</option>{% endfor %}
-        </select>
-      </div>
-      <div><label class="field-label">From</label>
-        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
-      <div><label class="field-label">To</label>
-        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
-      <button type="submit" class="btn-primary">Generate Report</button>
-    </form>
-  </div>
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
+    <div class="flex-1 min-w-[240px]">
+      <label class="field-label field-label-required" for="account_id">Account</label>
+      <select name="account_id" id="account_id" required>
+        <option value="">— pick —</option>
+        {% for a in accounts %}<option value="{{ a.id }}" {% if account_id == a.id %}selected{% endif %}>{{ a.code }} — {{ a.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div><label class="field-label" for="date_from">From</label>
+      <input type="date" name="date_from" id="date_from" value="{{ date_from }}"></div>
+    <div><label class="field-label" for="date_to">To</label>
+      <input type="date" name="date_to" id="date_to" value="{{ date_to }}"></div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/general-ledger') }}
 
   {% if ledger and ledger.account %}
   <div class="accent-card flex items-center justify-between">
     <div>
       <div class="stat-label">Account</div>
-      <h2 class="text-2xl font-bold text-gray-900 mt-1 tracking-tight"><span class="text-gray-500 text-base font-mono">{{ ledger.account.code }}</span> {{ ledger.account.name }}</h2>
+      <h2 class="text-2xl font-bold wt-ink mt-1 tracking-tight"><span class="wt-mute text-base font-mono">{{ ledger.account.code }}</span> {{ ledger.account.name }}</h2>
     </div>
     <div class="text-right">
       <div class="stat-label">Closing Balance</div>
       <div class="mt-1 flex items-baseline gap-3 justify-end">
-        <span class="text-3xl font-bold tabular-nums {% if ledger.closing_balance < 0 %}text-orange-700{% else %}text-gray-900{% endif %}">
-          <span class="text-xl text-gray-500 font-semibold mr-1">{{ currency }}</span>{{ '{:,.2f}'.format(ledger.closing_balance|abs) }}
+        <span class="text-3xl font-bold tabular-nums {% if ledger.closing_balance < 0 %}wt-neg{% else %}wt-ink{% endif %}">
+          <span class="text-xl wt-mute font-semibold mr-1">{{ currency }}</span>{{ '{:,.2f}'.format(ledger.closing_balance|abs) }}
         </span>
         {% if ledger.closing_balance < 0 %}<span class="pill-cr">CR</span>{% else %}<span class="pill-dr">DR</span>{% endif %}
       </div>
@@ -64,32 +59,34 @@
     </div>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <table class="min-w-full">
+  <div class="wt-panel">
+    {{ report_toolbar('tbl-general-ledger', print_btn=True) }}
+    <p class="wt-meta mb-2">Sorted by date. Re-sorting by another column keeps the running balance in its original date order — read the Balance column only in date order.</p>
+    {{ sortable_table_open('tbl-general-ledger', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Date</th>
-          <th class="text-left">Ref</th>
-          <th class="text-left">Description</th>
-          <th class="text-right">Debit</th>
-          <th class="text-right">Credit</th>
-          <th class="text-right">Balance</th>
+          <th>Date</th>
+          <th>Ref</th>
+          <th>Description</th>
+          <th class="num">Debit</th>
+          <th class="num">Credit</th>
+          <th class="num">Balance</th>
         </tr>
       </thead>
       <tbody>
-        <tr style="background: #fafaf9;">
-          <td colspan="3" class="text-gray-500 text-sm"><em>Opening balance</em></td>
+        <tr>
+          <td colspan="3" class="wt-mute text-sm"><em>Opening balance</em></td>
           <td colspan="2"></td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ledger.opening_balance) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ledger.opening_balance) }}</td>
         </tr>
         {% for r in ledger.lines %}
         <tr>
-          <td class="text-gray-700 whitespace-nowrap">{{ r.date }}</td>
-          <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/vouchers/{{ r.entry_id }}">{{ r.reference }}</a></td>
-          <td class="text-gray-900">{{ r.description }}{% if r.proof_path %} <a href="{{ r.proof_path }}" target="_blank" title="View payment proof" class="text-indigo-600 hover:underline">📎 proof</a>{% endif %}</td>
-          <td class="text-right tabular-nums">{% if r.debit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(r.debit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
-          <td class="text-right tabular-nums">{% if r.credit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(r.credit) }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
-          <td class="text-right tabular-nums font-semibold {% if r.balance < 0 %}text-orange-700{% else %}text-gray-900{% endif %}">
+          <td class="wt-body whitespace-nowrap">{{ r.date }}</td>
+          <td><a class="wt-drill font-medium font-mono text-xs" href="/trade/vouchers/{{ r.entry_id }}">{{ r.reference }}</a></td>
+          <td class="wt-ink">{{ r.description }}{% if r.proof_path %} <a href="{{ r.proof_path }}" target="_blank" title="View payment proof" class="wt-info hover:underline">📎 proof</a>{% endif %}</td>
+          <td class="num">{% if r.debit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(r.debit) }}</span>{% else %}<span class="wt-ash">—</span>{% endif %}</td>
+          <td class="num">{% if r.credit > 0 %}<span class="font-medium">{{ currency }} {{ '{:,.2f}'.format(r.credit) }}</span>{% else %}<span class="wt-ash">—</span>{% endif %}</td>
+          <td class="num">
             {{ currency }} {{ '{:,.2f}'.format(r.balance|abs) }}
             {% if r.balance < 0 %}<span class="pill-cr ml-2">CR</span>{% else %}<span class="pill-dr ml-2">DR</span>{% endif %}
           </td>
@@ -98,17 +95,17 @@
       </tbody>
       <tfoot class="bg-gray-50 border-t-2 border-gray-200">
         <tr>
-          <td colspan="3" class="text-xs uppercase tracking-widest font-bold text-gray-700">Period Totals</td>
-          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(ledger.total_debit) }}</td>
-          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(ledger.total_credit) }}</td>
-          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(ledger.closing_balance) }}</td>
+          <td colspan="3" class="text-xs uppercase tracking-widest font-bold wt-body">Period Totals</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ledger.total_debit) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ledger.total_credit) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ledger.closing_balance) }}</td>
         </tr>
       </tfoot>
-    </table>
+    {{ table_close() }}
   </div>
   {% else %}
   <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-    <p class="text-sm text-blue-700">Pick an account above to see its ledger.</p>
+    <p class="text-sm wt-info">Pick an account above to see its ledger.</p>
   </div>
   {% endif %}
 </div>

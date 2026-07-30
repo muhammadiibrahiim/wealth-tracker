@@ -22,9 +22,9 @@ class="flex items-end gap-4 flex-wrap">
       <div class="stat-label">Total Revenue</div>
       <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.total_revenue) }}</div>
     </div>
-    <div class="stat-card" class="wt-card-neg">
+    <div class="stat-card wt-card-neg">
       <div class="stat-label">Top-3 Concentration</div>
-      <div class="stat-value" class="wt-neg">{{ report.top3_concentration_pct }}%</div>
+      <div class="stat-value wt-neg">{{ report.top3_concentration_pct }}%</div>
       <div class="stat-foot">Share of revenue from top 3 customers</div>
     </div>
   </div>

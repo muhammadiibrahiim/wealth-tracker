@@ -30,11 +30,11 @@
     </div>
     <div class="stat-card">
       <div class="stat-label">Total In</div>
-      <div class="stat-value" class="wt-pos"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.total_debit) }}</div>
+      <div class="stat-value wt-pos"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.total_debit) }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Out</div>
-      <div class="stat-value" class="wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.total_credit) }}</div>
+      <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(book.total_credit) }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Closing Balance</div>
@@ -68,8 +68,8 @@
           <td><a class="wt-drill font-medium font-mono text-xs" href="/trade/vouchers/{{ r.entry_id }}">{{ r.reference }}</a></td>
           <td class="wt-ink">{{ r.particulars }}</td>
           <td class="wt-mute">{{ r.account_name }}</td>
-          <td class="num" class="wt-pos">{% if r.debit > 0 %}{{ currency }} {{ '{:,.2f}'.format(r.debit) }}{% endif %}</td>
-          <td class="num" class="wt-neg">{% if r.credit > 0 %}{{ currency }} {{ '{:,.2f}'.format(r.credit) }}{% endif %}</td>
+          <td class="num wt-pos">{% if r.debit > 0 %}{{ currency }} {{ '{:,.2f}'.format(r.debit) }}{% endif %}</td>
+          <td class="num wt-neg">{% if r.credit > 0 %}{{ currency }} {{ '{:,.2f}'.format(r.credit) }}{% endif %}</td>
           <td class="num">{{ currency }} {{ '{:,.2f}'.format(r.balance) }}</td>
         </tr>
         {% endfor %}

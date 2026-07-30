@@ -1,28 +1,21 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Bilty Report{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Bilty Report</h1>
-      <p class="page-subtitle">Every bilty (transport) entry — date, trade, customer + city, terminal, weight, amount, paid-by-customer status.</p>
-    </div>
-    <div class="flex gap-2">
-      <a href="/trade/reports" class="btn-secondary">← Reports</a>
-    </div>
-  </div>
+  {{ page_header('Bilty Report',
+      'Every bilty entry — date, trade, customer, terminal, weight, amount.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
+class="flex items-end gap-4 flex-wrap">
       <div><label class="field-label">From</label>
-        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+        <input type="date" name="date_from" value="{{ date_from }}"></div>
       <div><label class="field-label">To</label>
-        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
-      <button type="submit" class="btn-primary">Apply</button>
-      <a href="/trade/reports/bilty" class="btn-secondary">Reset</a>
-    </form>
-  </div>
+        <input type="date" name="date_to" value="{{ date_to }}"></div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/bilty') }}
 
   <!-- KPI strip -->
   <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -34,76 +27,77 @@
       <div class="stat-label">Total Amount</div>
       <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(total_amount) }}</div>
     </div>
-    <div class="stat-card" style="border-color:#4338ca;">
+    <div class="stat-card wt-card-info">
       <div class="stat-label">Avg Freight / pc</div>
-      <div class="stat-value" style="color:#4338ca;">{% if avg_per_pc is not none %}<span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(avg_per_pc) }}{% else %}—{% endif %}</div>
+      <div class="stat-value wt-info">{% if avg_per_pc is not none %}<span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(avg_per_pc) }}{% else %}—{% endif %}</div>
       <div class="stat-foot">{{ '{:,.0f}'.format(total_pieces) }} pcs shipped</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Paid by Customer</div>
-      <div class="stat-value" style="color: #15803d;"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(total_by_cust) }}</div>
+      <div class="stat-value wt-pos"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(total_by_cust) }}</div>
       <div class="stat-foot">Reduces customer A/R</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Weight</div>
-      <div class="stat-value">{{ '{:g}'.format(total_kgs) }}<span class="text-base text-gray-500 ml-1">kg</span></div>
+      <div class="stat-value">{{ '{:g}'.format(total_kgs) }}<span class="text-base wt-mute ml-1">kg</span></div>
     </div>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+  <div class="wt-panel overflow-x-auto">
     {% if rows %}
-    <table class="min-w-full">
+    {{ report_toolbar('tbl-bilty', print_btn=True) }}
+    {{ sortable_table_open('tbl-bilty', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Delivery Date</th>
-          <th class="text-left">Trade</th>
-          <th class="text-left">Customer</th>
-          <th class="text-left">City</th>
-          <th class="text-left">Terminal</th>
-          <th class="text-right">Weight (kg)</th>
-          <th class="text-right">Amount</th>
-          <th class="text-right">Pcs</th>
-          <th class="text-right">Freight / pc</th>
-          <th class="text-left">Paid By</th>
-          <th class="text-left">Ref</th>
+          <th>Delivery Date</th>
+          <th>Trade</th>
+          <th>Customer</th>
+          <th>City</th>
+          <th>Terminal</th>
+          <th class="num">Weight (kg)</th>
+          <th class="num">Amount</th>
+          <th class="num">Pcs</th>
+          <th class="num">Freight / pc</th>
+          <th>Paid By</th>
+          <th>Ref</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows %}
         <tr>
-          <td class="text-gray-900 whitespace-nowrap">{{ r.delivery_date }}</td>
-          <td><a href="/trade/trades/{{ r.trade_id }}" class="text-indigo-600 hover:underline font-medium font-mono text-xs">{{ r.trade_ref }}</a></td>
-          <td class="text-gray-900">{{ r.customer }}</td>
-          <td class="text-gray-700 text-sm">{{ r.customer_city or '—' }}</td>
-          <td class="text-gray-700 text-sm">{{ r.terminal or '—' }}</td>
-          <td class="text-right tabular-nums">{% if r.weight_kgs %}{{ '{:g}'.format(r.weight_kgs|float) }}{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
-          <td class="text-right tabular-nums font-medium">{{ currency }} {{ '{:,.2f}'.format(r.amount) }}</td>
-          <td class="text-right tabular-nums text-gray-700">{% if r.pieces %}{{ '{:,.0f}'.format(r.pieces) }}{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
-          <td class="text-right tabular-nums font-semibold" style="color:#4338ca;">{% if r.per_pc is not none %}{{ currency }} {{ '{:,.2f}'.format(r.per_pc) }}{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
+          <td class="wt-ink whitespace-nowrap">{{ r.delivery_date }}</td>
+          <td><a href="/trade/trades/{{ r.trade_id }}" class="wt-info hover:underline font-medium font-mono text-xs">{{ r.trade_ref }}</a></td>
+          <td class="wt-ink">{{ r.customer }}</td>
+          <td class="wt-body text-sm">{{ r.customer_city or '—' }}</td>
+          <td class="wt-body text-sm">{{ r.terminal or '—' }}</td>
+          <td class="num">{% if r.weight_kgs %}{{ '{:g}'.format(r.weight_kgs|float) }}{% else %}<span class="wt-ash">—</span>{% endif %}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(r.amount) }}</td>
+          <td class="num">{% if r.pieces %}{{ '{:,.0f}'.format(r.pieces) }}{% else %}<span class="wt-ash">—</span>{% endif %}</td>
+          <td class="num wt-info">{% if r.per_pc is not none %}{{ currency }} {{ '{:,.2f}'.format(r.per_pc) }}{% else %}<span class="wt-ash">—</span>{% endif %}</td>
           <td>
             {% if r.paid_by_customer %}
-            <span class="inline-block px-2 py-0.5 rounded text-xs font-medium" style="background:#fef3c7;color:#78350f;">Customer</span>
+            <span class="wt-pill wt-pill-warn">Customer</span>
             {% else %}
-            <span class="text-xs text-gray-500">Us (cash)</span>
+            <span class="text-xs wt-mute">Us (cash)</span>
             {% endif %}
           </td>
-          <td class="text-gray-500 text-xs font-mono">{{ r.ref }}</td>
+          <td class="wt-mute text-xs font-mono">{{ r.ref }}</td>
         </tr>
         {% endfor %}
       </tbody>
-      <tfoot style="background: #fafaf9;">
+      <tfoot>
         <tr>
-          <td colspan="5" class="text-right text-xs uppercase tracking-widest font-bold text-gray-700">Total</td>
-          <td class="text-right tabular-nums font-bold">{{ '{:g}'.format(total_kgs) }}</td>
-          <td class="text-right tabular-nums font-bold">{{ currency }} {{ '{:,.2f}'.format(total_amount) }}</td>
-          <td class="text-right tabular-nums font-bold">{{ '{:,.0f}'.format(total_pieces) }}</td>
-          <td class="text-right tabular-nums font-bold" style="color:#4338ca;">{% if avg_per_pc is not none %}{{ currency }} {{ '{:,.2f}'.format(avg_per_pc) }}{% else %}—{% endif %}</td>
+          <td colspan="5" class="text-right text-xs uppercase tracking-widest font-bold wt-body">Total</td>
+          <td class="num">{{ '{:g}'.format(total_kgs) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(total_amount) }}</td>
+          <td class="num">{{ '{:,.0f}'.format(total_pieces) }}</td>
+          <td class="num wt-info">{% if avg_per_pc is not none %}{{ currency }} {{ '{:,.2f}'.format(avg_per_pc) }}{% else %}—{% endif %}</td>
           <td colspan="2"></td>
         </tr>
       </tfoot>
-    </table>
+    {{ table_close() }}
     {% else %}
-    <div class="px-6 py-16 text-center text-sm text-gray-500">No bilty entries in this range.</div>
+    <div class=" text-center text-sm wt-mute">No bilty entries in this range.</div>
     {% endif %}
   </div>
 </div>

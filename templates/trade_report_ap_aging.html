@@ -37,22 +37,22 @@
     </div>
     <button type="button" class="stat-card wt-card-warn" data-bucket-filter="1_30">
       <div class="stat-label">1–30 days overdue</div>
-      <div class="stat-value" class="wt-warn"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['1_30']) }}</div>
+      <div class="stat-value wt-warn"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['1_30']) }}</div>
       <div class="stat-foot">{{ bc['1_30'] }} item{{ 's' if bc['1_30'] != 1 else '' }}</div>
     </div>
     <button type="button" class="stat-card wt-card-warn" data-bucket-filter="31_60">
       <div class="stat-label">31–60 days</div>
-      <div class="stat-value" class="wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['31_60']) }}</div>
+      <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['31_60']) }}</div>
       <div class="stat-foot">{{ bc['31_60'] }} item{{ 's' if bc['31_60'] != 1 else '' }}</div>
     </div>
     <button type="button" class="stat-card wt-card-neg" data-bucket-filter="61_90">
       <div class="stat-label">61–90 days</div>
-      <div class="stat-value" class="wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['61_90']) }}</div>
+      <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['61_90']) }}</div>
       <div class="stat-foot">{{ bc['61_90'] }} item{{ 's' if bc['61_90'] != 1 else '' }}</div>
     </div>
     <button type="button" class="stat-card wt-card-neg wt-card-em" data-bucket-filter="90_plus">
       <div class="stat-label">90+ days</div>
-      <div class="stat-value" class="wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['90_plus']) }}</div>
+      <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['90_plus']) }}</div>
       <div class="stat-foot">{{ bc['90_plus'] }} item{{ 's' if bc['90_plus'] != 1 else '' }}</div>
     </div>
   </div>
@@ -60,11 +60,11 @@
   <div class="accent-card wt-card-warn wt-warn-bg flex items-center justify-between">
     <div>
       <div class="stat-label">Total Owed to Vendors</div>
-      <div class="text-2xl font-bold mt-1" class="wt-neg">
+      <div class="text-2xl font-bold mt-1 wt-neg">
         {{ currency }} {{ '{:,.2f}'.format(report.total_outstanding) }}
       </div>
     </div>
-    <div class="text-right text-sm" class="wt-neg">
+    <div class="text-right text-sm wt-neg">
       {{ report.rows | length }} open item{% if report.rows | length != 1 %}s{% endif %}<br>
       <span class="wt-mute">as of {{ report.today }}</span>
     </div>
@@ -103,12 +103,12 @@
           <td>{% if r.trade_id %}{{ drill('/trade/trades/' ~ r.trade_id, r.trade_ref or '—', 'Open this trade') }}{% else %}<span class="wt-ash">—</span>{% endif %}</td>
           <td class="wt-body text-sm">{{ r.desc or '—' }}</td>
           <td class="wt-body whitespace-nowrap text-sm">{{ r.invoice_date }}</td>
-          <td class="num" class="{{ bcol }}">{{ currency }} {{ '{:,.2f}'.format(r.outstanding) }}</td>
+          <td class="num {{ bcol }}">{{ currency }} {{ '{:,.2f}'.format(r.outstanding) }}</td>
           <td class="wt-body whitespace-nowrap">{{ r.due_date }}</td>
-          <td class="num" class="{{ bcol }}">
+          <td class="num {{ bcol }}">
             {% if r.days_over > 0 %}+{{ r.days_over }}{% else %}{{ (r.due_date - report.today).days }}{% endif %}
           </td>
-          <td><span class="inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide" class="{{ bcol }}">{{ blabel }}</span></td>
+          <td><span class="inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide {{ bcol }}">{{ blabel }}</span></td>
         </tr>
         {% endfor %}
       </tbody>

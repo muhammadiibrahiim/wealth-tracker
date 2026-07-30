@@ -38,22 +38,22 @@
     </div>
     <button type="button" class="stat-card wt-card-warn" data-bucket-filter="1_30">
       <div class="stat-label">1–30 days overdue</div>
-      <div class="stat-value" class="wt-warn"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['1_30']) }}</div>
+      <div class="stat-value wt-warn"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['1_30']) }}</div>
       <div class="stat-foot">{{ bc['1_30'] }} deliveries</div>
     </div>
     <button type="button" class="stat-card wt-card-warn" data-bucket-filter="31_60">
       <div class="stat-label">31–60 days</div>
-      <div class="stat-value" class="wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['31_60']) }}</div>
+      <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['31_60']) }}</div>
       <div class="stat-foot">{{ bc['31_60'] }} deliveries</div>
     </div>
     <button type="button" class="stat-card wt-card-neg" data-bucket-filter="61_90">
       <div class="stat-label">61–90 days</div>
-      <div class="stat-value" class="wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['61_90']) }}</div>
+      <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['61_90']) }}</div>
       <div class="stat-foot">{{ bc['61_90'] }} deliveries</div>
     </div>
     <button type="button" class="stat-card wt-card-neg wt-card-em" data-bucket-filter="90_plus">
       <div class="stat-label">90+ days</div>
-      <div class="stat-value" class="wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['90_plus']) }}</div>
+      <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['90_plus']) }}</div>
       <div class="stat-foot">{{ bc['90_plus'] }} deliveries</div>
     </div>
   </div>
@@ -124,14 +124,14 @@
             {% if r.cash_applied > 0 %}<span class="wt-pos">- {{ currency }} {{ '{:,.2f}'.format(r.cash_applied) }}</span>
             {% else %}<span class="wt-ash">—</span>{% endif %}
           </td>
-          <td class="num" class="{{ bcol }}">{{ currency }} {{ '{:,.2f}'.format(r.outstanding) }}</td>
+          <td class="num {{ bcol }}">{{ currency }} {{ '{:,.2f}'.format(r.outstanding) }}</td>
           <td class="wt-body whitespace-nowrap">{{ r.due_date }}</td>
-          <td class="num" class="{{ bcol }}">
+          <td class="num {{ bcol }}">
             {% if r.days_over > 0 %}+{{ r.days_over }}{% else %}{{ (r.due_date - report.today).days }}{% endif %}
           </td>
           <td>
-            <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide"
-                  class="{{ bcol }}">{{ blabel }}</span>
+            <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide {{ bcol }}"
+                 >{{ blabel }}</span>
           </td>
         </tr>
         {% endfor %}

@@ -43,7 +43,7 @@ class="flex items-end gap-4 flex-wrap">
           <td>{{ drill('/trade/reports/ledger?party_id=' ~ r.vendor.id, r.vendor.name, 'Open this vendor&rsquo;s ledger') }}</td>
           <td class="text-right">{{ r.trade_count }}</td>
           <td class="num">{{ currency }} {{ '{:,.0f}'.format(r.purchases) }}</td>
-          <td class="num" class="wt-pos">{{ currency }} {{ '{:,.0f}'.format(r.gp_contributed) }}</td>
+          <td class="num wt-pos">{{ currency }} {{ '{:,.0f}'.format(r.gp_contributed) }}</td>
           <td class="num">{{ r.avg_pay_days }}<span class="text-xs wt-mute">d</span></td>
           <td class="num {{ 'wt-pos' if r.avg_qty_variance_pct > 0 else ('wt-neg' if r.avg_qty_variance_pct < 0 else 'wt-mute') }}" data-sort-value="{{ r.avg_qty_variance_pct }}">{{ r.avg_qty_variance_pct }}%</td>
           <td class="num {{ 'wt-neg' if r.outstanding > 0 else '' }}" data-sort-value="{{ r.outstanding }}">{{ currency }} {{ '{:,.0f}'.format(r.outstanding) }}</td>

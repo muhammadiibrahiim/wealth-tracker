@@ -12,7 +12,7 @@
   {% if report.on_order %}
   <div class="wt-panel {{ 'wt-card-warn' if report.on_order_needs_date else '' }}">
     <div class="wt-panel__head wt-warn-bg">
-      <h2 class="text-base font-bold" class="wt-warn">📦 Expected supply arrivals</h2>
+      <h2 class="text-base font-bold wt-warn">📦 Expected supply arrivals</h2>
       <p class="text-xs wt-mute mt-1">Goods still on order. Set the date each supply is expected to arrive — the forecast then schedules that trade's vendor payment and the resulting customer collection from that date.{% if report.on_order_needs_date %} <b class="wt-warn">Amber rows have no delivery history yet, so a date is needed to plan them.</b>{% endif %}</p>
     </div>
     <div class="divide-y divide-gray-100">
@@ -23,7 +23,7 @@
           <a class="font-mono wt-info hover:underline" href="/trade/trades/{{ o.trade_id }}">{{ o.ref }}</a>
           <span class="text-sm wt-body">· <b>{{ o.vendor }}</b> → {{ o.customer }}</span>
           <div class="text-xs wt-mute">supply {{ cur }} {{ '{:,.0f}'.format(o.pending_cost) }} · sells {{ cur }} {{ '{:,.0f}'.format(o.pending_sale) }}
-            {% if o.no_history %}<span class="ml-1 font-semibold" class="wt-warn">· no history — set a date</span>{% else %}<span class="ml-1 wt-ash">· timing estimated from history</span>{% endif %}
+            {% if o.no_history %}<span class="ml-1 font-semibold wt-warn">· no history — set a date</span>{% else %}<span class="ml-1 wt-ash">· timing estimated from history</span>{% endif %}
           </div>
           {% if o.pay_schedule %}
           <div class="text-xs mt-1 wt-body">
@@ -32,7 +32,7 @@
             {% if o.pay_schedule|length > 1 %}<span class="wt-ash">= {{ cur }} {{ '{:,.0f}'.format(o.net_payable) }} net</span>{% endif %}
           </div>
           {% elif o.net_payable == 0 %}
-          <div class="text-xs mt-1" class="wt-pos">✓ fully prepaid — nothing left to pay on arrival</div>
+          <div class="text-xs mt-1 wt-pos">✓ fully prepaid — nothing left to pay on arrival</div>
           {% endif %}
         </div>
         <div class="flex items-center gap-2">
@@ -94,7 +94,7 @@
                 hx-include="#cfm-delay-form"
                 hx-target="#cfm-content" hx-select="#cfm-content" hx-swap="outerHTML"
                 class="btn-primary btn-sm">Save as default</button>
-        {% if report.delay_overridden %}<span class="text-xs font-semibold" class="wt-warn">⚠ previewing unsaved values</span>{% endif %}
+        {% if report.delay_overridden %}<span class="text-xs font-semibold wt-warn">⚠ previewing unsaved values</span>{% endif %}
       </div>
     </form>
   </div>
@@ -134,11 +134,11 @@
         <div class="flex items-baseline justify-between flex-wrap gap-2 mb-2">
           <div>
             {% if ins.receipt > 0 %}<span class="text-lg font-bold wt-pos">Collect {{ cur }} {{ '{:,.0f}'.format(ins.receipt) }}</span>
-            {% elif ins.injected > 0 %}<span class="text-lg font-bold" class="wt-warn">💰 Inject {{ cur }} {{ '{:,.0f}'.format(ins.injected) }}</span>
-            {% else %}<span class="text-base font-bold" class="wt-info">🔮 Supply arrives</span>{% endif %}
+            {% elif ins.injected > 0 %}<span class="text-lg font-bold wt-warn">💰 Inject {{ cur }} {{ '{:,.0f}'.format(ins.injected) }}</span>
+            {% else %}<span class="text-base font-bold wt-info">🔮 Supply arrives</span>{% endif %}
             <span class="wt-mute ml-1">{{ ins.date.strftime('%a, %d %b %Y') }}</span>
             <span class="wt-ash text-xs">{% if ins.days_out <= 0 %}(now){% else %}(+{{ ins.days_out }}d){% endif %}</span>
-            {% if ins.receipt > 0 and ins.injected > 0 %}<span class="font-bold" class="wt-warn"> · 💰 inject {{ cur }} {{ '{:,.0f}'.format(ins.injected) }}</span>{% endif %}
+            {% if ins.receipt > 0 and ins.injected > 0 %}<span class="font-bold wt-warn"> · 💰 inject {{ cur }} {{ '{:,.0f}'.format(ins.injected) }}</span>{% endif %}
           </div>
           <div class="text-xs wt-mute whitespace-nowrap">pay out {{ cur }} {{ '{:,.0f}'.format(ins.paid_out) }}{% if ins.carried > 0 %} · carry {{ cur }} {{ '{:,.0f}'.format(ins.carried) }}{% endif %}</div>
         </div>
@@ -151,7 +151,7 @@
         <div class="wt-panel px-4">
           {% for p in ins.payments %}
           <div class="flex items-center justify-between gap-3 py-2.5 {{ 'border-t border-dashed' if not loop.first else '' }} {{ 'wt-warn-bg rounded px-2' if p.from_injection else '' }}">
-            <span class="text-sm"><span class="wt-neg">→</span> pay <b class="wt-ink">{{ p.vendor }}</b> <span class="wt-pill wt-pill-neutral" title="{{ p.reason }}">{{ p.tier }}</span> <b class="wt-ink tabular-nums">{{ cur }} {{ '{:,.0f}'.format(p.amount) }}</b> {% if p.from_injection %}<span class="text-xs font-semibold" class="wt-warn">💰 from injection (deadline reached)</span>{% else %}<span class="text-xs wt-ash">{% if p.remaining_after > 0 %}({{ cur }} {{ '{:,.0f}'.format(p.remaining_after) }} still owed){% else %}(cleared ✓){% endif %}</span>{% endif %}</span>
+            <span class="text-sm"><span class="wt-neg">→</span> pay <b class="wt-ink">{{ p.vendor }}</b> <span class="wt-pill wt-pill-neutral" title="{{ p.reason }}">{{ p.tier }}</span> <b class="wt-ink tabular-nums">{{ cur }} {{ '{:,.0f}'.format(p.amount) }}</b> {% if p.from_injection %}<span class="text-xs font-semibold wt-warn">💰 from injection (deadline reached)</span>{% else %}<span class="text-xs wt-ash">{% if p.remaining_after > 0 %}({{ cur }} {{ '{:,.0f}'.format(p.remaining_after) }} still owed){% else %}(cleared ✓){% endif %}</span>{% endif %}</span>
           </div>
           {% endfor %}
         </div>
@@ -167,14 +167,14 @@
   <!-- COLLECT (simple list) -->
   <div class="wt-panel p-5">
     <div class="flex items-center justify-between mb-3">
-      <div class="text-sm font-bold" class="wt-pos">↘ Collect these (chase biggest / overdue first)</div>
+      <div class="text-sm font-bold wt-pos">↘ Collect these (chase biggest / overdue first)</div>
       <div class="text-xs wt-mute">owed to you <b class="wt-pos">{{ cur }} {{ '{:,.0f}'.format(report.receivables_total) }}</b></div>
     </div>
     <ul class="space-y-1.5 text-sm">
       {% for g in report.customer_plans %}
       <li class="flex items-center justify-between gap-3">
         <span><b class="wt-ink">{{ g.name }}</b> <span class="wt-ash text-xs">{{ g['items']|length }} invoice{{ 's' if g['items']|length != 1 }}{% for it in g['items'] %}{% if it.overdue %} · <span class="wt-neg">overdue</span>{% endif %}{% endfor %}</span></span>
-        <span class="tabular-nums font-semibold whitespace-nowrap" class="wt-pos">{{ cur }} {{ '{:,.0f}'.format(g.outstanding) }}</span>
+        <span class="tabular-nums font-semibold whitespace-nowrap wt-pos">{{ cur }} {{ '{:,.0f}'.format(g.outstanding) }}</span>
       </li>
       {% else %}
       <li class="wt-ash">Nothing outstanding.</li>

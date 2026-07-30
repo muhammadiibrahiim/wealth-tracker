@@ -1,96 +1,108 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Expenses{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Expenses</h1>
-      <p class="page-subtitle">Every expense voucher — plates, design, freight, trips, write-offs — <b>excluding bilties</b> (those have their own report). Filter by date; grouped totals below.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Expenses',
+      'Every expense voucher except bilties, by date, with per-category totals.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
+class="flex items-end gap-4 flex-wrap">
       <div>
         <label class="field-label">From</label>
-        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5">
+        <input type="date" name="date_from" value="{{ date_from }}">
       </div>
       <div>
         <label class="field-label">To</label>
-        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5">
+        <input type="date" name="date_to" value="{{ date_to }}">
       </div>
-      <button type="submit" class="btn-primary">Apply</button>
-      {% if date_from or date_to %}<a href="/trade/reports/expenses" class="btn-secondary">Reset</a>{% endif %}
-    </form>
-  </div>
+      
+      {% if date_from or date_to %}{% endif %}
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/expenses') }}
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <div class="accent-card md:col-span-1 flex items-center justify-between" style="border-left-color:#b45309; background:#fef3e8;">
+    <div class="accent-card wt-card-warn md:col-span-1 flex items-center justify-between">
       <div>
         <div class="stat-label">Total Expenses</div>
-        <div class="text-2xl font-bold mt-1" style="color:#7c2d12;">{{ currency }} {{ '{:,.2f}'.format(report.total) }}</div>
+        <div class="text-2xl font-bold mt-1 wt-neg">{{ currency }} {{ '{:,.2f}'.format(report.total) }}</div>
       </div>
-      <div class="text-right text-sm" style="color:#7c2d12;">
+      <div class="text-right text-sm wt-neg">
         {{ report.count }} voucher{{ 's' if report.count != 1 }}<br>
-        <span style="color:var(--mute);">
+        <span class="wt-mute">
           {{ report.from_date.strftime('%d %b %Y') if report.from_date else 'all' }} → {{ report.to_date.strftime('%d %b %Y') if report.to_date else 'today' }}
         </span>
       </div>
     </div>
-    <div class="md:col-span-2 bg-white border border-gray-200 rounded-lg p-4">
+    <div class="md:col-span-2 wt-panel p-4">
       <div class="stat-label mb-2">By category</div>
       <div class="flex flex-wrap gap-x-6 gap-y-1 text-sm">
         {% for c in report.categories %}
-        <div><span class="text-gray-600">{{ c.category }}</span> <b class="tabular-nums">{{ currency }} {{ '{:,.0f}'.format(c.amount) }}</b></div>
+        <div><span class="wt-mute">{{ c.category }}</span> <b class="tabular-nums">{{ currency }} {{ '{:,.0f}'.format(c.amount) }}</b></div>
         {% else %}
-        <div class="text-gray-400">No expenses in range.</div>
+        <div class="wt-ash">No expenses in range.</div>
         {% endfor %}
       </div>
     </div>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+  {% if report.categories %}
+  {{ chart_card('expense-mix-chart', 'Where the money went', 'Share of total expenses by category.', 'sm') }}
+  {% endif %}
+
+  <div class="wt-panel overflow-x-auto">
     {% if report.rows %}
-    <table class="min-w-full">
+    {{ report_toolbar('tbl-expenses', print_btn=True) }}
+    {{ sortable_table_open('tbl-expenses', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Date</th>
-          <th class="text-left">Voucher</th>
-          <th class="text-left">Description</th>
-          <th class="text-left">Category</th>
-          <th class="text-left">Paid Via</th>
-          <th class="text-left">Trade</th>
-          <th class="text-right">Amount</th>
+          <th>Date</th>
+          <th>Voucher</th>
+          <th>Description</th>
+          <th>Category</th>
+          <th>Paid Via</th>
+          <th>Trade</th>
+          <th class="num">Amount</th>
         </tr>
       </thead>
       <tbody>
         {% for r in report.rows %}
         <tr>
-          <td class="text-gray-700 whitespace-nowrap text-sm">{{ r.date.strftime('%d %b %Y') }}</td>
-          <td class="font-mono text-xs text-gray-500">{{ r.reference }}</td>
-          <td class="text-gray-900">{{ r.description or '—' }}</td>
-          <td class="text-gray-600 text-sm">{{ r.category }}</td>
-          <td class="text-gray-600 text-sm">{{ r.paid_via }}</td>
-          <td>{% if r.trade_id %}<a class="text-indigo-600 hover:text-indigo-900 font-mono text-xs" href="/trade/trades/{{ r.trade_id }}">{{ r.trade_ref or '—' }}</a>{% else %}<span class="text-gray-300">—</span>{% endif %}</td>
-          <td class="text-right tabular-nums font-semibold" style="color:#b45309;">{{ currency }} {{ '{:,.2f}'.format(r.amount) }}</td>
+          <td class="wt-body whitespace-nowrap text-sm">{{ r.date.strftime('%d %b %Y') }}</td>
+          <td class="font-mono text-xs wt-mute">{{ r.reference }}</td>
+          <td class="wt-ink">{{ r.description or '—' }}</td>
+          <td class="wt-mute text-sm">{{ r.category }}</td>
+          <td class="wt-mute text-sm">{{ r.paid_via }}</td>
+          <td>{% if r.trade_id %}{{ drill('/trade/trades/' ~ r.trade_id, r.trade_ref or '—', 'Open this trade') }}{% else %}<span class="wt-ash">—</span>{% endif %}</td>
+          <td class="num wt-warn">{{ currency }} {{ '{:,.2f}'.format(r.amount) }}</td>
         </tr>
         {% endfor %}
       </tbody>
-      <tfoot style="background:#fafaf9;">
+      <tfoot>
         <tr>
-          <td colspan="6" class="text-right text-xs uppercase tracking-widest font-bold text-gray-700">Total</td>
-          <td class="text-right tabular-nums font-bold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(report.total) }}</td>
+          <td colspan="6" class="text-right text-xs uppercase tracking-widest font-bold wt-body">Total</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(report.total) }}</td>
         </tr>
       </tfoot>
-    </table>
+    {{ table_close() }}
     {% else %}
-    <div class="px-6 py-16 text-center text-sm text-gray-500">No expenses in this period.</div>
+    <div class=" text-center text-sm wt-mute">No expenses in this period.</div>
     {% endif %}
   </div>
 
-  <p class="text-xs text-gray-500">Bilty / freight charges are excluded — see the <a href="/trade/reports/bilty" class="text-indigo-600 hover:underline">Bilty Report</a>. Amount is the debited (expense) side of each voucher; "Paid Via" is what funded it (CEO capital, a party ledger, or cash).</p>
+  <p class="text-xs wt-mute">Bilty / freight charges are excluded — see the <a href="/trade/reports/bilty" class="wt-info hover:underline">Bilty Report</a>. Amount is the debited (expense) side of each voucher; "Paid Via" is what funded it (CEO capital, a party ledger, or cash).</p>
 </div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  if (!window.WTCharts) return;
+  WTCharts.doughnut('expense-mix-chart', {
+    labels: {{ report.categories | map(attribute='category') | map('string') | list | tojson }},
+    values: {{ report.categories | map(attribute='amount') | map('float') | list | tojson }},
+    currency: true
+  });
+});
+</script>
 {% endblock %}

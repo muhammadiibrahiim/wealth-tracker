@@ -1,21 +1,19 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Customer Pending Goods{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Customer Pending Goods</h1>
-      <p class="page-subtitle">What's still left for <b>us to deliver</b> to a customer — pick a customer, then export a delivery-pending list (quantity, order date, sale rate, pending value).</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Customer Pending Goods',
+      'Goods you still owe to deliver, by customer, valued at the sale rate.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
+class="flex items-end gap-4 flex-wrap">
       <div>
         <label class="field-label field-label-required">Customer</label>
-        <select name="customer_id" class="px-3 py-2.5" style="min-width:220px;"
+        <select name="customer_id" class="min-w-[220px]"
                 onchange="var it=this.form.querySelector('[name=item_id]'); if(it) it.value=''; if(this.value) this.form.submit();">
           <option value="">— Select customer —</option>
           {% for c in customers %}<option value="{{ c.id }}" {% if selected_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
@@ -24,76 +22,76 @@
       {% if selected and items %}
       <div>
         <label class="field-label">Item</label>
-        <select name="item_id" class="px-3 py-2.5" style="min-width:220px;" onchange="this.form.submit();">
+        <select name="item_id" class="min-w-[220px]" onchange="this.form.submit();">
           <option value="">All items</option>
           {% for it in items %}<option value="{{ it.id }}" {% if selected_item == it.id %}selected{% endif %}>{{ it.name }}</option>{% endfor %}
         </select>
       </div>
       {% endif %}
-      <button type="submit" class="btn-primary">Show Pending</button>
+      
       {% if selected %}
       {% set qs = ('?item_id=' ~ selected_item) if selected_item else '' %}
       <a href="/trade/reports/customer-pending/{{ selected.customer_id }}.pdf?img=1{% if selected_item %}&item_id={{ selected_item }}{% endif %}" target="_blank" class="btn-secondary">Open as Image</a>
-      <a href="/trade/reports/customer-pending/{{ selected.customer_id }}.pdf{{ qs }}" target="_blank" class="btn-secondary" style="color:#b45309;border-color:#f59e0b;">Export PDF</a>
+      <a href="/trade/reports/customer-pending/{{ selected.customer_id }}.pdf{{ qs }}" target="_blank" class="btn-secondary">Export PDF</a>
       {% endif %}
-    </form>
-  </div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/customer-pending') }}
 
   {% if selected %}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
     <div class="stat-card">
       <div class="stat-label">Customer</div>
-      <div class="text-lg font-bold text-gray-900 mt-1">{{ selected.customer_name }}</div>
+      <div class="text-lg font-bold wt-ink mt-1">{{ selected.customer_name }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Pending Quantity</div>
-      <div class="stat-value">{{ '{:,.0f}'.format(selected.pending_qty) }}<span class="text-base text-gray-500 ml-1">pcs</span></div>
+      <div class="stat-value">{{ '{:,.0f}'.format(selected.pending_qty) }}<span class="text-base wt-mute ml-1">pcs</span></div>
     </div>
-    <div class="stat-card" style="border-color:#4338ca;">
+    <div class="stat-card wt-card-info">
       <div class="stat-label">Pending Value (at sale)</div>
-      <div class="stat-value" style="color:#4338ca;"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(selected.pending_value) }}</div>
+      <div class="stat-value wt-info"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(selected.pending_value) }}</div>
     </div>
   </div>
 
   {% for tr in selected.trades %}
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2" style="background:#fafaf9;">
+  <div class="wt-panel">
+    <div class=" border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
       <div>
-        <a href="/trade/trades/{{ tr.trade_id }}" class="font-mono text-sm font-semibold text-indigo-600 hover:text-indigo-900">{{ tr.trade_ref }}</a>
-        <span class="text-sm text-gray-500 ml-2">ordered {{ tr.trade_date }} · {{ tr.days_open }} days open{% if tr.vendor_name %} · from {{ tr.vendor_name }}{% endif %}{% if tr.customer_due_date %} · due {{ tr.customer_due_date }}{% if tr.customer_due_date < today %} <span class="pill-cr">OVERDUE</span>{% endif %}{% endif %}</span>
+        <a href="/trade/trades/{{ tr.trade_id }}" class="font-mono text-sm font-semibold wt-info hover:text-indigo-900">{{ tr.trade_ref }}</a>
+        <span class="text-sm wt-mute ml-2">ordered {{ tr.trade_date }} · {{ tr.days_open }} days open{% if tr.vendor_name %} · from {{ tr.vendor_name }}{% endif %}{% if tr.customer_due_date %} · due {{ tr.customer_due_date }}{% if tr.customer_due_date < today %} <span class="pill-cr">OVERDUE</span>{% endif %}{% endif %}</span>
       </div>
-      <div class="text-sm">Trade pending: <span class="font-bold" style="color:#4338ca;">{{ currency }} {{ '{:,.2f}'.format(tr.pending_value) }}</span></div>
+      <div class="text-sm">Trade pending: <span class="font-bold wt-info">{{ currency }} {{ '{:,.2f}'.format(tr.pending_value) }}</span></div>
     </div>
-    <table class="min-w-full">
+    {{ report_toolbar('tbl-customer-pending', print_btn=True) }}
+    {{ sortable_table_open('tbl-customer-pending', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Item</th>
-          <th class="text-right">Ordered</th>
-          <th class="text-right">Delivered</th>
-          <th class="text-right">Pending</th>
-          <th class="text-right">Sale Rate</th>
-          <th class="text-right">Pending Value</th>
+          <th>Item</th>
+          <th class="num">Ordered</th>
+          <th class="num">Delivered</th>
+          <th class="num">Pending</th>
+          <th class="num">Sale Rate</th>
+          <th class="num">Pending Value</th>
         </tr>
       </thead>
       <tbody>
         {% for ln in tr.lines %}
         <tr>
-          <td class="text-gray-900"><span class="font-medium">{{ ln.item_name }}</span>{% if ln.specs %}<div class="text-xs text-gray-500">{{ ln.specs }}</div>{% endif %}</td>
-          <td class="text-right tabular-nums text-gray-700">{{ '{:,.0f}'.format(ln.ordered_qty) }} {{ ln.unit }}</td>
-          <td class="text-right tabular-nums text-gray-500">{{ '{:,.0f}'.format(ln.received_qty) }}</td>
-          <td class="text-right tabular-nums font-semibold" style="color:#4338ca;">{{ '{:,.0f}'.format(ln.pending_qty) }}</td>
-          <td class="text-right tabular-nums text-gray-700">{{ currency }} {{ '{:,.2f}'.format(ln.unit_price) }}</td>
-          <td class="text-right tabular-nums font-medium">{{ currency }} {{ '{:,.2f}'.format(ln.pending_value) }}</td>
+          <td class="wt-ink"><span class="font-medium">{{ ln.item_name }}</span>{% if ln.specs %}<div class="text-xs wt-mute">{{ ln.specs }}</div>{% endif %}</td>
+          <td class="num">{{ '{:,.0f}'.format(ln.ordered_qty) }} {{ ln.unit }}</td>
+          <td class="num">{{ '{:,.0f}'.format(ln.received_qty) }}</td>
+          <td class="num wt-info">{{ '{:,.0f}'.format(ln.pending_qty) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.unit_price) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.pending_value) }}</td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
   </div>
   {% else %}
-  <div class="bg-white border border-gray-200 rounded-lg px-6 py-12 text-center text-gray-400">Nothing pending for this customer — everything ordered has been delivered.</div>
+  <div class="wt-panel text-center wt-ash">Nothing pending for this customer — everything ordered has been delivered.</div>
   {% endfor %}
   {% else %}
-  <div class="bg-white border border-gray-200 rounded-lg px-6 py-12 text-center text-gray-400">Select a customer above to see what you still owe them.</div>
+  <div class="wt-panel text-center wt-ash">Select a customer above to see what you still owe them.</div>
   {% endif %}
 </div>
 

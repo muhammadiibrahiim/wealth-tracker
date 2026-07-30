@@ -27,7 +27,7 @@ class="flex items-end gap-4 flex-wrap">
         {% for r in rows %}
         <tr>
           <td>{{ drill('/trade/trades/' ~ r.trade.id, r.trade.reference, 'Open this trade') }}</td>
-          <td class="num" class="{{ tone }}">{{ value_prefix }}{{ '{:,.0f}'.format(r[value_attr]) }}</td>
+          <td class="num {{ tone }}">{{ value_prefix }}{{ '{:,.0f}'.format(r[value_attr]) }}</td>
         </tr>
         {% else %}<tr><td colspan="2" class=" text-center text-sm wt-ash">— none —</td></tr>{% endfor %}
         </tbody>

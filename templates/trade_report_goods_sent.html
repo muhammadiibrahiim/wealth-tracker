@@ -1,21 +1,19 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Goods Sent{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Goods Sent</h1>
-      <p class="page-subtitle">Order-vs-delivery statement for a customer — by <b>PO</b>: the ordered quantity, every dispatch with its running balance, and what's still pending (or over-delivered). Pick a customer and date range, then export to send them.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Goods Sent',
+      'Dated dispatch statement for a customer, by PO, over a date range.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
+class="flex items-end gap-4 flex-wrap">
       <div>
         <label class="field-label field-label-required">Customer</label>
-        <select name="customer_id" class="px-3 py-2.5" style="min-width:220px;"
+        <select name="customer_id" class="min-w-[220px]"
                 onchange="if(this.value) this.form.submit();">
           <option value="">— Select customer —</option>
           {% for c in customers %}<option value="{{ c.id }}" {% if selected_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
@@ -23,69 +21,68 @@
       </div>
       <div>
         <label class="field-label">From</label>
-        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5">
+        <input type="date" name="date_from" value="{{ date_from }}">
       </div>
       <div>
         <label class="field-label">To</label>
-        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5">
+        <input type="date" name="date_to" value="{{ date_to }}">
       </div>
-      <button type="submit" class="btn-primary">Show</button>
+      
       {% if report and report.customer_id %}
       {% set qs = [] %}
       {% if date_from %}{% set _ = qs.append('date_from=' ~ date_from) %}{% endif %}
       {% if date_to %}{% set _ = qs.append('date_to=' ~ date_to) %}{% endif %}
       {% set qstr = ('?' ~ qs|join('&')) if qs else '' %}
       <a href="/trade/reports/goods-sent/{{ report.customer_id }}.pdf?img=1{% if qs %}&{{ qs|join('&') }}{% endif %}" target="_blank" class="btn-secondary">Open as Image</a>
-      <a href="/trade/reports/goods-sent/{{ report.customer_id }}.pdf{{ qstr }}" target="_blank" class="btn-secondary" style="color:#b45309;border-color:#f59e0b;">Export PDF</a>
+      <a href="/trade/reports/goods-sent/{{ report.customer_id }}.pdf{{ qstr }}" target="_blank" class="btn-secondary">Export PDF</a>
       {% endif %}
-    </form>
-  </div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/goods-sent') }}
 
   {% if report %}
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
     <div class="stat-card">
       <div class="stat-label">Ordered</div>
-      <div class="stat-value">{{ '{:,.0f}'.format(report.total_ordered) }}<span class="text-base text-gray-500 ml-1">pcs</span></div>
+      <div class="stat-value">{{ '{:,.0f}'.format(report.total_ordered) }}<span class="text-base wt-mute ml-1">pcs</span></div>
     </div>
-    <div class="stat-card" style="border-color:#4338ca;">
+    <div class="stat-card wt-card-info">
       <div class="stat-label">Sent</div>
-      <div class="stat-value" style="color:#4338ca;">{{ '{:,.0f}'.format(report.total_qty) }}<span class="text-base text-gray-500 ml-1">pcs</span></div>
+      <div class="stat-value wt-info">{{ '{:,.0f}'.format(report.total_qty) }}<span class="text-base wt-mute ml-1">pcs</span></div>
     </div>
-    <div class="stat-card" style="border-color:#b45309;">
+    <div class="stat-card wt-card-warn">
       <div class="stat-label">Pending</div>
-      <div class="stat-value" style="color:#b45309;">{{ '{:,.0f}'.format(report.total_pending) }}<span class="text-base text-gray-500 ml-1">pcs</span></div>
+      <div class="stat-value wt-warn">{{ '{:,.0f}'.format(report.total_pending) }}<span class="text-base wt-mute ml-1">pcs</span></div>
     </div>
-    <div class="stat-card" style="{% if report.total_overflow > 0 %}border-color:#b91c1c;{% endif %}">
+    <div class="stat-card {{ 'wt-card-neg' if report.total_overflow > 0 else '' }}">
       <div class="stat-label">Over-delivered</div>
-      <div class="stat-value" style="{% if report.total_overflow > 0 %}color:#b91c1c;{% endif %}">{{ '{:,.0f}'.format(report.total_overflow) }}<span class="text-base text-gray-500 ml-1">pcs</span></div>
+      <div class="stat-value {{ 'wt-neg' if report.total_overflow > 0 else '' }}">{{ '{:,.0f}'.format(report.total_overflow) }}<span class="text-base wt-mute ml-1">pcs</span></div>
     </div>
   </div>
 
-  <div class="text-sm text-gray-500">
+  <div class="text-sm wt-mute">
     <b>{{ report.customer_name }}</b> · Period:
     <b>{{ report.from_date.strftime('%d %b %Y') if report.from_date else 'earliest' }}</b> →
     <b>{{ report.to_date.strftime('%d %b %Y') if report.to_date else 'today' }}</b>
   </div>
 
   {% for po in report.pos %}
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2" style="background:#fafaf9;">
+  <div class="wt-panel">
+    <div class=" border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
       <div>
-        <a href="/trade/trades/{{ po.trade_id }}" class="text-sm font-bold text-indigo-700 hover:text-indigo-900">PO #{{ po.po_no }}</a>
-        <span class="text-sm text-gray-500 ml-2">ordered {{ po.trade_date.strftime('%d %b %Y') if po.trade_date else '—' }}</span>
+        <a href="/trade/trades/{{ po.trade_id }}" class="text-sm font-bold wt-info hover:text-indigo-900">PO #{{ po.po_no }}</a>
+        <span class="text-sm wt-mute ml-2">ordered {{ po.trade_date.strftime('%d %b %Y') if po.trade_date else '—' }}</span>
       </div>
-      <div class="text-sm text-gray-600">ordered <b>{{ '{:,.0f}'.format(po.ordered) }}</b> · sent <b style="color:#4338ca;">{{ '{:,.0f}'.format(po.sent) }}</b>{% if po.pending > 0 %} · pending <b style="color:#b45309;">{{ '{:,.0f}'.format(po.pending) }}</b>{% endif %}{% if po.overflow > 0 %} · over <b style="color:#b91c1c;">{{ '{:,.0f}'.format(po.overflow) }}</b>{% endif %}</div>
+      <div class="text-sm wt-mute">ordered <b>{{ '{:,.0f}'.format(po.ordered) }}</b> · sent <b class="wt-info">{{ '{:,.0f}'.format(po.sent) }}</b>{% if po.pending > 0 %} · pending <b class="wt-warn">{{ '{:,.0f}'.format(po.pending) }}</b>{% endif %}{% if po.overflow > 0 %} · over <b class="wt-neg">{{ '{:,.0f}'.format(po.overflow) }}</b>{% endif %}</div>
     </div>
 
     {% for it in po['items'] %}
-    <div class="px-6 py-3 {% if not loop.first %}border-t border-gray-100{% endif %}">
+    <div class=" {% if not loop.first %}border-t border-gray-100{% endif %}">
       <div class="flex items-baseline justify-between flex-wrap gap-1 mb-2">
-        <div><span class="font-semibold text-gray-900">{{ it.item_name }}</span>{% if it.specs %}<span class="text-xs text-gray-500 ml-2">{{ it.specs }}</span>{% endif %}</div>
-        <div class="text-sm text-gray-600">Ordered <b class="text-gray-900">{{ '{:,.0f}'.format(it.ordered) }} {{ it.unit }}</b></div>
+        <div><span class="font-semibold wt-ink">{{ it.item_name }}</span>{% if it.specs %}<span class="text-xs wt-mute ml-2">{{ it.specs }}</span>{% endif %}</div>
+        <div class="text-sm wt-mute">Ordered <b class="wt-ink">{{ '{:,.0f}'.format(it.ordered) }} {{ it.unit }}</b></div>
       </div>
       <table class="min-w-full text-sm">
         <thead>
-          <tr class="text-gray-500" style="font-size:11px;text-transform:uppercase;letter-spacing:.03em;">
+          <tr class="wt-group">
             <th class="text-left py-1">Sent On</th>
             <th class="text-right py-1">Quantity</th>
             <th class="text-right py-1">Remaining</th>
@@ -93,38 +90,38 @@
         </thead>
         <tbody>
           {% if it.prior_count %}
-          <tr class="text-gray-400">
+          <tr class="wt-ash">
             <td class="py-1 italic" colspan="2">{{ it.prior_count }} earlier dispatch{{ 'es' if it.prior_count != 1 }} before this period</td>
             <td class="py-1 text-right tabular-nums italic">−{{ '{:,.0f}'.format(it.prior_qty) }}</td>
           </tr>
           {% endif %}
           {% for dv in it.deliveries %}
           <tr class="border-t border-gray-50">
-            <td class="py-1.5 text-gray-700 whitespace-nowrap">{{ dv.date.strftime('%d %b %Y') }}</td>
-            <td class="py-1.5 text-right tabular-nums font-semibold" style="color:#4338ca;">{{ '{:,.0f}'.format(dv.qty) }}</td>
-            <td class="py-1.5 text-right tabular-nums {% if dv.remaining < 0 %}font-semibold{% endif %}" style="color:{% if dv.remaining < 0 %}#b91c1c{% else %}#6b7280{% endif %};">{{ '{:,.0f}'.format(dv.remaining) }}</td>
+            <td class="py-1.5 wt-body whitespace-nowrap">{{ dv.date.strftime('%d %b %Y') }}</td>
+            <td class="num py-1.5 font-semibold wt-info">{{ '{:,.0f}'.format(dv.qty) }}</td>
+            <td class="num py-1.5 {% if dv.remaining < 0 %}font-semibold{% endif %} {{ 'wt-neg' if dv.remaining < 0 else '' }}" data-sort-value="{{ dv.remaining }}">{{ '{:,.0f}'.format(dv.remaining) }}</td>
           </tr>
           {% endfor %}
         </tbody>
         <tfoot>
-          <tr style="border-top:2px solid #eef2ff;">
-            <td class="py-2 text-xs uppercase tracking-wide font-bold text-gray-600">Delivered {{ '{:,.0f}'.format(it.delivered) }}</td>
+          <tr class="wt-total">
+            <td class="py-2 text-xs uppercase tracking-wide font-bold wt-mute">Delivered {{ '{:,.0f}'.format(it.delivered) }}</td>
             <td colspan="2" class="py-2 text-right font-bold">
-              {% if it.pending > 0 %}<span style="color:#b45309;">Pending {{ '{:,.0f}'.format(it.pending) }} {{ it.unit }}</span>
-              {% elif it.overflow > 0 %}<span style="color:#b91c1c;">Over-delivered {{ '{:,.0f}'.format(it.overflow) }} {{ it.unit }}</span>
-              {% else %}<span style="color:#15803d;">✓ Complete</span>{% endif %}
+              {% if it.pending > 0 %}<span class="wt-warn">Pending {{ '{:,.0f}'.format(it.pending) }} {{ it.unit }}</span>
+              {% elif it.overflow > 0 %}<span class="wt-neg">Over-delivered {{ '{:,.0f}'.format(it.overflow) }} {{ it.unit }}</span>
+              {% else %}<span class="wt-pos">✓ Complete</span>{% endif %}
             </td>
           </tr>
         </tfoot>
-      </table>
+      {{ table_close() }}
     </div>
     {% endfor %}
   </div>
   {% else %}
-  <div class="bg-white border border-gray-200 rounded-lg px-6 py-12 text-center text-gray-400">No goods dispatched to this customer in the selected period.</div>
+  <div class="wt-panel text-center wt-ash">No goods dispatched to this customer in the selected period.</div>
   {% endfor %}
   {% else %}
-  <div class="bg-white border border-gray-200 rounded-lg px-6 py-12 text-center text-gray-400">Select a customer above to see the goods sent to them, by PO.</div>
+  <div class="wt-panel text-center wt-ash">Select a customer above to see the goods sent to them, by PO.</div>
   {% endif %}
 </div>
 

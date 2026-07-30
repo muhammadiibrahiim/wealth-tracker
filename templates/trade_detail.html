@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Trade {{ trade.reference }}{% endblock %}
 {% block content %}
 
@@ -31,7 +32,7 @@
         {% endif %}
         {% if 0 < customer_outstanding <= 100 %}
         <form hx-post="/trade/trades/{{ trade.id }}/writeoff-residual" hx-confirm="Write off the remaining {{ currency }} {{ '{:,.2f}'.format(customer_outstanding) }} to expenses and mark this trade fully paid?">
-          <button class="btn-secondary" style="color: #b45309; border-color: #f59e0b;">Complete &amp; Adjust ({{ currency }} {{ '{:,.2f}'.format(customer_outstanding) }})</button>
+          <button class="btn-secondary wt-warn">Complete &amp; Adjust ({{ currency }} {{ '{:,.2f}'.format(customer_outstanding) }})</button>
         </form>
         {% endif %}
         {% if _status == 'paid' %}
@@ -40,41 +41,51 @@
         </form>
         {% endif %}
         <form hx-post="/trade/trades/{{ trade.id }}/cancel" hx-confirm="Cancel this trade? Status flips to Cancelled and journals reverse.">
-          <button class="btn-secondary" style="color: #b91c1c;">Cancel</button>
+          <button class="btn-secondary wt-neg">Cancel</button>
         </form>
       {% endif %}
       <form hx-post="/trade/trades/{{ trade.id }}/delete" hx-confirm="PERMANENTLY DELETE this trade? All payments and journal entries linked to it will be reversed and the trade row removed. This cannot be undone.">
-        <button class="btn-secondary" style="color: #fff; background: #b91c1c; border-color: #b91c1c;">Delete</button>
+        <button class="btn-danger">Delete</button>
       </form>
     </div>
+  </div>
+
+  <div class="wt-presets">
+    <a href="#sec-lines" class="wt-preset">Lines</a>
+    <a href="#sec-docs" class="wt-preset">Documents</a>
+    <a href="#sec-receipts" class="wt-preset">Receipts</a>
+    <a href="#sec-attachments" class="wt-preset">Attachments</a>
+    <a href="#sec-designs" class="wt-preset">Designs</a>
+    <a href="#sec-costs" class="wt-preset">Costs</a>
+    <a href="#sec-payments" class="wt-preset">Payments</a>
   </div>
 
   <!-- Header cards -->
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
     <div class="stat-card">
       <div class="stat-label">Vendor (we buy)</div>
-      <div class="text-lg font-bold text-gray-900 mt-1">{{ vendor.name if vendor else '—' }}</div>
-      {% if vendor and vendor.phone %}<div class="text-xs text-gray-500 mt-1">{{ vendor.phone }}</div>{% endif %}
+      <div class="text-lg font-bold wt-ink mt-1">{{ vendor.name if vendor else '—' }}</div>
+      {% if vendor and vendor.phone %}<div class="text-xs wt-mute mt-1">{{ vendor.phone }}</div>{% endif %}
     </div>
     <div class="stat-card">
       <div class="stat-label">Purchaser (we sell)</div>
-      <div class="text-lg font-bold text-gray-900 mt-1">{{ purchaser.name if purchaser else '—' }}</div>
-      {% if purchaser and purchaser.phone %}<div class="text-xs text-gray-500 mt-1">{{ purchaser.phone }}</div>{% endif %}
+      <div class="text-lg font-bold wt-ink mt-1">{{ purchaser.name if purchaser else '—' }}</div>
+      {% if purchaser and purchaser.phone %}<div class="text-xs wt-mute mt-1">{{ purchaser.phone }}</div>{% endif %}
     </div>
     <div class="stat-card">
       <div class="stat-label">Customer Terms</div>
-      <div class="text-sm font-bold text-gray-900 mt-1">{{ cust_terms_label }}</div>
+      <div class="text-sm font-bold wt-ink mt-1">{{ cust_terms_label }}</div>
       {% if trade.customer_due_date %}
-      <div class="text-xs mt-1 {% if trade.customer_due_date < today and customer_outstanding > 0 %}text-orange-700 font-semibold{% else %}text-gray-500{% endif %}">
+      <div class="text-xs mt-1 {% if trade.customer_due_date < today and customer_outstanding > 0 %}wt-neg font-semibold{% else %}wt-mute{% endif %}">
         Due: {{ trade.customer_due_date }}
       </div>
       {% endif %}
     </div>
     <div class="stat-card">
       <div class="stat-label">Vendor Terms</div>
-      <div class="text-sm font-bold text-gray-900 mt-1">{{ vend_terms_label }}</div>
+      <div class="text-sm font-bold wt-ink mt-1">{{ vend_terms_label }}</div>
       {% if trade.vendor_due_date %}
-      <div class="text-xs mt-1 {% if trade.vendor_due_date < today and vendor_outstanding > 0 %}text-orange-700 font-semibold{% else %}text-gray-500{% endif %}">
+      <div class="text-xs mt-1 {% if trade.vendor_due_date < today and vendor_outstanding > 0 %}wt-neg font-semibold{% else %}wt-mute{% endif %}">
         Due: {{ trade.vendor_due_date }}
       </div>
       {% endif %}
@@ -97,38 +108,38 @@
       <div class="stat-value">
         <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format((trade.total_sale - trade.total_cost)|abs) }}
       </div>
-      <div class="text-xs mt-1 text-gray-500">on goods only</div>
+      <div class="text-xs mt-1 wt-mute">on goods only</div>
     </div>
-    <div class="stat-card" style="border-color: {% if net_profit >= 0 %}#16a34a{% else %}#ea580c{% endif %};">
+    <div class="stat-card" class=\"{{ 'wt-card-pos' if net_profit >= 0 else 'wt-card-neg' }}\">
       <div class="stat-label">Net Profit</div>
-      <div class="stat-value" style="color: {% if net_profit >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+      <div class="stat-value" class=\"{{ 'wt-pos' if net_profit >= 0 else 'wt-neg' }}\">
         <span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(net_profit|abs) }}
       </div>
-      <div class="text-xs mt-1 text-gray-500">after bilty &amp; trade costs ({{ currency }} {{ '{:,.0f}'.format(trade_costs_total) }})</div>
+      <div class="text-xs mt-1 wt-mute">after bilty &amp; trade costs ({{ currency }} {{ '{:,.0f}'.format(trade_costs_total) }})</div>
     </div>
-    <div class="stat-card" style="border-color:#4f46e5;" title="Return on this trade = net profit ÷ everything you put in (goods cost + bilty + trade costs). What each rupee invested in the trade earned.">
+    <div class="stat-card wt-card-info" title="Return on this trade = net profit ÷ everything you put in (goods cost + bilty + trade costs). What each rupee invested in the trade earned.">
       <div class="stat-label">ROI</div>
-      <div class="stat-value" style="color: {% if net_profit >= 0 %}#4338ca{% else %}#c2410c{% endif %};">{{ '{:,.2f}'.format(net_profit / invested * 100) if invested > 0 else '0.00' }}%</div>
-      <div class="text-xs mt-1 text-gray-500">net profit ÷ {{ currency }} {{ '{:,.0f}'.format(invested) }} invested</div>
+      <div class="stat-value {{ 'wt-info' if net_profit >= 0 else 'wt-neg' }}">{{ '{:,.2f}'.format(net_profit / invested * 100) if invested > 0 else '0.00' }}%</div>
+      <div class="text-xs mt-1 wt-mute">net profit ÷ {{ currency }} {{ '{:,.0f}'.format(invested) }} invested</div>
     </div>
   </div>
 
   <!-- Lines -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between" style="background: #fafaf9;">
-      <h2>Line Items</h2>
+  <div class="wt-panel">
+    <div class="wt-panel__head">
+      <h2 id="sec-lines">Line Items</h2>
       <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/lines/new" hx-target="#modal-container">+ Add Line Item</button>
     </div>
-    <table class="min-w-full">
+    {{ table_open(dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Item</th>
-          <th class="text-left">Specs</th>
-          <th class="text-right">Qty</th>
-          <th class="text-right">Unit Cost</th>
-          <th class="text-right">Unit Price</th>
-          <th class="text-right">Line Cost</th>
-          <th class="text-right">Line Sale</th>
+          <th>Item</th>
+          <th>Specs</th>
+          <th class="num">Qty</th>
+          <th class="num">Unit Cost</th>
+          <th class="num">Unit Price</th>
+          <th class="num">Line Cost</th>
+          <th class="num">Line Sale</th>
           <th></th>
         </tr>
       </thead>
@@ -136,131 +147,131 @@
         {% for ln in trade.lines %}
         <tr class="align-top">
           <td>
-            <div class="font-medium text-gray-900">{{ ln.item_name }}</div>
-            {% if ln.line_notes %}<div class="text-xs text-gray-500 mt-1">{{ ln.line_notes }}</div>{% endif %}
+            <div class="font-medium wt-ink">{{ ln.item_name }}</div>
+            {% if ln.line_notes %}<div class="text-xs wt-mute mt-1">{{ ln.line_notes }}</div>{% endif %}
           </td>
-          <td class="text-xs text-gray-700">
+          <td class="text-xs wt-body">
             {% if ln.specs %}
-              {% for s in ln.specs %}<div><span class="text-gray-400">{{ s.label }}:</span> {{ s.value }}</div>{% endfor %}
-            {% else %}<span class="text-gray-400">—</span>{% endif %}
+              {% for s in ln.specs %}<div><span class="wt-ash">{{ s.label }}:</span> {{ s.value }}</div>{% endfor %}
+            {% else %}<span class="wt-ash">—</span>{% endif %}
           </td>
-          <td class="text-right tabular-nums">
+          <td class="num">
             {{ '{:g}'.format(ln.quantity) }} {{ ln.unit }}
             {% if ln.ordered_quantity and ln.ordered_quantity != ln.quantity %}
               {% set delta = ln.quantity - ln.ordered_quantity %}
-              <div class="text-xs text-gray-500 mt-1">
+              <div class="text-xs wt-mute mt-1">
                 ordered {{ '{:g}'.format(ln.ordered_quantity) }}
-                <span class="font-medium" style="color: {% if delta > 0 %}#15803d{% else %}#c2410c{% endif %};">
+                <span class="font-medium" class=\"{{ 'wt-pos' if delta > 0 else 'wt-neg' }}\">
                   ({% if delta > 0 %}+{% endif %}{{ '{:g}'.format(delta) }})
                 </span>
               </div>
             {% endif %}
           </td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ln.unit_cost) }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ln.unit_price) }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ln.quantity * ln.unit_cost) }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(ln.quantity * ln.unit_price) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.unit_cost) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.unit_price) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.quantity * ln.unit_cost) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.quantity * ln.unit_price) }}</td>
           <td class="text-right whitespace-nowrap">
             {% if _status in ('open', 'delivered', 'partially_paid') %}
-            <button type="button" class="text-indigo-600 text-xs hover:underline font-medium mr-3"
+            <button type="button" class="wt-info text-xs hover:underline font-medium mr-3"
                     hx-get="/trade/trades/{{ trade.id }}/lines/{{ ln.id }}/edit" hx-target="#modal-container">Edit</button>
-            <button type="button" class="text-red-600 text-xs hover:underline font-medium"
+            <button type="button" class="wt-neg text-xs hover:underline font-medium"
                     hx-post="/trade/trades/{{ trade.id }}/lines/{{ ln.id }}/delete" hx-confirm="Delete this line?">Remove</button>
             {% endif %}
           </td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
   </div>
 
   <!-- Documents -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200" style="background: #fafaf9;">
-      <h2>Documents</h2>
-      <div class="text-sm mt-1" style="color: var(--mute);">
+  <div class="wt-panel">
+    <div class="wt-panel__head">
+      <h2 id="sec-docs">Documents</h2>
+      <div class="text-sm mt-1 wt-mute">
         Auto-generated documents derived from this trade. Click to open each as a PDF.
       </div>
     </div>
     <div id="trade-documents" class="divide-y divide-gray-100">
-      <div class="px-6 py-3 flex items-center gap-3">
-        <span style="font-size: 18px;">🧾</span>
+      <div class=" flex items-center gap-3">
+        <span class="text-lg">🧾</span>
         <div class="flex-1">
-          <div class="font-medium text-gray-900">Invoice</div>
-          <div class="text-xs text-gray-500">Customer invoice — sent to the buyer for collection.</div>
+          <div class="font-medium wt-ink">Invoice</div>
+          <div class="text-xs wt-mute">Customer invoice — sent to the buyer for collection.</div>
         </div>
-        <a href="/trade/trades/{{ trade.id }}/invoice.pdf?img=1" target="_blank" class="btn-secondary" style="text-decoration:none;">Open</a> <a href="/trade/trades/{{ trade.id }}/invoice.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/invoice.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/invoice.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
       </div>
-      <div class="px-6 py-3 flex items-center gap-3">
-        <span style="font-size: 18px;">📨</span>
+      <div class=" flex items-center gap-3">
+        <span class="text-lg">📨</span>
         <div class="flex-1">
-          <div class="font-medium text-gray-900">Order Confirmation</div>
-          <div class="text-xs text-gray-500">Confirms the order back to the customer with terms, totals and item details.</div>
+          <div class="font-medium wt-ink">Order Confirmation</div>
+          <div class="text-xs wt-mute">Confirms the order back to the customer with terms, totals and item details.</div>
         </div>
-        <a href="/trade/trades/{{ trade.id }}/order-confirmation.pdf?img=1" target="_blank" class="btn-secondary" style="text-decoration:none;">Open</a> <a href="/trade/trades/{{ trade.id }}/order-confirmation.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/order-confirmation.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/order-confirmation.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
       </div>
-      <div class="px-6 py-3 flex items-center gap-3">
-        <span style="font-size: 18px;">🚚</span>
+      <div class=" flex items-center gap-3">
+        <span class="text-lg">🚚</span>
         <div class="flex-1">
-          <div class="font-medium text-gray-900">Delivery Note + Packing Slip</div>
-          <div class="text-xs text-gray-500">
+          <div class="font-medium wt-ink">Delivery Note + Packing Slip</div>
+          <div class="text-xs wt-mute">
             Combined doc — priced delivery table on top, warehouse packing checklist below, signature blocks.
             Quantities reflect the trade's final delivered amount.
           </div>
-          {% if not trade.delivered_at %}<div class="text-xs text-orange-700 mt-1">Trade not yet marked delivered — doc will say "Delivery in progress".</div>{% endif %}
+          {% if not trade.delivered_at %}<div class="text-xs wt-neg mt-1">Trade not yet marked delivered — doc will say "Delivery in progress".</div>{% endif %}
         </div>
-        <a href="/trade/trades/{{ trade.id }}/delivery-pack.pdf?img=1" target="_blank" class="btn-secondary" style="text-decoration:none;">Open</a> <a href="/trade/trades/{{ trade.id }}/delivery-pack.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/delivery-pack.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/delivery-pack.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
       </div>
       {% for d in receipt_dates %}
-      <div class="px-6 py-3 flex items-center gap-3" style="background: #fffbeb;">
-        <span style="font-size: 18px;">🚚</span>
+      <div class=" flex items-center gap-3">
+        <span class="text-lg">🚚</span>
         <div class="flex-1">
-          <div class="font-medium text-gray-900">Delivery + Packing · {{ d }}</div>
-          <div class="text-xs text-gray-500">For the partial receive event on this date — quantities reflect what was received that day only.</div>
+          <div class="font-medium wt-ink">Delivery + Packing · {{ d }}</div>
+          <div class="text-xs wt-mute">For the partial receive event on this date — quantities reflect what was received that day only.</div>
         </div>
-        <a href="/trade/trades/{{ trade.id }}/delivery-pack/by-date/{{ d }}.pdf?img=1" target="_blank" class="btn-secondary" style="text-decoration:none;">Open</a> <a href="/trade/trades/{{ trade.id }}/delivery-pack/by-date/{{ d }}.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/delivery-pack/by-date/{{ d }}.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/delivery-pack/by-date/{{ d }}.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
       </div>
-      <div class="px-6 py-3 flex items-center gap-3" style="background: #fffbeb;">
-        <span style="font-size: 18px;">🧾</span>
+      <div class=" flex items-center gap-3">
+        <span class="text-lg">🧾</span>
         <div class="flex-1">
-          <div class="font-medium text-gray-900">Invoice · {{ d }}</div>
-          <div class="text-xs text-gray-500">Customer invoice for the partial delivery on this date.</div>
+          <div class="font-medium wt-ink">Invoice · {{ d }}</div>
+          <div class="text-xs wt-mute">Customer invoice for the partial delivery on this date.</div>
         </div>
-        <a href="/trade/trades/{{ trade.id }}/invoice/by-date/{{ d }}.pdf?img=1" target="_blank" class="btn-secondary" style="text-decoration:none;">Open</a> <a href="/trade/trades/{{ trade.id }}/invoice/by-date/{{ d }}.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/invoice/by-date/{{ d }}.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/invoice/by-date/{{ d }}.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
       </div>
       {% endfor %}
 
-      <div class="px-6 py-3 flex items-center gap-3">
-        <span style="font-size: 18px;">🏷️</span>
+      <div class=" flex items-center gap-3">
+        <span class="text-lg">🏷️</span>
         <div class="flex-1">
-          <div class="font-medium text-gray-900">Vendor Purchase Order</div>
-          <div class="text-xs text-gray-500">Our PO to {{ vendor.name if vendor else 'the vendor' }} at cost terms.</div>
+          <div class="font-medium wt-ink">Vendor Purchase Order</div>
+          <div class="text-xs wt-mute">Our PO to {{ vendor.name if vendor else 'the vendor' }} at cost terms.</div>
         </div>
-        <a href="/trade/trades/{{ trade.id }}/vendor-po.pdf?img=1" target="_blank" class="btn-secondary" style="text-decoration:none;">Open</a> <a href="/trade/trades/{{ trade.id }}/vendor-po.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/vendor-po.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/vendor-po.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
       </div>
 
       {% for p in inbound_payments %}
-      <div class="px-6 py-3 flex items-center gap-3">
-        <span style="font-size: 18px;">🧾</span>
+      <div class=" flex items-center gap-3">
+        <span class="text-lg">🧾</span>
         <div class="flex-1">
-          <div class="font-medium text-gray-900">Payment Receipt · {{ p.paid_on }}</div>
-          <div class="text-xs text-gray-500">
+          <div class="font-medium wt-ink">Payment Receipt · {{ p.paid_on }}</div>
+          <div class="text-xs wt-mute">
             Acknowledgement for {{ currency }} {{ '{:,.2f}'.format(p.amount) }}
             {% if p.method %}via {{ p.method }}{% endif %}
             — applied to {{ trade.reference }}.
           </div>
         </div>
-        <a href="/trade/trades/{{ trade.id }}/payments/{{ p.id }}/receipt.pdf?img=1" target="_blank" class="btn-secondary" style="text-decoration:none;">Open</a> <a href="/trade/trades/{{ trade.id }}/payments/{{ p.id }}/receipt.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/payments/{{ p.id }}/receipt.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/payments/{{ p.id }}/receipt.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
       </div>
       {% endfor %}
       {% if not inbound_payments %}
-      <div class="px-6 py-3 flex items-center gap-3" style="opacity: 0.55;">
-        <span style="font-size: 18px;">🧾</span>
+      <div class="flex items-center gap-3 opacity-60">
+        <span class="text-lg">🧾</span>
         <div class="flex-1">
-          <div class="font-medium text-gray-500">Payment Receipts</div>
-          <div class="text-xs text-gray-500">A receipt will appear here for each customer payment you record.</div>
+          <div class="font-medium wt-mute">Payment Receipts</div>
+          <div class="text-xs wt-mute">A receipt will appear here for each customer payment you record.</div>
         </div>
-        <span class="text-xs text-gray-400">No payments yet</span>
+        <span class="text-xs wt-ash">No payments yet</span>
       </div>
       {% endif %}
     </div>
@@ -272,19 +283,19 @@
     {% for r in ln.receipts %}{% set _ = all_receipts.append((ln, r)) %}{% endfor %}
   {% endfor %}
   {% if all_receipts %}
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200" style="background: #fafaf9;">
-      <h2>Receipts (Partial Deliveries)</h2>
+  <div class="wt-panel">
+    <div class="wt-panel__head">
+      <h2 id="sec-receipts">Receipts (Partial Deliveries)</h2>
     </div>
-    <table class="min-w-full">
+    {{ table_open(dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Item</th>
-          <th class="text-left">Received On</th>
-          <th class="text-right">Qty</th>
-          <th class="text-left">Vendor Invoice</th>
-          <th class="text-left">Bilty</th>
-          <th class="text-left">Notes</th>
+          <th>Item</th>
+          <th>Received On</th>
+          <th class="num">Qty</th>
+          <th>Vendor Invoice</th>
+          <th>Bilty</th>
+          <th>Notes</th>
           <th></th>
         </tr>
       </thead>
@@ -292,29 +303,29 @@
         {% for ln, r in all_receipts %}
         {% set _bilty = bilties_by_date.get(r.received_on) %}
         <tr>
-          <td class="font-medium text-gray-900">{{ ln.item_name }}</td>
-          <td class="text-gray-700 whitespace-nowrap">{{ r.received_on }}</td>
-          <td class="text-right tabular-nums font-medium">{{ '{:g}'.format(r.received_qty) }} {{ ln.unit }}</td>
+          <td class="font-medium wt-ink">{{ ln.item_name }}</td>
+          <td class="wt-body whitespace-nowrap">{{ r.received_on }}</td>
+          <td class="num">{{ '{:g}'.format(r.received_qty) }} {{ ln.unit }}</td>
           <td>
             {% if r.vendor_invoice_path %}
-              <a href="{{ r.vendor_invoice_path }}" target="_blank" class="text-indigo-600 hover:underline text-xs font-medium">📎 view invoice</a>
-            {% else %}<span class="text-gray-400 text-xs">—</span>{% endif %}
+              <a href="{{ r.vendor_invoice_path }}" target="_blank" class="wt-info hover:underline text-xs font-medium">📎 view invoice</a>
+            {% else %}<span class="wt-ash text-xs">—</span>{% endif %}
           </td>
           <td>
             {% if _bilty %}
-              <button hx-get="/trade/trades/{{ trade.id }}/bilty/by-date/{{ r.received_on }}/new"
+              <button class="text-xs font-medium hover:underline wt-warn" hx-get="/trade/trades/{{ trade.id }}/bilty/by-date/{{ r.received_on }}/new"
                       hx-target="#modal-container"
-                      class="text-xs font-medium hover:underline"
-                      style="color: #b45309;">
+                     
+                     >
                 🚛 {{ currency }} {{ '{:,.2f}'.format(_bilty.amount) }} · Edit
               </button>
               {% if _bilty.by_customer %}
-              <span class="inline-block ml-1 px-2 py-0.5 rounded text-xs font-medium"
-                    style="background: #fef3c7; color: #78350f;"
+              <span class="inline-block ml-1 px-2 py-0.5 rounded text-xs font-medium wt-pill wt-pill-warn"
+                   
                     title="Customer paid this bilty on our behalf — reduces their receivable">paid by customer</span>
               {% endif %}
               {% if _bilty.weight_kgs or _bilty.terminal %}
-              <div class="text-xs text-gray-500 mt-1">
+              <div class="text-xs wt-mute mt-1">
                 {% if _bilty.terminal %}📍 {{ _bilty.terminal }}{% endif %}
                 {% if _bilty.weight_kgs and _bilty.terminal %} · {% endif %}
                 {% if _bilty.weight_kgs %}⚖ {{ '{:g}'.format(_bilty.weight_kgs|float) }} kg{% endif %}
@@ -323,69 +334,69 @@
             {% else %}
               <button hx-get="/trade/trades/{{ trade.id }}/bilty/by-date/{{ r.received_on }}/new"
                       hx-target="#modal-container"
-                      class="text-indigo-600 hover:text-indigo-900 text-xs font-medium">
+                      class="wt-drill text-xs font-medium">
                 + Add Bilty
               </button>
             {% endif %}
           </td>
-          <td class="text-gray-700 text-xs">{{ r.notes or '' }}</td>
+          <td class="wt-body text-xs">{{ r.notes or '' }}</td>
           <td class="text-right">
             <form hx-post="/trade/receipts/{{ r.id }}/delete" hx-confirm="Delete this receipt?">
-              <button class="text-red-600 text-xs hover:underline font-medium">Delete</button>
+              <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
             </form>
           </td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
   </div>
   {% endif %}
 
   <!-- Customer PO & Attachments -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200" style="background: #fafaf9;">
-      <h2>Customer PO &amp; Attachments</h2>
-      <div class="text-sm mt-1" style="color: var(--mute);">
+  <div class="wt-panel">
+    <div class="wt-panel__head">
+      <h2 id="sec-attachments">Customer PO &amp; Attachments</h2>
+      <div class="text-sm mt-1 wt-mute">
         Documents from the buyer — the original PO, signed copies, revisions.
         Drop a file, click to browse, or paste (Cmd+V) directly.
       </div>
     </div>
     {% if customer_pos %}
-    <table class="min-w-full">
+    {{ table_open(dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">File</th>
-          <th class="text-left">Kind</th>
-          <th class="text-right">Size</th>
-          <th class="text-left">Uploaded</th>
+          <th>File</th>
+          <th>Kind</th>
+          <th class="num">Size</th>
+          <th>Uploaded</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {% for a in customer_pos %}
         <tr>
-          <td class="text-gray-900">
-            <a href="{{ a.path }}" target="_blank" class="text-indigo-600 hover:underline font-medium">📎 {{ a.filename }}</a>
-            {% if a.notes %}<div class="text-xs text-gray-500 mt-1">{{ a.notes }}</div>{% endif %}
+          <td class="wt-ink">
+            <a href="{{ a.path }}" target="_blank" class="wt-info hover:underline font-medium">📎 {{ a.filename }}</a>
+            {% if a.notes %}<div class="text-xs wt-mute mt-1">{{ a.notes }}</div>{% endif %}
           </td>
-          <td class="text-gray-700 text-sm">{{ (a.kind.value if a.kind.value is defined else a.kind).replace('_',' ').title() }}</td>
-          <td class="text-right tabular-nums text-gray-700 text-sm">
+          <td class="wt-body text-sm">{{ (a.kind.value if a.kind.value is defined else a.kind).replace('_',' ').title() }}</td>
+          <td class="num">
             {% if a.size_bytes < 1024 %}{{ a.size_bytes }} B
             {% elif a.size_bytes < 1024*1024 %}{{ '%.1f'|format(a.size_bytes / 1024.0) }} KB
             {% else %}{{ '%.2f'|format(a.size_bytes / 1024.0 / 1024.0) }} MB{% endif %}
           </td>
-          <td class="text-gray-700 text-sm whitespace-nowrap">{{ a.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td class="wt-body text-sm whitespace-nowrap">{{ a.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
           <td class="text-right">
             <form hx-post="/trade/trades/{{ trade.id }}/attachments/{{ a.id }}/delete" hx-confirm="Delete this attachment?">
-              <button class="text-red-600 text-xs hover:underline font-medium">Delete</button>
+              <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
             </form>
           </td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
     {% else %}
-    <div class="px-6 py-6 text-sm text-gray-400">No customer POs yet. Upload the customer's PO below.</div>
+    <div class=" text-sm wt-ash">No customer POs yet. Upload the customer's PO below.</div>
     {% endif %}
 
     <div class="p-6 border-t border-gray-200">
@@ -397,16 +408,16 @@
           <div class="md:col-span-2">
             <label class="field-label">Add files (multiple allowed)</label>
             <div class="paste-zone" tabindex="0">
-              <input type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.doc,.docx,.xls,.xlsx" class="paste-input" style="display: none;">
+              <input type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.doc,.docx,.xls,.xlsx" class="paste-input" hidden>
               <div class="paste-placeholder">
-                <span style="font-size: 18px;">📎</span>
+                <span class="text-lg">📎</span>
                 <span><strong>Click</strong>, drop, or <strong>paste</strong> (Cmd+V) the customer's PO file(s)</span>
               </div>
-              <div class="paste-preview" style="display:none">
-                <img class="paste-thumb" alt="" style="display:none">
+              <div class="paste-preview" hidden>
+                <img class="paste-thumb" alt="" hidden>
                 <div class="paste-info">
                   <div class="paste-filename"></div>
-                  <div class="paste-size text-xs" style="color: var(--mute);"></div>
+                  <div class="paste-size text-xs wt-mute"></div>
                 </div>
                 <button type="button" class="paste-clear" title="Clear">✕</button>
               </div>
@@ -425,23 +436,23 @@
   </div>
 
   <!-- Designs / Artwork (embedded in the Vendor PO PDF) -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200" style="background: #fafaf9;">
-      <h2>Designs / Artwork</h2>
-      <div class="text-sm mt-1" style="color: var(--mute);">
+  <div class="wt-panel">
+    <div class="wt-panel__head">
+      <h2 id="sec-designs">Designs / Artwork</h2>
+      <div class="text-sm mt-1 wt-mute">
         Print-ready artwork for the vendor — these images are <strong>embedded inside
         the Vendor Purchase Order PDF</strong> so the supplier sees exactly what to
         produce. Drop a file, click to browse, or paste (Cmd+V) directly.
       </div>
     </div>
     {% if designs %}
-    <table class="min-w-full">
+    {{ table_open(dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Preview</th>
-          <th class="text-left">File</th>
-          <th class="text-right">Size</th>
-          <th class="text-left">Uploaded</th>
+          <th>Preview</th>
+          <th>File</th>
+          <th class="num">Size</th>
+          <th>Uploaded</th>
           <th></th>
         </tr>
       </thead>
@@ -453,29 +464,29 @@
           <td>
             {% if _is_img %}
               <a href="{{ a.path }}" target="_blank"><img src="{{ a.path }}" alt="{{ a.filename }}" style="max-height: 60px; max-width: 100px; border: 1px solid var(--hairline-soft); border-radius: 4px;"></a>
-            {% else %}<span style="font-size: 24px;">📄</span>{% endif %}
+            {% else %}<span class="text-2xl">📄</span>{% endif %}
           </td>
-          <td class="text-gray-900">
-            <a href="{{ a.path }}" target="_blank" class="text-indigo-600 hover:underline font-medium">📎 {{ a.filename }}</a>
-            {% if a.notes %}<div class="text-xs text-gray-500 mt-1">{{ a.notes }}</div>{% endif %}
+          <td class="wt-ink">
+            <a href="{{ a.path }}" target="_blank" class="wt-info hover:underline font-medium">📎 {{ a.filename }}</a>
+            {% if a.notes %}<div class="text-xs wt-mute mt-1">{{ a.notes }}</div>{% endif %}
           </td>
-          <td class="text-right tabular-nums text-gray-700 text-sm">
+          <td class="num">
             {% if a.size_bytes < 1024 %}{{ a.size_bytes }} B
             {% elif a.size_bytes < 1024*1024 %}{{ '%.1f'|format(a.size_bytes / 1024.0) }} KB
             {% else %}{{ '%.2f'|format(a.size_bytes / 1024.0 / 1024.0) }} MB{% endif %}
           </td>
-          <td class="text-gray-700 text-sm whitespace-nowrap">{{ a.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td class="wt-body text-sm whitespace-nowrap">{{ a.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
           <td class="text-right">
             <form hx-post="/trade/trades/{{ trade.id }}/attachments/{{ a.id }}/delete" hx-confirm="Delete this design?">
-              <button class="text-red-600 text-xs hover:underline font-medium">Delete</button>
+              <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
             </form>
           </td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
     {% else %}
-    <div class="px-6 py-6 text-sm text-gray-400">No designs uploaded yet. Drop the artwork below — it'll appear inside the Vendor PO PDF for the supplier.</div>
+    <div class=" text-sm wt-ash">No designs uploaded yet. Drop the artwork below — it'll appear inside the Vendor PO PDF for the supplier.</div>
     {% endif %}
 
     <div class="p-6 border-t border-gray-200">
@@ -487,16 +498,16 @@
           <div class="md:col-span-2">
             <label class="field-label">Add design files (PNG / JPG preferred — they embed in the PO PDF)</label>
             <div class="paste-zone" tabindex="0">
-              <input type="file" name="files" multiple accept=".png,.jpg,.jpeg,.webp,.gif,.pdf" class="paste-input" style="display: none;">
+              <input type="file" name="files" multiple accept=".png,.jpg,.jpeg,.webp,.gif,.pdf" class="paste-input" hidden>
               <div class="paste-placeholder">
-                <span style="font-size: 18px;">🎨</span>
+                <span class="text-lg">🎨</span>
                 <span><strong>Click</strong>, drop, or <strong>paste</strong> (Cmd+V) the print-ready artwork</span>
               </div>
-              <div class="paste-preview" style="display:none">
-                <img class="paste-thumb" alt="" style="display:none">
+              <div class="paste-preview" hidden>
+                <img class="paste-thumb" alt="" hidden>
                 <div class="paste-info">
                   <div class="paste-filename"></div>
-                  <div class="paste-size text-xs" style="color: var(--mute);"></div>
+                  <div class="paste-size text-xs wt-mute"></div>
                 </div>
                 <button type="button" class="paste-clear" title="Clear">✕</button>
               </div>
@@ -515,119 +526,119 @@
   </div>
 
   <!-- Trade Costs (DR Capital A/C / CR payee) -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between" style="background: #fafaf9;">
+  <div class="wt-panel">
+    <div class="wt-panel__head">
       <div>
-        <h2>Costs Absorbed by Capital</h2>
-        <div class="text-sm mt-1" style="color: var(--mute);">
+        <h2 id="sec-costs">Costs Absorbed by Capital</h2>
+        <div class="text-sm mt-1 wt-mute">
           Bilty, loading, demurrage, broker commission and other trade overheads — posted DR Capital A/C / CR payee.
         </div>
       </div>
       <div class="text-right">
-        <div class="text-xs uppercase tracking-wide" style="color: var(--mute);">Total Cost Absorbed</div>
-        <div class="tabular-nums font-semibold" style="font-size: 18px; color: var(--ink);">
+        <div class="text-xs uppercase tracking-wide wt-mute">Total Cost Absorbed</div>
+        <div class="tabular-nums font-semibold text-lg wt-ink">
           {{ currency }} {{ '{:,.2f}'.format(total_cost_absorbed) }}
         </div>
       </div>
     </div>
     {% if costs %}
-    <table class="min-w-full">
+    {{ table_open(dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Ref</th>
-          <th class="text-left">Date</th>
-          <th class="text-left">Description</th>
-          <th class="text-left">Payee</th>
-          <th class="text-right">Amount</th>
+          <th>Ref</th>
+          <th>Date</th>
+          <th>Description</th>
+          <th>Payee</th>
+          <th class="num">Amount</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {% for c in costs %}
         <tr>
-          <td class="text-gray-700 text-xs tabular-nums" style="font-family: 'Source Code Pro', monospace;">{{ c.reference }}</td>
-          <td class="text-gray-700 text-sm whitespace-nowrap">{{ c.entry_date }}</td>
-          <td class="text-gray-900 text-sm">{{ c.description }}</td>
-          <td class="text-gray-700 text-sm">
-            <span style="font-family: 'Source Code Pro', monospace; font-size: 11px; color: var(--mute);">{{ c.payee_code }}</span>
+          <td class="wt-body text-xs tabular-nums wt-mono">{{ c.reference }}</td>
+          <td class="wt-body text-sm whitespace-nowrap">{{ c.entry_date }}</td>
+          <td class="wt-ink text-sm">{{ c.description }}</td>
+          <td class="wt-body text-sm">
+            <span class="wt-mono text-xs wt-mute">{{ c.payee_code }}</span>
             {{ c.payee }}
             {% if c.by_customer %}
-            <span class="inline-block ml-1 px-2 py-0.5 rounded text-xs font-medium"
-                  style="background: #fef3c7; color: #78350f;"
+            <span class="inline-block ml-1 px-2 py-0.5 rounded text-xs font-medium wt-pill wt-pill-warn"
+                 
                   title="Customer paid this on our behalf — reduces their receivable">paid by customer</span>
             {% endif %}
           </td>
-          <td class="text-right tabular-nums font-medium" style="color: {% if c.by_customer %}#15803d{% else %}#c2410c{% endif %};">{{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
+          <td class="num" class=\"{{ 'wt-pos' if c.by_customer else 'wt-neg' }}\">{{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
           <td class="text-right">
             <form hx-post="/trade/trades/{{ trade.id }}/costs/{{ c.entry_id }}/delete" hx-confirm="Reverse this cost entry?">
-              <button class="text-red-600 text-xs hover:underline font-medium">Delete</button>
+              <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
             </form>
           </td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
     {% else %}
-    <div class="px-6 py-10 text-center text-sm text-gray-400">
+    <div class=" text-center text-sm wt-ash">
       No costs recorded for this trade yet. Click <strong>+ Record Cost</strong> above to add bilty, loading, broker commission, etc.
     </div>
     {% endif %}
   </div>
 
   <!-- Customer Payments (vendor payments are tracked globally on the party ledger, not per trade) -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200" style="background: #fafaf9;">
-      <h2>Customer Payments (Inbound)</h2>
+  <div class="wt-panel">
+    <div class="wt-panel__head">
+      <h2 id="sec-payments">Customer Payments (Inbound)</h2>
       <div class="text-sm mt-2 flex flex-wrap gap-x-4 gap-y-1">
-        <span>Invoiced <span class="font-semibold text-gray-700">{{ currency }} {{ '{:,.2f}'.format(trade.total_sale) }}</span></span>
-        <span>Paid in cash <span class="font-semibold" style="color: #15803d;">{{ currency }} {{ '{:,.2f}'.format(trade.paid_by_customer) }}</span></span>
+        <span>Invoiced <span class="font-semibold wt-body">{{ currency }} {{ '{:,.2f}'.format(trade.total_sale) }}</span></span>
+        <span>Paid in cash <span class="font-semibold wt-pos">{{ currency }} {{ '{:,.2f}'.format(trade.paid_by_customer) }}</span></span>
         {% if customer_paid_costs > 0 %}
         <span title="Costs the customer paid on our behalf (e.g. bilty) — reduces their receivable">
-          Paid via cost absorption <span class="font-semibold" style="color: #15803d;">{{ currency }} {{ '{:,.2f}'.format(customer_paid_costs) }}</span>
+          Paid via cost absorption <span class="font-semibold wt-pos">{{ currency }} {{ '{:,.2f}'.format(customer_paid_costs) }}</span>
         </span>
         {% endif %}
-        <span>Outstanding <span class="font-semibold" style="color: {% if customer_outstanding > 0 %}#c2410c{% else %}#6b7280{% endif %};">{{ currency }} {{ '{:,.2f}'.format(customer_outstanding) }}</span></span>
+        <span>Outstanding <span class="font-semibold {{ 'wt-neg' if customer_outstanding > 0 else 'wt-mute' }}">{{ currency }} {{ '{:,.2f}'.format(customer_outstanding) }}</span></span>
       </div>
     </div>
     {% set inbound = trade.payments | selectattr('direction.value','equalto','inbound') | list %}
     {% if inbound or customer_paid_costs > 0 %}
-    <table class="min-w-full">
-      <thead><tr><th class="text-left">Date</th><th class="text-left">Source</th><th class="text-left">Method / Note</th><th class="text-right">Amount</th><th></th></tr></thead>
+    {{ table_open(dense=True) }}
+      <thead><tr><th>Date</th><th>Source</th><th>Method / Note</th><th class="num">Amount</th><th></th></tr></thead>
       <tbody>
         {% for p in inbound %}
         <tr>
-          <td class="text-gray-700 text-sm whitespace-nowrap">{{ p.paid_on }}</td>
-          <td class="text-gray-700 text-sm">{{ p.cash_account.name if p.cash_account else (p.gl_account.name if p.gl_account else '—') }}</td>
-          <td class="text-gray-700 text-sm">
+          <td class="wt-body text-sm whitespace-nowrap">{{ p.paid_on }}</td>
+          <td class="wt-body text-sm">{{ p.cash_account.name if p.cash_account else (p.gl_account.name if p.gl_account else '—') }}</td>
+          <td class="wt-body text-sm">
             {{ p.method or '—' }}{% if p.reference %} · {{ p.reference }}{% endif %}
             {% if p.proof_path %}
-            <a href="{{ p.proof_path }}" target="_blank" title="View payment proof" class="inline-flex items-center gap-1 ml-1 text-indigo-600 hover:underline">
+            <a href="{{ p.proof_path }}" target="_blank" title="View payment proof" class="inline-flex items-center gap-1 ml-1 wt-info hover:underline">
               <img src="{{ p.proof_path }}" alt="proof" style="height:26px;width:26px;object-fit:cover;border-radius:4px;border:1px solid #e5e7eb;vertical-align:middle;"> <span class="text-xs">proof</span>
             </a>{% endif %}
           </td>
-          <td class="text-right tabular-nums text-sm font-medium" style="color: #15803d;">+ {{ currency }} {{ '{:,.2f}'.format(p.amount) }}</td>
-          <td class="text-right"><form hx-post="/trade/payments/{{ p.id }}/delete" hx-confirm="Delete payment?"><button class="text-red-600 text-xs hover:underline">Del</button></form></td>
+          <td class="num wt-pos">+ {{ currency }} {{ '{:,.2f}'.format(p.amount) }}</td>
+          <td class="text-right"><form hx-post="/trade/payments/{{ p.id }}/delete" hx-confirm="Delete payment?"><button class="wt-neg text-xs hover:underline">Del</button></form></td>
         </tr>
         {% endfor %}
         {% for c in costs if c.by_customer %}
-        <tr style="background: #fffbeb;">
-          <td class="text-gray-700 text-sm whitespace-nowrap">{{ c.entry_date }}</td>
-          <td class="text-gray-700 text-sm">
+        <tr>
+          <td class="wt-body text-sm whitespace-nowrap">{{ c.entry_date }}</td>
+          <td class="wt-body text-sm">
             Cost absorbed
-            <span class="inline-block ml-1 px-2 py-0.5 rounded text-xs font-medium" style="background: #fef3c7; color: #78350f;">paid by customer</span>
+            <span class="inline-block ml-1 px-2 py-0.5 rounded text-xs font-medium wt-pill wt-pill-warn">paid by customer</span>
           </td>
-          <td class="text-gray-700 text-sm">{{ c.description }}</td>
-          <td class="text-right tabular-nums text-sm font-medium" style="color: #15803d;">+ {{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
-          <td class="text-right"><form hx-post="/trade/trades/{{ trade.id }}/costs/{{ c.entry_id }}/delete" hx-confirm="Reverse this customer-paid cost?"><button class="text-red-600 text-xs hover:underline">Del</button></form></td>
+          <td class="wt-body text-sm">{{ c.description }}</td>
+          <td class="num wt-pos">+ {{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
+          <td class="text-right"><form hx-post="/trade/trades/{{ trade.id }}/costs/{{ c.entry_id }}/delete" hx-confirm="Reverse this customer-paid cost?"><button class="wt-neg text-xs hover:underline">Del</button></form></td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
-    {% else %}<div class="px-6 py-10 text-center text-sm text-gray-400">No customer payments yet.</div>{% endif %}
+    {{ table_close() }}
+    {% else %}<div class=" text-center text-sm wt-ash">No customer payments yet.</div>{% endif %}
   </div>
 
-  <div class="accent-card" style="border-left-color: #6b7280; background: #f4f5f8;">
-    <p class="text-sm" style="color: var(--mute);">
+  <div class="accent-card wt-surface-soft">
+    <p class="text-sm wt-mute">
       <strong>Vendor payments are tracked globally</strong> against the vendor's overall balance, not per trade.
       Use the <a href="/trade/parties" class="underline">Parties</a> ledger or the
       <a href="/trade/vouchers" class="underline">Vouchers</a> page to record a payment to {{ vendor.name if vendor else 'the vendor' }}.
@@ -635,16 +646,16 @@
   </div>
 
   {% if trade.notes %}
-  <div class="accent-card" style="border-left-color: #ca8a04;">
+  <div class="accent-card wt-card-warn">
     <div class="stat-label">Notes</div>
-    <p class="text-gray-800 mt-2 whitespace-pre-line text-sm">{{ trade.notes }}</p>
+    <p class="wt-body mt-2 whitespace-pre-line text-sm">{{ trade.notes }}</p>
   </div>
   {% endif %}
 
   {% if trade.cancellation_reason %}
-  <div class="accent-card" style="border-left-color: #dc2626;">
+  <div class="accent-card wt-card-neg">
     <div class="stat-label">Cancellation Reason</div>
-    <p class="text-gray-800 mt-2 whitespace-pre-line text-sm">{{ trade.cancellation_reason }}</p>
+    <p class="wt-body mt-2 whitespace-pre-line text-sm">{{ trade.cancellation_reason }}</p>
   </div>
   {% endif %}
 </div>

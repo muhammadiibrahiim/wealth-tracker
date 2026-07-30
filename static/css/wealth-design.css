@@ -494,23 +494,6 @@ a.btn-danger  { color: #fff; }
   font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.02em;
 }
 
-/* ---- TEMPORARY: bare-table compatibility ------------------------------
-   Mirrors the old global `table` rules from base.html so pages not yet
-   converted to .wt-table keep their styling during the migration.
-   PROMPT 48 DELETES THIS BLOCK once every table carries .wt-table.
-   Do not write new markup that relies on it.                          */
-table:not(.wt-table) { background: var(--surface-card); }
-table:not(.wt-table) thead { background: var(--surface-soft);
-  border-bottom: 1px solid var(--hairline-soft); }
-table:not(.wt-table) thead th {
-  font-family: 'IBM Plex Sans', sans-serif;
-  font-size: 0.75rem; font-weight: 700; color: var(--body);
-  text-transform: uppercase; padding: 0.875rem 1.25rem; }
-table:not(.wt-table) tbody td {
-  padding: 1rem 1.25rem; font-size: 0.9375rem; color: var(--ink); }
-table:not(.wt-table) tbody tr { border-top: 1px solid var(--hairline-soft); }
-table:not(.wt-table) tbody tr:hover { background: #faf9f5; }
-/* ---- END TEMPORARY ---------------------------------------------------- */
 
 
 /* ============================================================
@@ -862,3 +845,8 @@ html, body { overflow-x: hidden; }
     scroll-behavior: auto !important;
   }
 }
+
+/* Proportional bar whose WIDTH carries a data value (see --w). */
+.wt-bar { height: 8px; border-radius: 2px; width: var(--w, 0%); }
+.wt-bar-pos { background: var(--accent-green); }
+.wt-bar-neg { background: var(--accent-red); }

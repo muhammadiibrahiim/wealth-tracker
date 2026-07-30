@@ -43,10 +43,10 @@
           <td class="num {{ 'wt-pos' if m.net>=0 else 'wt-neg' }}">{{ '{:,.0f}'.format(m.net) }}</td>
           <td class="px-5 py-2">
             <div class="flex items-center gap-2">
-              <div style="height:8px; background:#16a34a; border-radius:2px; width:{{ (m.income / maxv.v * 100)|round(1) }}%;"></div>
+              <div class="wt-bar wt-bar-pos" style="--w:{{ (m.income / maxv.v * 100)|round(1) }}%;"></div>
             </div>
             <div class="flex items-center gap-2">
-              <div style="height:8px; background:#dc2626; border-radius:2px; width:{{ (m.expense / maxv.v * 100)|round(1) }}%;"></div>
+              <div class="wt-bar wt-bar-neg" style="--w:{{ (m.expense / maxv.v * 100)|round(1) }}%;"></div>
             </div>
           </td>
         </tr>

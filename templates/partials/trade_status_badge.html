@@ -1,12 +1,15 @@
+{# Shared trade-status badge. Rendered on the trades list, trade detail and
+   the dashboard, so the mapping lives here and only here. Tones follow the
+   meaning of the status, not the colour it happened to have before. #}
 {% set s = t.status.value if t.status.value is defined else t.status %}
 {% set styles = {
-  'open':            ('bg-gray-100 text-gray-800',     'Open'),
-  'delivered':       ('bg-blue-100 text-blue-800',     'Delivered'),
-  'partially_paid':  ('bg-amber-100 text-amber-800',   'Partially Paid'),
-  'paid':            ('bg-green-100 text-green-800',   'Paid'),
-  'completed':       ('bg-emerald-100 text-emerald-800','✓ Completed'),
-  'closed':          ('bg-gray-200 text-gray-700',     'Closed'),
-  'cancelled':       ('bg-red-100 text-red-800',       'Cancelled'),
+  'open':            ('neutral', 'Open'),
+  'delivered':       ('info',    'Delivered'),
+  'partially_paid':  ('warn',    'Partially Paid'),
+  'paid':            ('pos',     'Paid'),
+  'completed':       ('pos',     '✓ Completed'),
+  'closed':          ('neutral', 'Closed'),
+  'cancelled':       ('neg',     'Cancelled'),
 } %}
-{% set cls, label = styles.get(s, ('bg-gray-100 text-gray-700', s)) %}
-<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ cls }}">{{ label }}</span>
+{% set tone, label = styles.get(s, ('neutral', s)) %}
+<span class="wt-pill wt-pill-{{ tone }}">{{ label }}</span>

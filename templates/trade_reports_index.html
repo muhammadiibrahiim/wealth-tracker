@@ -1,25 +1,26 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, nav_card, section_title, empty_state %}
 {% block title %}Reports{% endblock %}
 {% block content %}
 
-<div class="space-y-8">
+<div class="space-y-6">
+  {{ page_header('Reports', 'Financial statements, business intelligence, and operational reports.') }}
+
   <div>
-    <h1 class="page-title">Reports</h1>
-    <p class="page-subtitle">Financial statements, business intelligence, and operational reports.</p>
+    <input type="search" id="rptFilter" class="w-full"
+           placeholder="Filter reports &mdash; try &ldquo;vendor&rdquo;, &ldquo;cash&rdquo;, &ldquo;aging&rdquo;&hellip;"
+           autocomplete="off" aria-label="Filter reports">
   </div>
 
   {% macro section(title, items) -%}
-  <div>
-    <div class="stat-label mb-3">{{ title }}</div>
+  <section data-cat>
+    {{ section_title(title) }}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {% for href, name, blurb in items %}
-      <a href="{{ href }}" class="bg-white border border-gray-200 rounded-lg p-6 hover:border-gray-900 hover:shadow-md transition">
-        <h3 class="text-base font-bold text-gray-900">{{ name|safe }}</h3>
-        <p class="mt-2 text-sm text-gray-500">{{ blurb }}</p>
-      </a>
+      {{ nav_card(href, name, blurb) }}
       {% endfor %}
     </div>
-  </div>
+  </section>
   {%- endmacro %}
 
   {{ section('Financial Statements', [
@@ -56,6 +57,36 @@
     ('/trade/reports/expenses', 'Expenses', 'Every expense voucher except bilties — plates, design, freight, trips, write-offs — by date, with per-category totals.'),
     ('/trade/reports/bilty',  'Bilty Report',  'Every bilty entry — date, trade, customer + city, terminal, weight, amount, paid-by-customer status.'),
   ]) }}
+
+  <div id="rptNoResults" class="hidden">
+    {{ empty_state('No reports match that filter', 'Try a different word, or clear the box to see all 26 reports.') }}
+  </div>
 </div>
+
+<script>
+(function () {
+  var input = document.getElementById('rptFilter');
+  if (!input) return;
+  var cards = Array.prototype.slice.call(document.querySelectorAll('[data-search]'));
+  var cats  = Array.prototype.slice.call(document.querySelectorAll('[data-cat]'));
+  var none  = document.getElementById('rptNoResults');
+  function apply() {
+    var q = (input.value || '').trim().toLowerCase();
+    var any = false;
+    cards.forEach(function (c) {
+      var hit = !q || (c.getAttribute('data-search') || '').indexOf(q) !== -1;
+      c.style.display = hit ? '' : 'none';
+      if (hit) any = true;
+    });
+    cats.forEach(function (cat) {
+      var visible = Array.prototype.slice.call(cat.querySelectorAll('[data-search]'))
+        .some(function (c) { return c.style.display !== 'none'; });
+      cat.style.display = (visible || !q) ? '' : 'none';
+    });
+    if (none) none.classList.toggle('hidden', any || !q);
+  }
+  input.addEventListener('input', apply);
+})();
+</script>
 
 {% endblock %}

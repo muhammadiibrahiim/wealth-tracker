@@ -1843,6 +1843,19 @@ async def partners_allocate(session: Session = Depends(get_session)):
     return RedirectResponse("/trade/partners", status_code=303)
 
 
+@router.post("/partners/setup-owner")
+async def partners_setup_owner(
+    name: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    """Create the owner's own capital account and move all current retained
+    capital into it, so the pool starts empty for the partnership era."""
+    from services import partners as PS
+    if name and name.strip():
+        PS.setup_owner_capital(session, DEFAULT_USER_ID, name.strip())
+    return RedirectResponse("/trade/partners", status_code=303)
+
+
 @router.get("/parties/new", response_class=HTMLResponse)
 async def party_new_modal(request: Request):
     from services.pk_cities import PK_CITIES

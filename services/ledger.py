@@ -28,7 +28,8 @@ def _nature_sign(nature: AccountNature) -> int:
     return -1
 
 
-def balance_asof(session: Session, account_id: int, as_of: Optional[date] = None) -> Decimal:
+def balance_asof(session: Session, account_id: int, as_of: Optional[date] = None,
+                 exclude_types=None) -> Decimal:
     q = (
         select(
             func.coalesce(func.sum(JournalLine.debit), 0),
@@ -42,6 +43,10 @@ def balance_asof(session: Session, account_id: int, as_of: Optional[date] = None
     )
     if as_of is not None:
         q = q.where(JournalEntry.entry_date <= as_of)
+    if exclude_types:
+        # e.g. PARTNER_ALLOCATION — so dashboard capital metrics stay blind to the
+        # partner sub-ledger (the equity split among partners).
+        q = q.where(JournalEntry.entry_type.notin_(list(exclude_types)))
     dr, cr = session.exec(q).one()
     return (Decimal(dr or 0) - Decimal(cr or 0)).quantize(Decimal("0.01"))
 

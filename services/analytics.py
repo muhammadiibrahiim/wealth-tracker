@@ -802,7 +802,7 @@ def time_based_performance(session, user_id, as_of=None) -> dict:
     }
 
 
-def _avg_equity_over_period(session, acct_ids, start, end):
+def _avg_equity_over_period(session, acct_ids, start, end, exclude_types=None):
     """Time-weighted average of equity (credit-positive) across [start, end] —
     the mean of each DAY's closing balance. This is the capital that was actually
     at work: injecting Rs 1M in the last two days shouldn't count as if it funded
@@ -811,19 +811,20 @@ def _avg_equity_over_period(session, acct_ids, start, end):
         return None
     opening = ZERO
     for aid in acct_ids:
-        opening += -balance_asof(session, aid, start - timedelta(days=1))  # credit-positive
-    rows = session.exec(
-        select(JournalEntry.entry_date,
-               func.coalesce(func.sum(JournalLine.debit), 0),
-               func.coalesce(func.sum(JournalLine.credit), 0))
-        .select_from(JournalLine)
-        .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
-        .where(JournalLine.account_id.in_(acct_ids),
-               JournalEntry.is_reversed == False,  # noqa: E712
-               JournalEntry.entry_date >= start,
-               JournalEntry.entry_date <= end)
-        .group_by(JournalEntry.entry_date)
-    ).all()
+        opening += -balance_asof(session, aid, start - timedelta(days=1),
+                                 exclude_types=exclude_types)  # credit-positive
+    q = (select(JournalEntry.entry_date,
+                func.coalesce(func.sum(JournalLine.debit), 0),
+                func.coalesce(func.sum(JournalLine.credit), 0))
+         .select_from(JournalLine)
+         .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+         .where(JournalLine.account_id.in_(acct_ids),
+                JournalEntry.is_reversed == False,  # noqa: E712
+                JournalEntry.entry_date >= start,
+                JournalEntry.entry_date <= end))
+    if exclude_types:
+        q = q.where(JournalEntry.entry_type.notin_(list(exclude_types)))
+    rows = session.exec(q.group_by(JournalEntry.entry_date)).all()
     delta = {d: (Decimal(cr) - Decimal(dr)) for d, dr, cr in rows}  # equity delta = CR − DR
     running = opening
     total = ZERO
@@ -844,6 +845,11 @@ def capital_utilization(session, user_id, as_of=None, ni_from=None, ni_to=None) 
     against the TIME-WEIGHTED AVERAGE equity over the period (not the closing
     balance), so it reflects the capital actually deployed through the month."""
     as_of = as_of or date.today()
+    # Dashboard capital metrics stay BLIND to the partner sub-ledger — the equity
+    # split among partners (moving the owner's capital into a named account and
+    # dividing monthly profit) must not move these numbers. Excluding this entry
+    # type means the dashboard reads the business as one owner's, as before.
+    PART_EXCL = ("partner_allocation",)
     metrics = working_capital_metrics(session, user_id, as_of=as_of, period_days=365)
     cash = metrics["cash_balance"]
     ar = metrics["ar_balance"]
@@ -853,7 +859,7 @@ def capital_utilization(session, user_id, as_of=None, ni_from=None, ni_to=None) 
     equity_total = ZERO
     for sub_code in ("3100", "3900"):
         for a in _accounts_in_subclass(session, user_id, sub_code):
-            equity_total += -balance_asof(session, a.id, as_of)
+            equity_total += -balance_asof(session, a.id, as_of, exclude_types=PART_EXCL)
 
     ni_from = ni_from or (as_of - timedelta(days=365))
     ni_to = ni_to or as_of
@@ -877,7 +883,7 @@ def capital_utilization(session, user_id, as_of=None, ni_from=None, ni_to=None) 
         total = ZERO
         for a in equity_accts:
             if (a.name or "").strip().lower() in [n.lower() for n in names]:
-                total += -balance_asof(session, a.id, ni_to)  # credit-positive
+                total += -balance_asof(session, a.id, ni_to, exclude_types=PART_EXCL)  # credit-positive
         return total
 
     funding = _closing("Ibrahim (CEO)", "CEO", "Funding")
@@ -887,7 +893,8 @@ def capital_utilization(session, user_id, as_of=None, ni_from=None, ni_to=None) 
     # Denominator = time-weighted AVERAGE equity over the period (mean of each
     # day's closing balance), so a late-month injection doesn't overstate the
     # base. Falls back to the closing snapshot if the average can't be formed.
-    avg_equity = _avg_equity_over_period(session, [a.id for a in equity_accts], ni_from, ni_to)
+    avg_equity = _avg_equity_over_period(session, [a.id for a in equity_accts], ni_from, ni_to,
+                                         exclude_types=PART_EXCL)
     if avg_equity is None or avg_equity <= 0:
         avg_equity = invested_capital
     avg_invested_capital = Decimal(avg_equity).quantize(Decimal("0.01"))
@@ -903,8 +910,8 @@ def capital_utilization(session, user_id, as_of=None, ni_from=None, ni_to=None) 
     capital_acct = next((a for a in equity_accts
                          if (a.name or "").strip().lower() in ("capital a/c", "capital")), None)
     if capital_acct is not None:
-        c_open = -balance_asof(session, capital_acct.id, ni_from - timedelta(days=1))
-        c_close = -balance_asof(session, capital_acct.id, ni_to)
+        c_open = -balance_asof(session, capital_acct.id, ni_from - timedelta(days=1), exclude_types=PART_EXCL)
+        c_close = -balance_asof(session, capital_acct.id, ni_to, exclude_types=PART_EXCL)
         capital_growth = (c_close - c_open)
     else:
         capital_growth = ZERO

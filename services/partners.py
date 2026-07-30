@@ -126,17 +126,27 @@ def update_partner(session, user_id, partner_id, *, pct=None, name=None,
     return p
 
 
+def _owner_partner(session, user_id) -> Optional[Partner]:
+    """The owner's own capital account (is_owner), if set up."""
+    return next((p for p in list_partners(session, user_id) if p.is_owner), None)
+
+
+def _non_owner_partners(session, user_id) -> list[Partner]:
+    return [p for p in list_partners(session, user_id) if not p.is_owner]
+
+
 def total_partner_pct(session, user_id) -> Decimal:
-    return sum((Decimal(p.pct) for p in list_partners(session, user_id)), ZERO)
+    return sum((Decimal(p.pct) for p in _non_owner_partners(session, user_id)), ZERO)
 
 
 # ── cap table ────────────────────────────────────────────────────────────
 def cap_table(session, user_id, as_of=None) -> dict:
-    partners = list_partners(session, user_id)
+    non_owner = _non_owner_partners(session, user_id)
+    owner = _owner_partner(session, user_id)
     rows = []
     partner_total_cap = ZERO
     partner_total_pct = ZERO
-    for p in partners:
+    for p in non_owner:
         cap = _equity_balance(session, p.account_id, as_of) if p.account_id else ZERO
         partner_total_cap += cap
         partner_total_pct += Decimal(p.pct)
@@ -145,17 +155,23 @@ def cap_table(session, user_id, as_of=None) -> dict:
             "capital": cap, "joined_on": p.joined_on, "account_id": p.account_id,
         })
     owner_pct = (Decimal(100) - partner_total_pct)
-    # Owner's CAPITAL = retained-earnings/capital pool (2102) only. The CEO
-    # funding account (2103) is the owner's fluctuating funding/drawings current
-    # account — money pushed in / pulled out for cashflow — NOT capital, so it's
-    # excluded from the cap table (shown separately, for reference).
+    # The Capital A/C pool (2102) holds any profit not yet split; the owner's own
+    # capital lives in their named account (e.g. "Ibrahim Capital") once set up.
     pool = _account_by_code(session, user_id, POOL_CODE)
-    owner_cap = _equity_balance(session, pool.id, as_of) if pool else ZERO
+    pool_bal = _equity_balance(session, pool.id, as_of) if pool else ZERO
+    if owner and owner.account_id:
+        owner_cap = _equity_balance(session, owner.account_id, as_of) + pool_bal
+        owner_name = owner.name
+    else:
+        owner_cap = pool_bal
+        owner_name = "You"
+    # CEO funding account — fluctuating funding/drawings, NOT capital (info only).
     fund_acct = _account_by_code(session, user_id, FUNDING_CODE)
     owner_funding = _equity_balance(session, fund_acct.id, as_of) if fund_acct else ZERO
     total_cap = owner_cap + partner_total_cap
     return {
-        "owner_pct": owner_pct, "owner_capital": owner_cap,
+        "owner_pct": owner_pct, "owner_capital": owner_cap, "owner_name": owner_name,
+        "owner_is_setup": bool(owner),
         "owner_funding": owner_funding,   # CEO current account — info only, not equity
         "partners": rows,
         "partner_total_pct": partner_total_pct,
@@ -166,38 +182,88 @@ def cap_table(session, user_id, as_of=None) -> dict:
     }
 
 
+# ── owner capital account setup (one-time) ───────────────────────────────
+def setup_owner_capital(session, user_id, name, joined_on=None) -> Partner:
+    """Create the owner's own capital account and move ALL current retained
+    capital (the Capital A/C pool) into it, so the pool starts empty for the
+    partnership era. The move is a PARTNER_ALLOCATION entry — hidden from the
+    dashboard, which stays blind to the whole partner sub-ledger."""
+    existing = _owner_partner(session, user_id)
+    if existing:
+        return existing
+    acct = create_account(session, user_id, name=name.strip(),
+                          subclass_code="3100",
+                          description="Owner's capital account")
+    p = Partner(user_id=user_id, name=name.strip(), account_id=acct.id,
+                pct=ZERO, joined_on=joined_on or date.today(), is_owner=True)
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+    pool = _account_by_code(session, user_id, POOL_CODE)
+    if pool:
+        bal = _equity_balance(session, pool.id)   # credit-positive capital sitting in the pool
+        if abs(bal) > CENT:
+            if bal > 0:   # pool holds capital → move it out (DR pool / CR owner)
+                lines = [{"account_id": pool.id, "debit": bal, "credit": 0},
+                         {"account_id": acct.id, "debit": 0, "credit": bal}]
+            else:         # pool net-debit (rare) → mirror
+                lines = [{"account_id": pool.id, "debit": 0, "credit": -bal},
+                         {"account_id": acct.id, "debit": -bal, "credit": 0}]
+            PostingEngine.post(
+                session, user_id, entry_date=date.today(),
+                entry_type=JournalEntryType.PARTNER_ALLOCATION,
+                description=f"Move retained capital to {name.strip()} (partnership baseline)",
+                lines=lines)
+    return p
+
+
 # ── monthly allocation ───────────────────────────────────────────────────
-def _allocate_month(session, user_id, month_first: date, active_partners, pool) -> dict:
+def _allocate_month(session, user_id, month_first, non_owner_active, owner_partner, pool) -> dict:
     month_last = _last_of_month(month_first)
-    # partners who owned for the WHOLE month (joined on/before the 1st)
-    parts = [p for p in active_partners if p.joined_on <= month_first]
+    # non-owner partners who owned for the WHOLE month (joined on/before the 1st)
+    parts = [p for p in non_owner_active if p.joined_on <= month_first]
+    include_owner = bool(owner_partner and owner_partner.account_id
+                         and owner_partner.joined_on <= month_first)
     pl = profit_and_loss(session, user_id, from_date=month_first, to_date=month_last)
     profit = Decimal(str(pl.get("net_income", 0) or 0))
 
     je_id = None
     breakdown = []
-    if parts and abs(profit) > Decimal("0.005"):
+    if (parts or include_owner) and abs(profit) > Decimal("0.005"):
         lines = []
-        partner_total = ZERO
+        non_owner_total = ZERO
         for p in parts:
             share = (profit * Decimal(p.pct) / Decimal(100)).quantize(CENT)
             if share == 0:
                 continue
-            partner_total += share
+            non_owner_total += share
             breakdown.append({"partner": p.name, "share": share})
             if share > 0:      # profit → increase partner equity (CR)
                 lines.append({"account_id": p.account_id, "debit": 0, "credit": share})
             else:              # loss → decrease partner equity (DR)
                 lines.append({"account_id": p.account_id, "debit": -share, "credit": 0})
-        if lines and partner_total != 0:
-            if partner_total > 0:   # balancing DR out of the owner's retained pool
-                lines.append({"account_id": pool.id, "debit": partner_total, "credit": 0})
+        # Owner (is_owner) takes the RESIDUAL so the split totals profit exactly and
+        # the pool empties. If no owner account is set up, the owner's share simply
+        # stays in the pool (only the investors' share moves out).
+        pool_move = non_owner_total
+        if include_owner:
+            owner_share = (profit - non_owner_total).quantize(CENT)
+            if owner_share != 0:
+                breakdown.append({"partner": owner_partner.name, "share": owner_share})
+                if owner_share > 0:
+                    lines.append({"account_id": owner_partner.account_id, "debit": 0, "credit": owner_share})
+                else:
+                    lines.append({"account_id": owner_partner.account_id, "debit": -owner_share, "credit": 0})
+            pool_move = non_owner_total + owner_share
+        if lines and pool_move != 0:
+            if pool_move > 0:   # balancing DR out of the retained-earnings pool
+                lines.append({"account_id": pool.id, "debit": pool_move, "credit": 0})
             else:
-                lines.append({"account_id": pool.id, "debit": 0, "credit": -partner_total})
+                lines.append({"account_id": pool.id, "debit": 0, "credit": -pool_move})
             kind = "profit" if profit > 0 else "loss"
             je = PostingEngine.post(
                 session, user_id, entry_date=month_last,
-                entry_type=JournalEntryType.JOURNAL,
+                entry_type=JournalEntryType.PARTNER_ALLOCATION,
                 description=(f"Partner {kind} allocation · {month_first.strftime('%b %Y')} "
                             f"· {kind} {abs(profit):,.2f}"),
                 lines=lines)
@@ -208,7 +274,8 @@ def _allocate_month(session, user_id, month_first: date, active_partners, pool) 
     session.add(alloc)
     session.commit()
     return {"period": month_first, "profit": profit.quantize(CENT),
-            "je_id": je_id, "partner_count": len(parts), "breakdown": breakdown}
+            "je_id": je_id, "partner_count": len(parts) + (1 if include_owner else 0),
+            "breakdown": breakdown}
 
 
 def run_due_allocations(session, user_id, as_of=None) -> list[dict]:
@@ -217,9 +284,11 @@ def run_due_allocations(session, user_id, as_of=None) -> list[dict]:
     Safe to call on every app open — the unique (user, period) row + the
     'already-done' check mean it never double-posts."""
     as_of = as_of or date.today()
-    active = [p for p in list_partners(session, user_id)
-              if Decimal(p.pct) > 0 and p.account_id]
-    if not active:
+    non_owner = [p for p in _non_owner_partners(session, user_id)
+                 if Decimal(p.pct) > 0 and p.account_id]
+    owner = _owner_partner(session, user_id)
+    starters = list(non_owner) + ([owner] if owner else [])
+    if not starters:
         return []
     pool = _account_by_code(session, user_id, POOL_CODE)
     if not pool:
@@ -227,7 +296,7 @@ def run_due_allocations(session, user_id, as_of=None) -> list[dict]:
     done = {a.period for a in session.exec(
         select(PartnerAllocation).where(PartnerAllocation.user_id == user_id)).all()}
 
-    earliest = _first_of_month(min(p.joined_on for p in active))
+    earliest = _first_of_month(min(p.joined_on for p in starters))
     current_month = _first_of_month(as_of)
     results = []
     m = earliest
@@ -235,7 +304,7 @@ def run_due_allocations(session, user_id, as_of=None) -> list[dict]:
     while m < current_month and guard < 120:
         guard += 1
         if m not in done:
-            results.append(_allocate_month(session, user_id, m, active, pool))
+            results.append(_allocate_month(session, user_id, m, non_owner, owner, pool))
         m = _next_month(m)
     return results
 

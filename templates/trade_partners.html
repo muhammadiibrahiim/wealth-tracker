@@ -17,6 +17,21 @@
   </div>
   {% endif %}
 
+  {% if not cap.owner_is_setup %}
+  <div class="accent-card" style="border-left-color:#4f46e5; background:#eef2ff;">
+    <div class="stat-label mb-1">Set up your capital account</div>
+    <p class="text-xs text-gray-600 mb-3">Create your own named capital account and move today's retained capital ({{ cur }} {{ '{:,.0f}'.format(cap.owner_capital) }}) into it. The main Capital A/C then starts empty as the shared pool — profit from here on is split among all partners (your share routes to this account). These entries are hidden from the dashboard.</p>
+    <form method="post" action="/trade/partners/setup-owner" class="flex items-end gap-3 flex-wrap"
+          onsubmit="return confirm('Create this capital account and move {{ cur }} {{ '{:,.0f}'.format(cap.owner_capital) }} into it? The main Capital A/C will become 0.');">
+      <div>
+        <label class="field-label field-label-required">Your capital account name</label>
+        <input name="name" required class="px-3 py-2.5" style="min-width:220px;" placeholder="e.g. Ibrahim Capital">
+      </div>
+      <button type="submit" class="btn-primary">Create & move capital</button>
+    </form>
+  </div>
+  {% endif %}
+
   <!-- Cap table -->
   <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
     <div class="px-6 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2" style="background:#fafaf9;">
@@ -35,7 +50,7 @@
       </thead>
       <tbody>
         <tr style="background:#eef2ff;">
-          <td class="font-bold text-gray-900">You <span class="text-xs font-normal text-gray-500">(owner · remainder)</span></td>
+          <td class="font-bold text-gray-900">{{ cap.owner_name }} <span class="text-xs font-normal text-gray-500">(owner · remainder)</span></td>
           <td class="text-right tabular-nums font-bold">{{ '{:g}'.format(cap.owner_pct) }}%</td>
           <td class="text-right tabular-nums font-bold">{{ cur }} {{ '{:,.2f}'.format(cap.owner_capital) }}<div class="text-xs font-normal text-gray-400">retained profit</div></td>
           <td class="text-gray-400 text-sm">—</td>

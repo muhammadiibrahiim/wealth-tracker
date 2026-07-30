@@ -40,6 +40,7 @@ class PostingEngine:
             JournalEntryType.CONTRA: "CON",
             JournalEntryType.JOURNAL: "JV",
             JournalEntryType.REVERSAL: "REV",
+            JournalEntryType.PARTNER_ALLOCATION: "PART",
         }
         prefix = prefix_map.get(entry_type, "JE")
         # Use the highest existing numeric suffix + 1 rather than COUNT(*) + 1.

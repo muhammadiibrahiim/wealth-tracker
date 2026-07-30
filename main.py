@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from database import create_db_and_tables
-from routes import assets, wealth, investments, habits, trade, accounts
+from routes import assets, wealth, investments, habits, trade, accounts, search
 from config import APP_NAME, APP_VERSION
 
 # Import models to register them with SQLModel metadata
@@ -51,6 +51,7 @@ app.include_router(investments.router)
 app.include_router(habits.router)
 app.include_router(trade.router)
 app.include_router(accounts.router)
+app.include_router(search.router)
 
 
 def _tighten_whitespace(img, blank_thresh=245, max_gap=56, pad=28):

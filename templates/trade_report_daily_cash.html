@@ -1,17 +1,6 @@
 {% extends "base.html" %}
 {% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
-{% block title %}Daily Cash Requirement
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  if (!window.WTCharts) return;
-  WTCharts.line('daily-cash-chart', {
-    labels: {{ report.rows | map(attribute='date') | map('string') | list | tojson }},
-    series: [{ name: 'Running cash', data: {{ report.rows | map(attribute='running') | map('float') | list | tojson }} }],
-    currency: true, showLegend: false
-  });
-});
-</script>
-{% endblock %}
+{% block title %}Daily Cash Requirement{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
@@ -92,4 +81,14 @@ document.addEventListener('DOMContentLoaded', function () {
   <p class="text-sm wt-mute">The <b>Running</b> column is your cash if you started with nothing and used no owner funding — where it goes red, you're short. <b>Extra Needed</b> is fresh cash required that day (beyond what earlier days already needed). The <b>Peak Cash Needed</b> tile is the single largest amount you'd have to have put in.</p>
 </div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  if (!window.WTCharts) return;
+  WTCharts.line('daily-cash-chart', {
+    labels: {{ report.rows | map(attribute='date') | map('string') | list | tojson }},
+    series: [{ name: 'Running cash', data: {{ report.rows | map(attribute='running') | map('float') | list | tojson }} }],
+    currency: true, showLegend: false
+  });
+});
+</script>
 {% endblock %}

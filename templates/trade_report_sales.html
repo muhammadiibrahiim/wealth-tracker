@@ -1,26 +1,21 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Sales Report{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Sales Report</h1>
-      <p class="page-subtitle">Monthly sales, cost and gross profit.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Sales Report',
+      'Monthly sales, cost and gross profit.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
+class="flex items-end gap-4 flex-wrap">
       <div><label class="field-label">From</label>
-        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+        <input type="date" name="date_from" value="{{ date_from }}"></div>
       <div><label class="field-label">To</label>
-        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
-      <button type="submit" class="btn-primary">Apply</button>
-      <a href="/trade/reports/sales" class="btn-secondary">Reset</a>
-    </form>
-  </div>
+        <input type="date" name="date_to" value="{{ date_to }}"></div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/sales') }}
 
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
     <div class="stat-card">
@@ -35,42 +30,57 @@
       <div class="stat-label">Total Cost</div>
       <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.total_cost) }}</div>
     </div>
-    <div class="stat-card" style="border-color: {% if report.total_profit >= 0 %}#16a34a{% else %}#ea580c{% endif %};">
+    <div class="stat-card" class=\"{{ 'wt-card-pos' if report.total_profit >= 0 else 'wt-card-neg' }}\">
       <div class="stat-label">Gross Profit</div>
-      <div class="stat-value" style="color: {% if report.total_profit >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+      <div class="stat-value" class=\"{{ 'wt-pos' if report.total_profit >= 0 else 'wt-neg' }}\">
         <span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.total_profit|abs) }}
       </div>
     </div>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+  <div class="wt-panel overflow-x-auto">
     {% if report.rows %}
-    <table class="min-w-full">
+    {{ report_toolbar('tbl-sales', print_btn=True) }}
+    {{ sortable_table_open('tbl-sales', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Month</th>
-          <th class="text-right">Trades</th>
-          <th class="text-right">Sales</th>
-          <th class="text-right">Cost</th>
-          <th class="text-right">Profit</th>
+          <th>Month</th>
+          <th class="num">Trades</th>
+          <th class="num">Sales</th>
+          <th class="num">Cost</th>
+          <th class="num">Profit</th>
         </tr>
       </thead>
       <tbody>
         {% for r in report.rows %}
         <tr>
-          <td class="font-medium text-gray-900">{{ r.month }}</td>
+          <td class="font-medium wt-ink">{{ r.month }}</td>
           <td class="text-right">{{ r.trades }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(r.sales) }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(r.cost) }}</td>
-          <td class="text-right tabular-nums font-semibold" style="color: {% if r.profit >= 0 %}#15803d{% else %}#c2410c{% endif %};">{{ currency }} {{ '{:,.2f}'.format(r.profit) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(r.sales) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.2f}'.format(r.cost) }}</td>
+          <td class="num" class=\"{{ 'wt-pos' if r.profit >= 0 else 'wt-neg' }}\">{{ currency }} {{ '{:,.2f}'.format(r.profit) }}</td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
     {% else %}
-    <div class="px-6 py-16 text-center text-sm text-gray-500">No trades in this range.</div>
+    <div class=" text-center text-sm wt-mute">No trades in this range.</div>
     {% endif %}
   </div>
 </div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  if (!window.WTCharts) return;
+  WTCharts.bar('sales-trend-chart', {
+    labels: {{ report.rows | map(attribute='month') | map('string') | list | tojson }},
+    series: [
+      { name: 'Sales', data: {{ report.rows | map(attribute='sales') | map('float') | list | tojson }} },
+      { name: 'Cost',    data: {{ report.rows | map(attribute='cost')    | map('float') | list | tojson }} },
+      { name: 'Profit',  data: {{ report.rows | map(attribute='profit')  | map('float') | list | tojson }}, type: 'line', tone: 'pos' }
+    ],
+    currency: true, showLegend: true
+  });
+});
+</script>
 {% endblock %}

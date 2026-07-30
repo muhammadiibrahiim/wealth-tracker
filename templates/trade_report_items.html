@@ -1,57 +1,53 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Item Report{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Item Report</h1>
-      <p class="page-subtitle">Units sold, revenue, and margin per item.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Item Report',
+      'Units sold, revenue and margin per item.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
+class="flex items-end gap-4 flex-wrap">
       <div><label class="field-label">From</label>
-        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+        <input type="date" name="date_from" value="{{ date_from }}"></div>
       <div><label class="field-label">To</label>
-        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
-      <button type="submit" class="btn-primary">Apply</button>
-      <a href="/trade/reports/items" class="btn-secondary">Reset</a>
-    </form>
-  </div>
+        <input type="date" name="date_to" value="{{ date_to }}"></div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/items') }}
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+  <div class="wt-panel overflow-x-auto">
     {% if rows %}
-    <table class="min-w-full">
+    {{ report_toolbar('tbl-items', print_btn=True) }}
+    {{ sortable_table_open('tbl-items', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Item</th>
-          <th class="text-right">Units Sold</th>
-          <th class="text-right">Trades</th>
-          <th class="text-right">Revenue</th>
-          <th class="text-right">Cost</th>
-          <th class="text-right">Profit</th>
-          <th class="text-right">Margin %</th>
+          <th>Item</th>
+          <th class="num">Units Sold</th>
+          <th class="num">Trades</th>
+          <th class="num">Revenue</th>
+          <th class="num">Cost</th>
+          <th class="num">Profit</th>
+          <th class="num">Margin %</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows %}
         <tr>
-          <td class="font-medium text-gray-900">{{ r.item_name }}</td>
-          <td class="text-right tabular-nums">{{ '{:g}'.format(r.units) }}</td>
+          <td class="font-medium wt-ink">{{ r.item_name }}</td>
+          <td class="num">{{ '{:g}'.format(r.units) }}</td>
           <td class="text-right">{{ r.trades }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(r.revenue) }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(r.cost) }}</td>
-          <td class="text-right tabular-nums font-semibold" style="color: {% if r.profit >= 0 %}#15803d{% else %}#c2410c{% endif %};">{{ currency }} {{ '{:,.0f}'.format(r.profit) }}</td>
-          <td class="text-right tabular-nums">{% if r.revenue > 0 %}{{ '{:.1f}'.format((r.profit / r.revenue) * 100) }}%{% else %}—{% endif %}</td>
+          <td class="num">{{ currency }} {{ '{:,.0f}'.format(r.revenue) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.0f}'.format(r.cost) }}</td>
+          <td class="num" class=\"{{ 'wt-pos' if r.profit >= 0 else 'wt-neg' }}\">{{ currency }} {{ '{:,.0f}'.format(r.profit) }}</td>
+          <td class="num">{% if r.revenue > 0 %}{{ '{:.1f}'.format((r.profit / r.revenue) * 100) }}%{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
     {% else %}
-    <div class="px-6 py-16 text-center text-sm text-gray-500">No items sold in this range.</div>
+    <div class=" text-center text-sm wt-mute">No items sold in this range.</div>
     {% endif %}
   </div>
 </div>

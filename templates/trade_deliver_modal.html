@@ -1,3 +1,4 @@
+{% from"partials/_ui.html" import table_open, table_close %}
 <div class="modal-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8">
   <div class="bg-white p-7 w-full max-w-2xl mx-4">
     <div class="flex items-start justify-between mb-5">
@@ -11,11 +12,11 @@
     <form hx-post="/trade/trades/{{ trade.id }}/deliver" class="space-y-4">
       <div>
         <label class="field-label">Delivered On</label>
-        <input type="date" name="delivered_on" value="{{ today }}" required class="px-3 py-2.5">
+        <input type="date" name="delivered_on" value="{{ today }}" required class="">
       </div>
 
       <div class="border border-gray-200 rounded-lg overflow-hidden">
-        <table class="min-w-full">
+        {{ table_open(dense=True) }}
           <thead>
             <tr>
               <th class="text-left">Item</th>
@@ -30,10 +31,10 @@
             {% for ln in trade.lines %}
             <tr data-line-id="{{ ln.id }}">
               <td>
-                <div class="font-medium text-gray-900">{{ ln.item_name }}</div>
-                {% if ln.specs %}<div class="text-xs text-gray-500 mt-1">{% for s in ln.specs %}{{ s.label }}: {{ s.value }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+                <div class="font-medium wt-ink">{{ ln.item_name }}</div>
+                {% if ln.specs %}<div class="text-xs wt-mute mt-1">{% for s in ln.specs %}{{ s.label }}: {{ s.value }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}
               </td>
-              <td class="text-right tabular-nums text-gray-500">{{ '{:g}'.format(ln.ordered_quantity or ln.quantity) }} {{ ln.unit }}</td>
+              <td class="num">{{ '{:g}'.format(ln.ordered_quantity or ln.quantity) }} {{ ln.unit }}</td>
               <td class="text-right">
                 <input type="number" step="0.001" min="0"
                        name="final_qty_{{ ln.id }}"
@@ -43,21 +44,21 @@
                        data-unit-price="{{ ln.unit_price }}"
                        class="qty-input w-24 text-right">
               </td>
-              <td class="text-right tabular-nums text-gray-700">{{ currency }} {{ '{:,.2f}'.format(ln.unit_cost) }}</td>
-              <td class="text-right tabular-nums text-gray-700">{{ currency }} {{ '{:,.2f}'.format(ln.unit_price) }}</td>
-              <td class="text-right tabular-nums delta-cell text-gray-400">—</td>
+              <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.unit_cost) }}</td>
+              <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.unit_price) }}</td>
+              <td class="num">—</td>
             </tr>
             {% endfor %}
           </tbody>
           <tfoot style="background: #fafaf9;">
             <tr>
-              <td colspan="3" class="text-right text-xs uppercase tracking-widest font-bold text-gray-700">New cost / sale / profit</td>
-              <td class="text-right tabular-nums font-bold" id="new-cost-cell">—</td>
-              <td class="text-right tabular-nums font-bold" id="new-sale-cell">—</td>
-              <td class="text-right tabular-nums font-bold" id="new-profit-cell">—</td>
+              <td colspan="3" class="text-right text-xs uppercase tracking-widest font-bold wt-body">New cost / sale / profit</td>
+              <td class="num" id="new-cost-cell">—</td>
+              <td class="num" id="new-sale-cell">—</td>
+              <td class="num" id="new-profit-cell">—</td>
             </tr>
           </tfoot>
-        </table>
+        {{ table_close() }}
       </div>
 
       <div class="accent-card" style="border-left-color: #4f46e5; background: #eef2ff;">
@@ -94,7 +95,7 @@
       const dcell = r.querySelector('.delta-cell');
       if (Math.abs(delta) < 0.0005) {
         dcell.textContent = '—';
-        dcell.className = 'text-right tabular-nums delta-cell text-gray-400';
+        dcell.className = 'text-right tabular-nums delta-cell wt-ash';
       } else if (delta > 0) {
         dcell.textContent = '+' + delta.toLocaleString();
         dcell.className = 'text-right tabular-nums delta-cell font-medium';

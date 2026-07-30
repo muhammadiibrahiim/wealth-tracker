@@ -26,13 +26,13 @@
         <div class="border border-gray-200 rounded-lg p-4" style="background: #fafaf9;">
           <div class="flex items-start justify-between mb-3 gap-4">
             <div class="flex-1 min-w-0">
-              <div class="font-semibold text-gray-900">{{ ln.item_name }}</div>
-              {% if ln.specs %}<div class="text-xs text-gray-500 mt-1">{% for s in ln.specs %}{{ s.label }}: {{ s.value }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+              <div class="font-semibold wt-ink">{{ ln.item_name }}</div>
+              {% if ln.specs %}<div class="text-xs wt-mute mt-1">{% for s in ln.specs %}{{ s.label }}: {{ s.value }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}
             </div>
             <div class="text-right text-sm whitespace-nowrap">
-              <div class="text-gray-500">Ordered <span class="font-semibold text-gray-900 tabular-nums">{{ '{:g}'.format(ln.ordered_quantity or ln.quantity) }}</span> {{ ln.unit }}</div>
-              <div class="text-gray-500">Received <span class="font-semibold text-gray-900 tabular-nums">{{ '{:g}'.format(r.received_total) }}</span> {{ ln.unit }}</div>
-              <div class="text-orange-700 font-semibold mt-1">Remaining <span class="tabular-nums">{{ '{:g}'.format(r.remaining) }}</span> {{ ln.unit }}</div>
+              <div class="wt-mute">Ordered <span class="font-semibold wt-ink tabular-nums">{{ '{:g}'.format(ln.ordered_quantity or ln.quantity) }}</span> {{ ln.unit }}</div>
+              <div class="wt-mute">Received <span class="font-semibold wt-ink tabular-nums">{{ '{:g}'.format(r.received_total) }}</span> {{ ln.unit }}</div>
+              <div class="wt-neg font-semibold mt-1">Remaining <span class="tabular-nums">{{ '{:g}'.format(r.remaining) }}</span> {{ ln.unit }}</div>
             </div>
           </div>
 
@@ -69,13 +69,13 @@
             <div class="field-label mb-2">Previous Receipts</div>
             <div class="space-y-1">
               {% for rec in r.receipts %}
-              <div class="flex items-center justify-between text-xs text-gray-700">
+              <div class="flex items-center justify-between text-xs wt-body">
                 <div>
                   <span class="font-mono">{{ rec.received_on }}</span> · <span class="font-medium tabular-nums">{{ '{:g}'.format(rec.received_qty) }}</span> {{ ln.unit }}
-                  {% if rec.vendor_invoice_path %}· <a href="{{ rec.vendor_invoice_path }}" target="_blank" class="text-indigo-600 hover:underline">📎 invoice</a>{% endif %}
-                  {% if rec.notes %}<span class="text-gray-500">({{ rec.notes }})</span>{% endif %}
+                  {% if rec.vendor_invoice_path %}· <a href="{{ rec.vendor_invoice_path }}" target="_blank" class="wt-info hover:underline">📎 invoice</a>{% endif %}
+                  {% if rec.notes %}<span class="wt-mute">({{ rec.notes }})</span>{% endif %}
                 </div>
-                <button type="button" class="text-red-600 hover:underline"
+                <button type="button" class="wt-neg hover:underline"
                         hx-post="/trade/receipts/{{ rec.id }}/delete" hx-confirm="Delete this receipt?">remove</button>
               </div>
               {% endfor %}

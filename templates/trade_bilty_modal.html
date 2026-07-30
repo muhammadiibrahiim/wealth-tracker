@@ -26,7 +26,7 @@
         <label class="field-label">Description</label>
         <input name="description" placeholder="e.g. Bilty Karachi → Lahore"
                value="{% if existing %}{% set _d = existing.description.split(' ',1)[1] if ' ' in existing.description else existing.description %}{% set _d = _d.replace(' [bilty-for:' ~ event_date ~ ']', '').replace(' [paid-by-customer]', '').strip() %}{{ _d }}{% endif %}"
-               class="w-full px-3 py-2.5">
+               class="w-full">
       </div>
 
       <label class="flex items-start gap-2 cursor-pointer p-3 border border-gray-200 rounded" style="background: #fefce8;">
@@ -44,7 +44,7 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div id="paid-from-row">
           <label class="field-label field-label-required">Paid from (cash / bank)</label>
-          <select name="paid_from_id" class="w-full px-3 py-2.5">
+          <select name="paid_from_id" class="w-full">
             <option value="">— pick account —</option>
             {% for a in accounts %}
             <option value="{{ a.id }}"
@@ -59,7 +59,7 @@
         </div>
         <div>
           <label class="field-label">Expense Account · locked</label>
-          <div class="w-full px-3 py-2.5 rounded" style="background: #f4f5f8; border: 1px solid var(--hairline); color: var(--ink);">
+          <div class="w-full rounded" style="background: #f4f5f8; border: 1px solid var(--hairline); color: var(--ink);">
             🔒 {{ pl_acct.code }} — {{ pl_acct.name }}
           </div>
           <p class="text-xs mt-1" style="color: var(--mute);">
@@ -74,9 +74,9 @@
           <input id="amount-input" type="number" step="0.01" min="0"
                  name="amount"
                  value="{% if existing %}{% for ln in existing.lines if ln.debit > 0 %}{{ ln.debit }}{% endfor %}{% else %}0{% endif %}"
-                 class="w-full px-3 py-2.5 text-right tabular-nums" placeholder="0.00">
+                 class="w-full text-right tabular-nums" placeholder="0.00">
           <p class="text-xs mt-1" style="color: var(--mute);">
-            Enter <strong>0</strong> for "no bilty".
+            Enter <strong>0</strong> for"no bilty".
             {% if existing %}Saving with 0 will <strong>reverse</strong> the existing bilty.{% endif %}
           </p>
         </div>
@@ -85,7 +85,7 @@
           <input type="number" step="0.001" min="0"
                  name="weight_kgs"
                  value="{% if existing_meta and existing_meta.weight_kgs is not none %}{{ existing_meta.weight_kgs }}{% endif %}"
-                 placeholder="e.g. 250" class="w-full px-3 py-2.5 text-right tabular-nums">
+                 placeholder="e.g. 250" class="w-full text-right tabular-nums">
           <p class="text-xs mt-1" style="color: var(--mute);">Optional — for record-keeping &amp; reporting.</p>
         </div>
         <div>
@@ -94,7 +94,7 @@
                  value="{{ existing_terminal_name }}"
                  placeholder="e.g. Lahore Thokar / Faysal Movers"
                  autocomplete="off"
-                 class="w-full px-3 py-2.5">
+                 class="w-full">
           <datalist id="bilty-terminals">
             {% for t in terminals %}<option value="{{ t.name }}">{% endfor %}
           </datalist>

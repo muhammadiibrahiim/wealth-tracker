@@ -11,12 +11,12 @@
     <form hx-post="{{ action }}" class="space-y-4">
       <div>
         <label class="field-label field-label-required">Name</label>
-        <input name="name" required value="{{ account.name if account else '' }}" placeholder="e.g. Meezan Current" class="w-full px-3 py-2.5">
+        <input name="name" required value="{{ account.name if account else '' }}" placeholder="e.g. Meezan Current" class="w-full">
       </div>
 
       <div>
         <label class="field-label">Type</label>
-        <select name="kind" class="w-full px-3 py-2.5">
+        <select name="kind" class="w-full">
           {% set kinds = [('bank','Bank'), ('cash','Cash'), ('mobile_wallet','Mobile Wallet'), ('capital','Capital / Equity'), ('other','Other')] %}
           {% for v, lbl in kinds %}<option value="{{ v }}" {% if account and account.kind == v %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
         </select>
@@ -25,22 +25,22 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label class="field-label">Bank Name</label>
-          <input name="bank_name" value="{{ account.bank_name or '' if account else '' }}" class="w-full px-3 py-2.5">
+          <input name="bank_name" value="{{ account.bank_name or '' if account else '' }}" class="w-full">
         </div>
         <div>
           <label class="field-label">Account #</label>
-          <input name="account_number" value="{{ account.account_number or '' if account else '' }}" class="w-full px-3 py-2.5">
+          <input name="account_number" value="{{ account.account_number or '' if account else '' }}" class="w-full">
         </div>
       </div>
 
       <div>
         <label class="field-label">Opening Balance ({{ currency }})</label>
-        <input type="number" step="0.01" name="opening_balance" value="{{ account.opening_balance if account else 0 }}" class="w-full px-3 py-2.5">
+        <input type="number" step="0.01" name="opening_balance" value="{{ account.opening_balance if account else 0 }}" class="w-full">
       </div>
 
       <div>
         <label class="field-label">Notes</label>
-        <textarea name="notes" rows="2" class="w-full px-3 py-2.5">{{ account.notes or '' if account else '' }}</textarea>
+        <textarea name="notes" rows="2" class="w-full">{{ account.notes or '' if account else '' }}</textarea>
       </div>
 
       <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">

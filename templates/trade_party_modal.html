@@ -11,14 +11,14 @@
     <form hx-post="{{ action }}" class="space-y-4">
       <div>
         <label class="field-label field-label-required">Name</label>
-        <input name="name" required value="{{ party.name if party else '' }}" class="w-full px-3 py-2.5">
+        <input name="name" required value="{{ party.name if party else '' }}" class="w-full">
       </div>
 
       <div class="grid grid-cols-2 gap-3">
-        <label class="flex items-center gap-2 text-sm text-gray-700">
+        <label class="flex items-center gap-2 text-sm wt-body">
           <input type="checkbox" name="is_vendor" value="1" {% if party and party.is_vendor %}checked{% endif %} class="w-4 h-4"> Is Vendor
         </label>
-        <label class="flex items-center gap-2 text-sm text-gray-700">
+        <label class="flex items-center gap-2 text-sm wt-body">
           <input type="checkbox" name="is_customer" value="1" {% if (not party) or party.is_customer %}checked{% endif %} class="w-4 h-4"> Is Customer
         </label>
       </div>
@@ -26,30 +26,30 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label class="field-label">Contact Person</label>
-          <input name="contact_person" value="{{ party.contact_person or '' if party else '' }}" class="w-full px-3 py-2.5">
+          <input name="contact_person" value="{{ party.contact_person or '' if party else '' }}" class="w-full">
         </div>
         <div>
           <label class="field-label">Phone</label>
-          <input name="phone" value="{{ party.phone or '' if party else '' }}" class="w-full px-3 py-2.5">
+          <input name="phone" value="{{ party.phone or '' if party else '' }}" class="w-full">
         </div>
         <div>
           <label class="field-label">Email</label>
-          <input name="email" type="email" value="{{ party.email or '' if party else '' }}" class="w-full px-3 py-2.5">
+          <input name="email" type="email" value="{{ party.email or '' if party else '' }}" class="w-full">
         </div>
         <div>
           <label class="field-label">Tax ID</label>
-          <input name="tax_id" value="{{ party.tax_id or '' if party else '' }}" class="w-full px-3 py-2.5">
+          <input name="tax_id" value="{{ party.tax_id or '' if party else '' }}" class="w-full">
         </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div class="md:col-span-2">
           <label class="field-label">Address</label>
-          <textarea name="address" rows="2" class="w-full px-3 py-2.5">{{ party.address or '' if party else '' }}</textarea>
+          <textarea name="address" rows="2" class="w-full">{{ party.address or '' if party else '' }}</textarea>
         </div>
         <div>
           <label class="field-label">City (shipment destination)</label>
-          <select name="city" class="w-full px-3 py-2.5">
+          <select name="city" class="w-full">
             <option value="">— Pick city —</option>
             {% for c in cities or [] %}
             <option value="{{ c }}" {% if party and party.city == c %}selected{% endif %}>{{ c }}</option>
@@ -62,37 +62,37 @@
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="field-label">Default Customer Terms (days)</label>
-          <input type="number" name="default_customer_terms_days" min="0" value="{{ party.default_customer_terms_days if party else 30 }}" class="w-full px-3 py-2.5">
+          <input type="number" name="default_customer_terms_days" min="0" value="{{ party.default_customer_terms_days if party else 30 }}" class="w-full">
         </div>
         <div>
           <label class="field-label">Default Vendor Terms (days)</label>
-          <input type="number" name="default_vendor_terms_days" min="0" value="{{ party.default_vendor_terms_days if party else 7 }}" class="w-full px-3 py-2.5">
+          <input type="number" name="default_vendor_terms_days" min="0" value="{{ party.default_vendor_terms_days if party else 7 }}" class="w-full">
         </div>
       </div>
 
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="field-label">Max Payment Delay (days)</label>
-          <input type="number" name="max_payment_delay_days" min="0" value="{{ party.max_payment_delay_days if party else 1 }}" class="w-full px-3 py-2.5">
-          <p class="text-xs text-gray-500 mt-1">As a vendor: the most you can stretch a payment past its due date. Cash Flow Management holds their payable until due&nbsp;+&nbsp;this, then flags the injection needed to clear it.</p>
+          <input type="number" name="max_payment_delay_days" min="0" value="{{ party.max_payment_delay_days if party else 1 }}" class="w-full">
+          <p class="text-xs wt-mute mt-1">As a vendor: the most you can stretch a payment past its due date. Cash Flow Management holds their payable until due&nbsp;+&nbsp;this, then flags the injection needed to clear it.</p>
         </div>
       </div>
 
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="field-label">Opening Balance ({{ currency }})</label>
-          <input type="number" step="0.01" name="opening_balance" value="{{ party.opening_balance if party else 0 }}" class="w-full px-3 py-2.5">
-          <p class="text-xs text-gray-500 mt-1">+ they owe us · − we owe them</p>
+          <input type="number" step="0.01" name="opening_balance" value="{{ party.opening_balance if party else 0 }}" class="w-full">
+          <p class="text-xs wt-mute mt-1">+ they owe us · − we owe them</p>
         </div>
         <div>
           <label class="field-label">Opening Balance Date</label>
-          <input type="date" name="opening_balance_date" value="{{ party.opening_balance_date or '' if party else '' }}" class="w-full px-3 py-2.5">
+          <input type="date" name="opening_balance_date" value="{{ party.opening_balance_date or '' if party else '' }}" class="w-full">
         </div>
       </div>
 
       <div>
         <label class="field-label">Notes</label>
-        <textarea name="notes" rows="2" class="w-full px-3 py-2.5">{{ party.notes or '' if party else '' }}</textarea>
+        <textarea name="notes" rows="2" class="w-full">{{ party.notes or '' if party else '' }}</textarea>
       </div>
 
       <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">

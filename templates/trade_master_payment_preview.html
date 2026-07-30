@@ -1,34 +1,35 @@
+{% from "partials/_ui.html" import table_open, table_close %}
 {% if prev and prev.customer %}
 {% if prev.rows %}
 <div class="border border-gray-200 rounded-lg overflow-hidden" style="background:#fafaf9;">
-  <div class="px-3 py-2 text-xs font-bold text-gray-700 border-b border-gray-200">
+  <div class="px-3 py-2 text-xs font-bold wt-body border-b border-gray-200">
     How it will be applied — oldest due first
   </div>
-  <table class="min-w-full text-xs">
+  {{ table_open(dense=True) }}
     <tbody>
       {% for r in prev['rows'] %}
       <tr class="border-t border-gray-100 {% if r.apply > 0 and r.fully_paid %}bg-green-50{% elif r.apply > 0 %}bg-amber-50{% endif %}">
         <td class="px-3 py-1.5 whitespace-nowrap">
-          <span class="font-mono text-indigo-600">{{ r.reference }}</span>
-          <span class="text-gray-400">{% if r.due %}due {{ r.due.strftime('%d %b') }}{% elif r.trade_date %}{{ r.trade_date.strftime('%d %b') }}{% endif %}</span>
+          <span class="font-mono wt-info">{{ r.reference }}</span>
+          <span class="wt-ash">{% if r.due %}due {{ r.due.strftime('%d %b') }}{% elif r.trade_date %}{{ r.trade_date.strftime('%d %b') }}{% endif %}</span>
         </td>
-        <td class="px-3 py-1.5 text-right tabular-nums text-gray-500">owed {{ currency }} {{ '{:,.0f}'.format(r.outstanding) }}</td>
+        <td class="px-3 py-1.5 text-right tabular-nums wt-mute">owed {{ currency }} {{ '{:,.0f}'.format(r.outstanding) }}</td>
         <td class="px-3 py-1.5 text-right tabular-nums font-semibold">
           {% if r.apply > 0 %}
-            <span style="color:#15803d;">apply {{ currency }} {{ '{:,.0f}'.format(r.apply) }}</span>
-            {% if r.fully_paid %}<span style="color:#166534; font-weight:700;"> ✓ paid</span>{% else %}<span class="text-amber-700"> (part)</span>{% endif %}
-          {% else %}<span class="text-gray-300">—</span>{% endif %}
+            <span class="wt-pos">apply {{ currency }} {{ '{:,.0f}'.format(r.apply) }}</span>
+            {% if r.fully_paid %}<span style="color:#166534; font-weight:700;"> ✓ paid</span>{% else %}<span class="wt-warn"> (part)</span>{% endif %}
+          {% else %}<span class="wt-ash">—</span>{% endif %}
         </td>
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  {{ table_close() }}
   <div class="px-3 py-2 border-t border-gray-200 flex justify-between text-xs">
-    <span class="text-gray-600">Applied <b style="color:#15803d;">{{ currency }} {{ '{:,.0f}'.format(prev.allocated) }}</b></span>
-    {% if prev.leftover > 0 %}<span class="text-amber-700">Rs {{ '{:,.0f}'.format(prev.leftover) }} extra → advance on newest trade</span>{% endif %}
+    <span class="wt-mute">Applied <b class="wt-pos">{{ currency }} {{ '{:,.0f}'.format(prev.allocated) }}</b></span>
+    {% if prev.leftover > 0 %}<span class="wt-warn">Rs {{ '{:,.0f}'.format(prev.leftover) }} extra → advance on newest trade</span>{% endif %}
   </div>
 </div>
 {% else %}
-<div class="text-xs text-gray-400 px-1">{{ prev.customer.name }} has nothing outstanding to apply this to.</div>
+<div class="text-xs wt-ash px-1">{{ prev.customer.name }} has nothing outstanding to apply this to.</div>
 {% endif %}
 {% endif %}

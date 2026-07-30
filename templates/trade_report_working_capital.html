@@ -1,48 +1,44 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Working Capital & Capital Utilization{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Working Capital & Capital Utilization</h1>
-      <p class="page-subtitle">DSO · DPO · Cash Conversion Cycle · ROCE — the broker's health checks.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Working Capital &amp; Capital Utilization',
+      'DSO · DPO · Cash Conversion Cycle · ROCE — the broker&rsquo;s health checks.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
-      <div><label class="field-label">As of</label>
-        <input type="date" name="as_of" value="{{ as_of }}" class="px-3 py-2.5"></div>
-      <button type="submit" class="btn-primary">Generate Report</button>
-      <a href="/trade/reports/working-capital" class="btn-secondary">Reset</a>
-    </form>
-  </div>
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('as_of', mode='single') }}</div>
+    <div>
+      <label class="field-label" for="as_of">As of</label>
+      <input type="date" name="as_of" id="as_of" value="{{ as_of }}">
+    </div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/working-capital') }}
 
   <div>
     <div class="stat-label mb-3">Working Capital — {{ metrics.period_days }}-day window</div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="stat-card">
         <div class="stat-label">DSO — Days to Collect</div>
-        <div class="stat-value">{% if metrics.dso is none %}<span class="text-gray-400">—</span>{% else %}{{ metrics.dso }}<span class="text-lg text-gray-500 ml-1">days</span>{% endif %}</div>
-        <div class="text-sm text-gray-600 mt-2">
+        <div class="stat-value">{% if metrics.dso is none %}<span class="wt-ash">—</span>{% else %}{{ metrics.dso }}<span class="text-lg wt-mute ml-1">days</span>{% endif %}</div>
+        <div class="text-sm wt-mute mt-2">
           {% if metrics.dso is none %}Not enough sales history yet to measure.
           {% else %}On average it takes your customers <b>{{ metrics.dso }} days</b> to pay you after you deliver. Lower is better — your money comes back faster.{% endif %}
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">DPO — Days to Pay</div>
-        <div class="stat-value">{% if metrics.dpo is none %}<span class="text-gray-400">—</span>{% else %}{{ metrics.dpo }}<span class="text-lg text-gray-500 ml-1">days</span>{% endif %}</div>
-        <div class="text-sm text-gray-600 mt-2">
+        <div class="stat-value">{% if metrics.dpo is none %}<span class="wt-ash">—</span>{% else %}{{ metrics.dpo }}<span class="text-lg wt-mute ml-1">days</span>{% endif %}</div>
+        <div class="text-sm wt-mute mt-2">
           {% if metrics.dpo is none %}Not enough purchase history yet to measure.
           {% else %}On average you take <b>{{ metrics.dpo }} days</b> to pay your vendor after buying. Higher means you hold cash longer — but don't strain the relationship.{% endif %}
         </div>
       </div>
-      <div class="stat-card" {% if metrics.ccc is not none %}style="border-color: {% if metrics.ccc <= 0 %}#16a34a{% else %}#ea580c{% endif %};"{% endif %}>
+      <div class="stat-card" {% if metrics.ccc is not none %}class=\"{{ 'wt-card-pos' if metrics.ccc <= 0 else 'wt-card-neg' }}\"{% endif %}>
         <div class="stat-label">Cash Conversion Cycle</div>
-        <div class="stat-value" {% if metrics.ccc is not none %}style="color: {% if metrics.ccc <= 0 %}#15803d{% else %}#c2410c{% endif %};"{% endif %}>{% if metrics.ccc is none %}<span class="text-gray-400">—</span>{% else %}{{ metrics.ccc }}<span class="text-lg text-gray-500 ml-1">days</span>{% endif %}</div>
-        <div class="text-sm text-gray-600 mt-2">
+        <div class="stat-value" {% if metrics.ccc is not none %}class=\"{{ 'wt-pos' if metrics.ccc <= 0 else 'wt-neg' }}\"{% endif %}>{% if metrics.ccc is none %}<span class="wt-ash">—</span>{% else %}{{ metrics.ccc }}<span class="text-lg wt-mute ml-1">days</span>{% endif %}</div>
+        <div class="text-sm wt-mute mt-2">
           {% if metrics.ccc is none %}Needs both DSO and DPO to compute.
           {% elif metrics.ccc <= 0 %}<b>Your vendor funds your trades.</b> You collect from customers about {{ (metrics.ccc * -1)|round(1) }} days <i>before</i> you have to pay your vendor — so you can trade without tying up your own cash.
           {% else %}Your cash is tied up for <b>{{ metrics.ccc }} days</b> on each cycle — the gap between paying your vendor and getting paid by your customer. You need enough working capital to cover this gap.{% endif %}
@@ -51,7 +47,7 @@
       <div class="stat-card">
         <div class="stat-label">Current Ratio</div>
         <div class="stat-value">{{ metrics.current_ratio if metrics.current_ratio is not none else '—' }}</div>
-        <div class="text-sm text-gray-600 mt-2">
+        <div class="text-sm wt-mute mt-2">
           {% if metrics.current_ratio is none %}No current liabilities to compare against.
           {% else %}For every <b>{{ currency }} 1</b> of current liabilities (<b>{{ currency }} {{ '{:,.0f}'.format(metrics.current_liabilities) }}</b> owed), you hold <b>{{ currency }} {{ metrics.current_ratio }}</b> in current assets — cash, customer receivables and vendor prepayments (<b>{{ currency }} {{ '{:,.0f}'.format(metrics.current_assets) }}</b>). Above 1.0 means you can cover what you owe.{% endif %}
         </div>
@@ -61,38 +57,38 @@
 
   <div>
     <div class="stat-label mb-3">Return on Your Invested Capital</div>
-    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden mb-4">
-      <table class="min-w-full">
+    <div class="wt-panel mb-4">
+      {{ table_open(dense=True) }}
         <tbody>
           <tr>
-            <td class="text-gray-900">Funding — cash you put in (CEO account)</td>
-            <td class="text-right tabular-nums font-medium text-gray-900">{{ currency }} {{ '{:,.2f}'.format(capital.funding_ceo) }}</td>
+            <td class="wt-ink">Funding — cash you put in (CEO account)</td>
+            <td class="num">{{ currency }} {{ '{:,.2f}'.format(capital.funding_ceo) }}</td>
           </tr>
           <tr>
-            <td class="text-gray-900">Profit retained in the business (Capital A/C)</td>
-            <td class="text-right tabular-nums font-medium" style="color: #15803d;">{{ currency }} {{ '{:,.2f}'.format(capital.retained_capital) }}</td>
+            <td class="wt-ink">Profit retained in the business (Capital A/C)</td>
+            <td class="num" class="wt-pos">{{ currency }} {{ '{:,.2f}'.format(capital.retained_capital) }}</td>
           </tr>
         </tbody>
         <tfoot class="bg-gray-50 border-t-2 border-gray-200">
           <tr>
-            <td class="text-xs uppercase tracking-widest font-bold text-gray-700">Total Capital in the Business</td>
-            <td class="text-right tabular-nums font-bold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(capital.invested_capital) }}</td>
+            <td class="text-xs uppercase tracking-widest font-bold wt-body">Total Capital in the Business</td>
+            <td class="num">{{ currency }} {{ '{:,.2f}'.format(capital.invested_capital) }}</td>
           </tr>
         </tfoot>
-      </table>
+      {{ table_close() }}
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="stat-card" style="border-color: {% if capital.roi_since_inception_pct >= 0 %}#16a34a{% else %}#ea580c{% endif %};">
+      <div class="stat-card" class=\"{{ 'wt-card-pos' if capital.roi_since_inception_pct >= 0 else 'wt-card-neg' }}\">
         <div class="stat-label">Return Since Start</div>
-        <div class="stat-value" style="color: {% if capital.roi_since_inception_pct >= 0 %}#15803d{% else %}#c2410c{% endif %};">{{ capital.roi_since_inception_pct }}%</div>
-        <div class="text-sm text-gray-600 mt-2">
+        <div class="stat-value" class=\"{{ 'wt-pos' if capital.roi_since_inception_pct >= 0 else 'wt-neg' }}\">{{ capital.roi_since_inception_pct }}%</div>
+        <div class="text-sm wt-mute mt-2">
           Every <b>{{ currency }} 100</b> you funded has earned <b>{{ currency }} {{ '{:,.0f}'.format(capital.roi_since_inception_pct) }}</b> in profit so far — total, since you started.
         </div>
       </div>
-      <div class="stat-card" style="border-color: {% if capital.roi_pct >= 0 %}#16a34a{% else %}#ea580c{% endif %};">
+      <div class="stat-card" class=\"{{ 'wt-card-pos' if capital.roi_pct >= 0 else 'wt-card-neg' }}\">
         <div class="stat-label">Trailing 12-Month ROI</div>
-        <div class="stat-value" style="color: {% if capital.roi_pct >= 0 %}#15803d{% else %}#c2410c{% endif %};">{{ capital.roi_pct }}%</div>
-        <div class="text-sm text-gray-600 mt-2">
+        <div class="stat-value" class=\"{{ 'wt-pos' if capital.roi_pct >= 0 else 'wt-neg' }}\">{{ capital.roi_pct }}%</div>
+        <div class="text-sm wt-mute mt-2">
           Your money in the business earned <b>{{ capital.roi_pct }}%</b> over the last year — profit of {{ currency }} {{ '{:,.0f}'.format(capital.trailing_net_income) }} on {{ currency }} {{ '{:,.0f}'.format(capital.invested_capital) }} of capital. Compare this to what the same cash would earn in a bank or elsewhere.
         </div>
       </div>
@@ -101,25 +97,25 @@
 
   <div>
     <div class="stat-label mb-3">Where Your Money Is Right Now</div>
-    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <table class="min-w-full">
+    <div class="wt-panel">
+      {{ table_open(dense=True) }}
         <tbody>
           {% for c in capital.components %}
           <tr>
-            <td class="text-gray-900">{{ c.label }}</td>
-            <td class="text-right tabular-nums font-medium" style="color: {% if c.amount < 0 %}#c2410c{% else %}#111827{% endif %};">{{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
+            <td class="wt-ink">{{ c.label }}</td>
+            <td class="num {{ 'wt-neg' if c.amount < 0 else 'wt-ink' }}" data-sort-value="{{ c.amount }}">{{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
           </tr>
           {% endfor %}
         </tbody>
         <tfoot class="bg-gray-50 border-t-2 border-gray-200">
           <tr>
-            <td class="text-xs uppercase tracking-widest font-bold text-gray-700">Capital Tied Up in Live Trades</td>
-            <td class="text-right tabular-nums font-bold text-gray-900">{{ currency }} {{ '{:,.2f}'.format(capital.capital_deployed) }}</td>
+            <td class="text-xs uppercase tracking-widest font-bold wt-body">Capital Tied Up in Live Trades</td>
+            <td class="num">{{ currency }} {{ '{:,.2f}'.format(capital.capital_deployed) }}</td>
           </tr>
         </tfoot>
-      </table>
+      {{ table_close() }}
     </div>
-    <p class="text-sm text-gray-500 mt-2">Cash on hand, plus what customers owe you, minus what you owe vendors — the money currently working inside open trades.</p>
+    <p class="text-sm wt-mute mt-2">Cash on hand, plus what customers owe you, minus what you owe vendors — the money currently working inside open trades.</p>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -129,13 +125,13 @@
     </div>
     <div class="stat-card">
       <div class="stat-label">Trailing 12-mo Net Income</div>
-      <div class="stat-value" style="color: {% if capital.trailing_net_income >= 0 %}#15803d{% else %}#c2410c{% endif %};">
+      <div class="stat-value" class=\"{{ 'wt-pos' if capital.trailing_net_income >= 0 else 'wt-neg' }}\">
         <span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(capital.trailing_net_income|abs) }}
       </div>
     </div>
-    <div class="stat-card" style="border-color: {% if capital.roce_pct >= 0 %}#16a34a{% else %}#ea580c{% endif %};">
+    <div class="stat-card" class=\"{{ 'wt-card-pos' if capital.roce_pct >= 0 else 'wt-card-neg' }}\">
       <div class="stat-label">Trailing 12-mo ROCE</div>
-      <div class="stat-value" style="color: {% if capital.roce_pct >= 0 %}#15803d{% else %}#c2410c{% endif %};">{{ capital.roce_pct }}%</div>
+      <div class="stat-value" class=\"{{ 'wt-pos' if capital.roce_pct >= 0 else 'wt-neg' }}\">{{ capital.roce_pct }}%</div>
     </div>
   </div>
 </div>

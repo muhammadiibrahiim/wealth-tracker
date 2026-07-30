@@ -1,80 +1,95 @@
 {% extends "base.html" %}
-{% block title %}Daily Cash Requirement{% endblock %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
+{% block title %}Daily Cash Requirement
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  if (!window.WTCharts) return;
+  WTCharts.line('daily-cash-chart', {
+    labels: {{ report.rows | map(attribute='date') | map('string') | list | tojson }},
+    series: [{ name: 'Running cash', data: {{ report.rows | map(attribute='running') | map('float') | list | tojson }} }],
+    currency: true, showLegend: false
+  });
+});
+</script>
+{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Daily Cash Requirement</h1>
-      <p class="page-subtitle">How much cash you need to put in, day by day — starting from zero (owner/CEO funding ignored). Each day nets expected collections against vendor payments; whenever the running balance dips below zero, that dip is cash you must inject by that day. Deliveries are projected batch-by-batch at each vendor's real cadence.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Daily Cash Requirement',
+      'Day by day: how much cash you must inject, starting from zero (owner funding ignored).',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
+  <div class="wt-panel p-6">
     <form method="get" class="flex items-end gap-4 flex-wrap">
       <div><label class="field-label">Horizon (days)</label>
-        <input type="number" name="days" value="{{ days }}" min="7" max="120" class="px-3 py-2.5" style="width:120px;"></div>
+        <input type="number" name="days" value="{{ days }}" min="7" max="120"></div>
       <button type="submit" class="btn-primary">Generate</button>
       <a href="/trade/reports/daily-cash" class="btn-secondary">Reset</a>
     </form>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-    <div class="stat-card" style="border-color: {% if report.peak_funding_needed > 0 %}#ea580c{% else %}#16a34a{% endif %};">
+    <div class="stat-card {{ 'wt-card-neg' if report.peak_funding_needed > 0 else 'wt-card-pos' }}">
       <div class="stat-label">Peak Cash Needed</div>
-      <div class="stat-value" style="color: {% if report.peak_funding_needed > 0 %}#c2410c{% else %}#15803d{% endif %};"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.peak_funding_needed) }}</div>
-      <div class="stat-foot text-gray-500">most you'd be down{% if report.peak_day %} · by {{ report.peak_day }}{% endif %}</div>
+      <div class="stat-value {{ 'wt-neg' if report.peak_funding_needed > 0 else 'wt-pos' }}"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.peak_funding_needed) }}</div>
+      <div class="stat-foot wt-mute">most you'd be down{% if report.peak_day %} · by {{ report.peak_day }}{% endif %}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Ending Balance</div>
-      <div class="stat-value" style="color: {% if report.ending_balance < 0 %}#c2410c{% else %}#15803d{% endif %};"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.ending_balance) }}</div>
-      <div class="stat-foot text-gray-500">after {{ report.horizon_days }} days</div>
+      <div class="stat-value {{ 'wt-neg' if report.ending_balance < 0 else 'wt-pos' }}"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.ending_balance) }}</div>
+      <div class="stat-foot wt-mute">after {{ report.horizon_days }} days</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Cash In</div>
-      <div class="stat-value" style="color: #15803d;"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.total_in) }}</div>
+      <div class="stat-value" class="wt-pos"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.total_in) }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Cash Out</div>
-      <div class="stat-value" style="color: #b91c1c;"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.total_out) }}</div>
+      <div class="stat-value" class="wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.total_out) }}</div>
     </div>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200" style="background: #fafaf9;">
+  {% if report.rows %}
+  {{ chart_card('daily-cash-chart', 'Running cash position',
+       'Closing balance per day. Below the line is cash you must inject by that date.', 'lg') }}
+  {% endif %}
+
+  <div class="wt-panel">
+    <div class="wt-panel__head">
       <h2>Day-by-Day</h2>
     </div>
-    <div style="overflow-x:auto;">
-    <table class="min-w-full">
+    <div class="wt-table-scroll">
+    {{ report_toolbar('tbl-daily-cash', print_btn=True) }}
+    <p class="wt-meta mb-2">Sorted by date. Re-sorting by another column keeps the Running column in its original date order.</p>
+    {{ sortable_table_open('tbl-daily-cash', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">Date</th>
-          <th class="text-right">Day</th>
-          <th class="text-right">Cash In</th>
-          <th class="text-right">Cash Out</th>
-          <th class="text-right">Net</th>
-          <th class="text-right">Running (from 0)</th>
-          <th class="text-right">Extra Needed</th>
+          <th>Date</th>
+          <th class="num">Day</th>
+          <th class="num">Cash In</th>
+          <th class="num">Cash Out</th>
+          <th class="num">Net</th>
+          <th class="num">Running (from 0)</th>
+          <th class="num">Extra Needed</th>
         </tr>
       </thead>
       <tbody>
         {% for r in report.rows %}
-        <tr {% if r.running < 0 %}style="background:#fff7ed;"{% endif %}>
-          <td class="text-gray-800 whitespace-nowrap font-medium">{{ r.date }}</td>
-          <td class="text-right text-gray-500 tabular-nums">{% if r.days_out == 0 %}today{% else %}+{{ r.days_out }}d{% endif %}</td>
-          <td class="text-right tabular-nums" style="color: {% if r.cash_in %}#15803d{% else %}#9ca3af{% endif %};">{% if r.cash_in %}+ {{ currency }} {{ '{:,.0f}'.format(r.cash_in) }}{% else %}—{% endif %}</td>
-          <td class="text-right tabular-nums" style="color: {% if r.cash_out %}#b91c1c{% else %}#9ca3af{% endif %};">{% if r.cash_out %}− {{ currency }} {{ '{:,.0f}'.format(r.cash_out) }}{% else %}—{% endif %}</td>
-          <td class="text-right tabular-nums font-medium" style="color: {% if r.net < 0 %}#c2410c{% else %}#15803d{% endif %};">{{ '{:,.0f}'.format(r.net) }}</td>
-          <td class="text-right tabular-nums font-semibold" style="color: {% if r.running < 0 %}#c2410c{% else %}#111827{% endif %};">{{ currency }} {{ '{:,.0f}'.format(r.running) }}</td>
-          <td class="text-right tabular-nums font-bold" style="color: {% if r.extra_needed > 0 %}#c2410c{% else %}#9ca3af{% endif %};">{% if r.extra_needed > 0 %}{{ currency }} {{ '{:,.0f}'.format(r.extra_needed) }}{% else %}—{% endif %}</td>
+        <tr class="{{ 'wt-neg-bg' if r.running < 0 else '' }}">
+          <td class="wt-body whitespace-nowrap font-medium">{{ r.date }}</td>
+          <td class="text-right wt-mute tabular-nums">{% if r.days_out == 0 %}today{% else %}+{{ r.days_out }}d{% endif %}</td>
+          <td class="num {{ 'wt-pos' if r.cash_in else 'wt-ash' }}" data-sort-value="{{ r.cash_in or 0 }}">{% if r.cash_in %}+ {{ currency }} {{ '{:,.0f}'.format(r.cash_in) }}{% else %}—{% endif %}</td>
+          <td class="num {{ 'wt-neg' if r.cash_out else 'wt-ash' }}" data-sort-value="{{ r.cash_out or 0 }}">{% if r.cash_out %}− {{ currency }} {{ '{:,.0f}'.format(r.cash_out) }}{% else %}—{% endif %}</td>
+          <td class="num {{ 'wt-neg' if r.net < 0 else 'wt-pos' }}" data-sort-value="{{ r.net }}">{{ '{:,.0f}'.format(r.net) }}</td>
+          <td class="num {{ 'wt-neg' if r.running < 0 else 'wt-ink' }}" data-sort-value="{{ r.running }}">{{ currency }} {{ '{:,.0f}'.format(r.running) }}</td>
+          <td class="num {{ 'wt-neg' if r.extra_needed > 0 else 'wt-ash' }}" data-sort-value="{{ r.extra_needed or 0 }}">{% if r.extra_needed > 0 %}{{ currency }} {{ '{:,.0f}'.format(r.extra_needed) }}{% else %}—{% endif %}</td>
         </tr>
-        {% else %}<tr><td colspan="7" class="px-6 py-10 text-center text-sm text-gray-400">No cash activity in this window.</td></tr>{% endfor %}
+        {% else %}<tr><td colspan="7" class=" text-center text-sm wt-ash">No cash activity in this window.</td></tr>{% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
     </div>
   </div>
-  <p class="text-sm text-gray-500">The <b>Running</b> column is your cash if you started with nothing and used no owner funding — where it goes red, you're short. <b>Extra Needed</b> is fresh cash required that day (beyond what earlier days already needed). The <b>Peak Cash Needed</b> tile is the single largest amount you'd have to have put in.</p>
+  <p class="text-sm wt-mute">The <b>Running</b> column is your cash if you started with nothing and used no owner funding — where it goes red, you're short. <b>Extra Needed</b> is fresh cash required that day (beyond what earlier days already needed). The <b>Peak Cash Needed</b> tile is the single largest amount you'd have to have put in.</p>
 </div>
 
 {% endblock %}

@@ -2,28 +2,28 @@
 <!-- Date Navigation -->
 <div class="flex items-center justify-center space-x-4 mb-6">
     <a href="/habits?d={{ prev_date }}" 
-       class="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 text-gray-600">
+       class="p-2 rounded-lg bg-white border border-gray-200 hover:wt-surface-soft wt-mute">
         ← Prev
     </a>
     <div class="text-center">
-        <span class="text-lg font-semibold text-gray-800">
+        <span class="text-lg font-semibold wt-body">
             {{ view_date.strftime('%A, %B %d, %Y') }}
         </span>
         {% if view_date == today %}
-        <span class="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">Today</span>
+        <span class="ml-2 px-2 py-0.5 bg-green-100 wt-pos text-xs rounded-full font-medium">Today</span>
         {% endif %}
     </div>
     <a href="/habits?d={{ next_date }}"
-       class="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 text-gray-600">
+       class="p-2 rounded-lg bg-white border border-gray-200 hover:wt-surface-soft wt-mute">
         Next →
     </a>
 </div>
 
 <!-- Daily Score Bar -->
-<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+<div class="wt-panel border border-gray-200 p-4 mb-6">
     <div class="flex items-center justify-between mb-2">
-        <span class="text-sm font-medium text-gray-700">Daily Score</span>
-        <span class="text-2xl font-bold {% if daily.daily_score >= 80 %}text-green-600{% elif daily.daily_score >= 50 %}text-yellow-600{% else %}text-red-600{% endif %}">
+        <span class="text-sm font-medium wt-body">Daily Score</span>
+        <span class="text-2xl font-bold {% if daily.daily_score >= 80 %}wt-pos{% elif daily.daily_score >= 50 %}wt-warn{% else %}wt-neg{% endif %}">
             {{ daily.daily_score }}%
         </span>
     </div>
@@ -31,21 +31,21 @@
         <div class="h-3 rounded-full transition-all duration-500 {% if daily.daily_score >= 80 %}bg-green-500{% elif daily.daily_score >= 50 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
              style="width: {{ daily.daily_score }}%"></div>
     </div>
-    <div class="text-xs text-gray-500 mt-1">{{ daily.total_completed }} of {{ daily.total_habits }} habits completed</div>
+    <div class="text-xs wt-mute mt-1">{{ daily.total_completed }} of {{ daily.total_habits }} habits completed</div>
 </div>
 
 <!-- Aspect Cards -->
 {% if daily.aspects %}
     {% for av in daily.aspects %}
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-4 overflow-hidden">
+    <div class="wt-panel border border-gray-200 mb-4 overflow-hidden">
         <!-- Aspect Header -->
         <div class="px-5 py-3 flex items-center justify-between" style="border-left: 4px solid {{ av.aspect.color }}">
             <div class="flex items-center space-x-2">
                 <span class="text-xl">{{ av.aspect.icon }}</span>
-                <h3 class="text-lg font-semibold text-gray-800">{{ av.aspect.name }}</h3>
+                <h3 class="text-lg font-semibold wt-body">{{ av.aspect.name }}</h3>
             </div>
             <div class="flex items-center space-x-3">
-                <span class="text-sm text-gray-500">{{ av.completed_count }}/{{ av.total_count }}</span>
+                <span class="text-sm wt-mute">{{ av.completed_count }}/{{ av.total_count }}</span>
                 <div class="w-24 bg-gray-200 rounded-full h-2">
                     <div class="h-2 rounded-full transition-all duration-300" 
                          style="width: {{ av.score }}%; background-color: {{ av.aspect.color }}"></div>
@@ -57,24 +57,24 @@
         {% if av.habits %}
         <div class="divide-y divide-gray-100">
             {% for item in av.habits %}
-            <div class="px-5 py-3 flex items-center justify-between hover:bg-gray-50" id="habit-item-{{ item.habit.id }}">
-                {% include "partials/habit_checkbox.html" with context %}
+            <div class="px-5 py-3 flex items-center justify-between hover:wt-surface-soft" id="habit-item-{{ item.habit.id }}">
+                {% include"partials/habit_checkbox.html" with context %}
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <div class="px-5 py-4 text-sm text-gray-400 italic">
-            No habits yet. <a href="/habits/aspects" class="text-blue-500 hover:underline">Add habits</a> to this aspect.
+        <div class="px-5 py-4 text-sm wt-ash italic">
+            No habits yet. <a href="/habits/aspects" class="wt-info hover:underline">Add habits</a> to this aspect.
         </div>
         {% endif %}
     </div>
     {% endfor %}
 {% else %}
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+    <div class="wt-panel border border-gray-200 p-12 text-center">
         <span class="text-4xl mb-4 block">🌱</span>
-        <h3 class="text-lg font-semibold text-gray-700 mb-2">No habits yet</h3>
-        <p class="text-gray-500 mb-4">Start by creating life aspects and habits to track your 1% daily improvement.</p>
-        <a href="/habits/aspects" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        <h3 class="text-lg font-semibold wt-body mb-2">No habits yet</h3>
+        <p class="wt-mute mb-4">Start by creating life aspects and habits to track your 1% daily improvement.</p>
+        <a href="/habits/aspects" class="btn-primary">
             Get Started
         </a>
     </div>

@@ -1,30 +1,29 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 
 {% block title %}Wealth Summary - Wealth Tracker{% endblock %}
 
 {% block content %}
-<div class="px-4 py-6 max-w-6xl mx-auto">
+<div class="space-y-6">
     <div class="mb-6">
-        <a href="/wealth/entries" class="text-blue-600 hover:text-blue-800">
+        <a href="/wealth/entries" class="wt-info hover:wt-info">
             ← Back to Entries
         </a>
     </div>
 
-    <h1 class="text-3xl font-bold text-gray-900 mb-6">Wealth Summary</h1>
+    <h1 class="page-title">Wealth Summary</h1>
 
     <!-- Month Range Selector -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Select Date Range</h2>
+    <div class="wt-panel p-6 mb-6">
+        <h2 class="text-xl font-semibold wt-body mb-4">Select Date Range</h2>
         
         <form method="get" action="/wealth/entries/summary" class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-                <label for="start_month" class="block text-sm font-medium text-gray-700 mb-2">
+                <label for="start_month" class="field-label">
                     Start Month
                 </label>
                 <select 
                     id="start_month"
-                    name="start_month"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    name="start_month" class="w-full">
                     <option value="">All time (start)</option>
                     {% for month in all_months %}
                     <option value="{{ month }}" {% if month == start_month %}selected{% endif %}>
@@ -35,13 +34,12 @@
             </div>
             
             <div>
-                <label for="end_month" class="block text-sm font-medium text-gray-700 mb-2">
+                <label for="end_month" class="field-label">
                     End Month
                 </label>
                 <select 
                     id="end_month"
-                    name="end_month"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    name="end_month" class="w-full">
                     <option value="">All time (end)</option>
                     {% for month in all_months %}
                     <option value="{{ month }}" {% if month == end_month %}selected{% endif %}>
@@ -54,7 +52,7 @@
             <div class="flex items-end">
                 <button 
                     type="submit"
-                    class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    class="btn-primary">
                     Apply Filter
                 </button>
             </div>
@@ -65,80 +63,80 @@
     {% if stats.months %}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div class="bg-blue-50 p-6 rounded-lg border-l-4 border-blue-500">
-            <div class="text-sm text-gray-600 mb-1">Start Networth</div>
-            <div class="text-2xl font-bold text-blue-700">
+            <div class="stat-label">Start Networth</div>
+            <div class="stat-value">
                 {% if stats.networth_by_month %}
                     {{ format_currency(stats.networth_by_month[0].networth) }}
                 {% else %}
                     $0.00
                 {% endif %}
             </div>
-            <div class="text-xs text-gray-500 mt-1">
+            <div class="text-xs wt-mute mt-1">
                 {{ stats.start_month }}
             </div>
         </div>
         
         <div class="bg-green-50 p-6 rounded-lg border-l-4 border-green-500">
-            <div class="text-sm text-gray-600 mb-1">End Networth</div>
-            <div class="text-2xl font-bold text-green-700">
+            <div class="stat-label">End Networth</div>
+            <div class="stat-value">
                 {% if stats.networth_by_month %}
                     {{ format_currency(stats.networth_by_month[-1].networth) }}
                 {% else %}
                     $0.00
                 {% endif %}
             </div>
-            <div class="text-xs text-gray-500 mt-1">
+            <div class="text-xs wt-mute mt-1">
                 {{ stats.end_month }}
             </div>
         </div>
         
         <div class="bg-purple-50 p-6 rounded-lg border-l-4 border-purple-500">
-            <div class="text-sm text-gray-600 mb-1">Avg Monthly Gain</div>
-            <div class="text-2xl font-bold {{ 'text-green-700' if stats.avg_monthly_networth_gain >= 0 else 'text-red-700' }}">
+            <div class="stat-label">Avg Monthly Gain</div>
+            <div class="text-2xl font-bold {{ 'wt-pos' if stats.avg_monthly_networth_gain >= 0 else 'wt-neg' }}">
                 {{ format_delta(stats.avg_monthly_networth_gain) }}
             </div>
-            <div class="text-xs text-gray-500 mt-1">
+            <div class="text-xs wt-mute mt-1">
                 Per month
             </div>
         </div>
     </div>
 
     <!-- Networth Timeline -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <div class="wt-panel p-6 mb-6">
         <div class="flex justify-between items-center mb-4">
-            <h2 class="text-2xl font-semibold text-gray-800">Networth Timeline</h2>
+            <h2 class="text-2xl font-semibold wt-body">Networth Timeline</h2>
             <a href="/wealth/entries/summary/csv?start_month={{ start_month }}&end_month={{ end_month }}" 
-               class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+               class="btn-primary">
                 📥 Export CSV
             </a>
         </div>
         
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+            <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
+                <thead class="wt-surface-soft">
                     <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th scope="col" >
                             Month
                         </th>
-                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="num">
                             Networth
                         </th>
-                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="num">
                             Change
                         </th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                <tbody class="bg-white">
                     {% for item in stats.networth_by_month %}
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap">
+                    <tr class="hover:wt-surface-soft">
+                        <td>
                             <a href="/wealth/entries/{{ item.month }}" 
-                               class="text-sm font-medium text-blue-600 hover:text-blue-800">
+                               class="text-sm font-medium wt-info hover:wt-info">
                                 {{ item.month }}
                             </a>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right">
-                            <div class="text-sm font-semibold text-gray-900">
+                            <div class="text-sm font-semibold wt-ink">
                                 {{ format_currency(item.networth) }}
                             </div>
                         </td>
@@ -146,23 +144,23 @@
                             {% if loop.index > 1 %}
                                 {% set prev_networth = stats.networth_by_month[loop.index - 2].networth %}
                                 {% set change = item.networth - prev_networth %}
-                                <div class="text-sm font-semibold {{ 'text-green-600' if change >= 0 else 'text-red-600' }}">
+                                <div class="text-sm font-semibold {{ 'wt-pos' if change >= 0 else 'wt-neg' }}">
                                     {{ format_delta(change) }}
                                 </div>
                             {% else %}
-                                <div class="text-sm text-gray-400">-</div>
+                                <div class="text-sm wt-ash">-</div>
                             {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
-            </table>
+            </table></div>
         </div>
     </div>
 
     <!-- Simple Chart Visualization -->
-    <div class="bg-white rounded-lg shadow-md p-6">
-        <h2 class="text-2xl font-semibold text-gray-800 mb-4">Networth Trend</h2>
+    <div class="wt-panel p-6">
+        <h2 class="text-2xl font-semibold wt-body mb-4">Networth Trend</h2>
         
         <div class="relative h-64">
             {% if stats.networth_by_month|length > 0 %}
@@ -174,27 +172,27 @@
                     {% for item in stats.networth_by_month %}
                         {% set height_pct = ((item.networth - min_networth) / range * 80 + 10) if range > 0 else 50 %}
                         <div class="flex flex-col items-center">
-                            <div class="bg-blue-500 hover:bg-blue-600 w-8 rounded-t transition-all cursor-pointer" 
+                            <div class="btn-primary" 
                                  style="height: {{ height_pct }}%"
                                  title="{{ item.month }}: {{ format_currency(item.networth) }}">
                             </div>
-                            <div class="text-xs text-gray-600 mt-2 transform -rotate-45 origin-top-left">
+                            <div class="text-xs wt-mute mt-2 transform -rotate-45 origin-top-left">
                                 {{ item.month[-2:] }}
                             </div>
                         </div>
                     {% endfor %}
                 </div>
             {% else %}
-                <div class="flex items-center justify-center h-full text-gray-500">
+                <div class="flex items-center justify-center h-full wt-mute">
                     No data available for chart
                 </div>
             {% endif %}
         </div>
     </div>
     {% else %}
-    <div class="bg-white rounded-lg shadow-md p-8 text-center">
-        <p class="text-lg text-gray-600 mb-4">No data available for the selected range</p>
-        <p class="text-sm text-gray-500">Try adjusting your date range or add some wealth entries</p>
+    <div class="wt-panel p-8 text-center">
+        <p class="text-lg wt-mute mb-4">No data available for the selected range</p>
+        <p class="text-sm wt-mute">Try adjusting your date range or add some wealth entries</p>
     </div>
     {% endif %}
 </div>

@@ -1,13 +1,13 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 
 {% block title %}Assets - Wealth Tracker{% endblock %}
 
 {% block content %}
-<div class="px-4 py-6">
+<div class="space-y-6">
     <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-900">Assets</h1>
+        <h1 class="page-title">Assets</h1>
         <button 
-            class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            class="btn-primary"
             hx-get="/wealth/assets/new"
             hx-target="#modal-container">
             ➕ Add New Asset
@@ -19,17 +19,16 @@
         <input 
             type="text"
             name="query"
-            placeholder="Search assets..."
-            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Search assets..." class="w-full"
             hx-get="/wealth/assets"
             hx-trigger="keyup changed delay:300ms"
             hx-target="#asset-list">
     </div>
 
     <!-- Assets list -->
-    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+    <div class="wt-panel overflow-hidden">
         <div id="asset-list">
-            {% include "partials/asset_list_rows.html" %}
+            {% include"partials/asset_list_rows.html" %}
         </div>
     </div>
 </div>

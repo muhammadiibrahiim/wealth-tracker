@@ -1,89 +1,89 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 
 {% block title %}Investments{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
+<div class="space-y-6">
     <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-900">Investments</h1>
+        <h1 class="text-3xl font-bold wt-ink">Investments</h1>
         <button 
             hx-get="/investments/select-type" 
             hx-target="#modal-container" 
             hx-swap="innerHTML"
-            class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition">
+            class="btn-primary">
             + Add Investment
         </button>
     </div>
 
     {% if investments %}
-    <div class="bg-white shadow-md rounded-lg overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
+    <div class="wt-panel  overflow-hidden">
+        <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
+            <thead class="wt-surface-soft">
                 <tr>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" >
                         Name
                     </th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" >
                         Total Investment
                     </th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" >
                         Discount Rate
                     </th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" >
                         Actions
                     </th>
                 </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
+            <tbody class="bg-white">
                 {% for inv in investments %}
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                <tr class="hover:wt-surface-soft">
+                    <td>
                         {{ inv.name }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        Rs {{ "{:,.2f}".format(inv.total_investment_value) }}
+                    <td>
+                        Rs {{"{:,.2f}".format(inv.total_investment_value) }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {{ "{:.3f}".format(inv.discount_rate_annual_percent) }}%
+                    <td>
+                        {{"{:.3f}".format(inv.discount_rate_annual_percent) }}%
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                    <td>
                         <a 
                             href="/investments/{{ inv.id }}" 
-                            class="text-blue-600 hover:text-blue-900">
+                            class="wt-info hover:text-blue-900">
                             View
                         </a>
                         <button 
                             hx-get="/investments/{{ inv.id }}/edit" 
                             hx-target="#modal-container" 
                             hx-swap="innerHTML"
-                            class="text-green-600 hover:text-green-900">
+                            class="wt-pos hover:text-green-900">
                             Edit
                         </button>
                         <button 
                             hx-post="/investments/{{ inv.id }}/delete" 
                             hx-confirm="Are you sure you want to delete this investment?"
-                            class="text-red-600 hover:text-red-900">
+                            class="wt-neg hover:text-red-900">
                             Delete
                         </button>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
-        </table>
+        </table></div>
     </div>
     {% else %}
-    <div class="bg-white shadow-md rounded-lg p-12 text-center">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div class="wt-panel  p-12 text-center">
+        <svg class="mx-auto h-12 w-12 wt-ash" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
         </svg>
-        <h3 class="mt-2 text-sm font-medium text-gray-900">No investments</h3>
-        <p class="mt-1 text-sm text-gray-500">Get started by adding a new investment.</p>
+        <h3 class="mt-2 text-sm font-medium wt-ink">No investments</h3>
+        <p class="mt-1 text-sm wt-mute">Get started by adding a new investment.</p>
         <div class="mt-6">
             <button 
                 hx-get="/investments/select-type" 
                 hx-target="#modal-container" 
                 hx-swap="innerHTML"
-                class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                class="btn-primary">
                 + Add Investment
             </button>
         </div>

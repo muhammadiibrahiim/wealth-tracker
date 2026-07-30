@@ -1,47 +1,45 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 
 {% block title %}Add Wealth Entry - Wealth Tracker{% endblock %}
 
 {% block content %}
-<div class="px-4 py-6 max-w-4xl mx-auto">
+<div class="space-y-6">
     <div class="mb-6">
-        <a href="/wealth/entries" class="text-blue-600 hover:text-blue-800">
+        <a href="/wealth/entries" class="wt-info hover:wt-info">
             ← Back to Entries
         </a>
     </div>
 
-    <h1 class="text-3xl font-bold text-gray-900 mb-6">Add Wealth Entry</h1>
+    <h1 class="page-title">Add Wealth Entry</h1>
 
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <div class="wt-panel p-6 mb-6">
         <div class="mb-6">
-            <label for="month" class="block text-sm font-medium text-gray-700 mb-2">
+            <label for="month" class="field-label">
                 Select Month
             </label>
             <input 
                 type="month"
                 id="month"
                 value="{{ month }}"
-                class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 onchange="window.location.href = '/wealth/entries/new?month=' + this.value">
-            <p class="text-sm text-gray-500 mt-1">Currently editing: <strong>{{ month }}</strong></p>
-            <p class="text-xs text-gray-400 mt-1">You can select any month, including previous months</p>
+            <p class="text-sm wt-mute mt-1">Currently editing: <strong>{{ month }}</strong></p>
+            <p class="text-xs wt-ash mt-1">You can select any month, including previous months</p>
         </div>
 
         <!-- Add Valuation Form -->
         <div class="border-t pt-6">
-            <h3 class="text-lg font-semibold text-gray-800 mb-4">Add Asset Valuation</h3>
+            <h3 class="text-lg font-semibold wt-body mb-4">Add Asset Valuation</h3>
             <form id="add-valuation-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <input type="hidden" name="month" value="{{ month }}">
                 
                 <div>
-                    <label for="asset_id" class="block text-sm font-medium text-gray-700 mb-2">
+                    <label for="asset_id" class="field-label">
                         Asset
                     </label>
                     <select 
                         id="asset_id"
                         name="asset_id"
-                        required
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                        required class="w-full">
                         <option value="">Select an asset...</option>
                         {% for asset in assets %}
                         <option value="{{ asset.id }}">{{ asset.name }}</option>
@@ -50,7 +48,7 @@
                 </div>
                 
                 <div>
-                    <label for="value" class="block text-sm font-medium text-gray-700 mb-2">
+                    <label for="value" class="field-label">
                         Value (PKR)
                     </label>
                     <input 
@@ -58,16 +56,15 @@
                         id="value"
                         name="value"
                         step="0.01"
-                        required
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        required class="w-full"
                         placeholder="0.00">
-                    <p class="text-xs text-gray-500 mt-1">Negative values allowed for liabilities/debts</p>
+                    <p class="text-xs wt-mute mt-1">Negative values allowed for liabilities/debts</p>
                 </div>
                 
                 <div class="flex items-end">
                     <button 
                         type="submit"
-                        class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                        class="btn-primary"
                         hx-post="/wealth/entries/add_row"
                         hx-include="#add-valuation-form"
                         hx-target="#valuation-rows">
@@ -79,10 +76,10 @@
     </div>
 
     <!-- Existing Valuations -->
-    <div class="bg-white rounded-lg shadow-md p-6">
-        <h3 class="text-lg font-semibold text-gray-800 mb-4">Valuations for {{ month }}</h3>
+    <div class="wt-panel p-6">
+        <h3 class="text-lg font-semibold wt-body mb-4">Valuations for {{ month }}</h3>
         <div id="valuation-rows">
-            {% include "partials/valuation_rows.html" %}
+            {% include"partials/valuation_rows.html" %}
         </div>
     </div>
 
@@ -90,7 +87,7 @@
     {% if existing_valuations %}
     <div class="mt-6 flex justify-end space-x-4">
         <a href="/wealth/entries/{{ month }}" 
-           class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+           class="btn-primary">
             View Month Detail →
         </a>
     </div>

@@ -12,21 +12,21 @@
                 <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                     <div class="sm:flex sm:items-start">
                         <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4" id="modal-title">
+                            <h3 class="text-lg leading-6 font-medium wt-ink mb-4" id="modal-title">
                                 Edit Investment - {{ investment.name }}
                             </h3>
                             
                             <div class="space-y-4">
                                 <!-- Name -->
                                 <div>
-                                    <label for="name" class="block text-sm font-medium text-gray-700">Name *</label>
+                                    <label for="name" class="field-label">Name *</label>
                                     <input type="text" name="name" id="name" value="{{ investment.name }}" required
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                 </div>
 
                                 <!-- Total Investment Value -->
                                 <div>
-                                    <label for="total_investment_value" class="block text-sm font-medium text-gray-700">Total Investment Value (Rs) *</label>
+                                    <label for="total_investment_value" class="field-label">Total Investment Value (Rs) *</label>
                                     <input type="number" step="0.01" name="total_investment_value" id="total_investment_value" value="{{ investment.total_investment_value }}" required
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                 </div>
@@ -35,80 +35,80 @@
                                 <div>
                                     <label class="flex items-center">
                                         <input type="checkbox" name="installments" value="true" id="installments-check" {% if investment.installments %}checked{% endif %}
-                                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                                        <span class="ml-2 text-sm text-gray-700">Pay investment cost in installments (spread over time)</span>
+                                            class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300 rounded">
+                                        <span class="ml-2 text-sm wt-body">Pay investment cost in installments (spread over time)</span>
                                     </label>
-                                    <p class="ml-6 mt-1 text-xs text-gray-500">If unchecked, entire investment is paid upfront at month 0</p>
+                                    <p class="ml-6 mt-1 text-xs wt-mute">If unchecked, entire investment is paid upfront at month 0</p>
                                 </div>
 
                                 <!-- Installment Value & Months -->
                                 <div id="installment-fields" class="{% if not investment.installments %}hidden{% endif %} space-y-4">
                                     <div>
-                                        <label for="installment_value" class="block text-sm font-medium text-gray-700">Installment Payment (Rs per month)</label>
+                                        <label for="installment_value" class="field-label">Installment Payment (Rs per month)</label>
                                         <input type="number" step="0.01" name="installment_value" id="installment_value" value="{{ investment.installment_value or '' }}" oninput="calculateInstallmentMonths()"
                                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                        <p class="mt-1 text-xs text-gray-500">Amount paid each month (as outflow/cost)</p>
+                                        <p class="mt-1 text-xs wt-mute">Amount paid each month (as outflow/cost)</p>
                                     </div>
                                     <div>
-                                        <label for="installment_months" class="block text-sm font-medium text-gray-700">Number of Installment Months</label>
+                                        <label for="installment_months" class="field-label">Number of Installment Months</label>
                                         <input type="number" name="installment_months" id="installment_months" value="{{ investment.installment_months or '' }}"
                                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                        <p id="installment-info" class="mt-1 text-xs text-blue-600">Calculated based on total investment ÷ monthly installment</p>
+                                        <p id="installment-info" class="mt-1 text-xs wt-info">Calculated based on total investment ÷ monthly installment</p>
                                     </div>
                                 </div>
 
                                 <!-- Gain in Income -->
                                 <div>
-                                    <label for="gain_in_income_value" class="block text-sm font-medium text-gray-700">Monthly Income Generated (Rs)</label>
+                                    <label for="gain_in_income_value" class="field-label">Monthly Income Generated (Rs)</label>
                                     <input type="number" step="0.01" name="gain_in_income_value" id="gain_in_income_value" value="{{ investment.gain_in_income_value }}"
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                    <p class="mt-1 text-xs text-gray-500">Income amount per period (system will calculate the % automatically)</p>
+                                    <p class="mt-1 text-xs wt-mute">Income amount per period (system will calculate the % automatically)</p>
                                 </div>
 
                                 <!-- Cadence -->
                                 <div>
-                                    <label for="cadence" class="block text-sm font-medium text-gray-700">Income Payment Frequency</label>
+                                    <label for="cadence" class="field-label">Income Payment Frequency</label>
                                     <select name="cadence" id="cadence"
                                         class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
                                         {% for option in cadence_options %}
                                         <option value="{{ option }}" {% if option == investment.cadence.value %}selected{% endif %}>{{ option }}</option>
                                         {% endfor %}
                                     </select>
-                                    <p class="mt-1 text-xs text-gray-500">How often the income is received (inflow)</p>
+                                    <p class="mt-1 text-xs wt-mute">How often the income is received (inflow)</p>
                                 </div>
 
                                 <!-- Income Growth -->
                                 <div>
                                     <label class="flex items-center">
                                         <input type="checkbox" name="income_increases" value="true" id="income-increase-check" {% if investment.income_increases %}checked{% endif %}
-                                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                                        <span class="ml-2 text-sm text-gray-700">Income increases over time (growth rate)</span>
+                                            class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300 rounded">
+                                        <span class="ml-2 text-sm wt-body">Income increases over time (growth rate)</span>
                                     </label>
                                 </div>
 
                                 <!-- Income Growth Details -->
                                 <div id="income-increase-fields" class="{% if not investment.income_increases %}hidden{% endif %} space-y-4 pl-6 border-l-2 border-blue-200">
                                     <div>
-                                        <label for="income_increase_rate_percent" class="block text-sm font-medium text-gray-700">Income Growth Rate (%)</label>
+                                        <label for="income_increase_rate_percent" class="field-label">Income Growth Rate (%)</label>
                                         <input type="number" step="0.001" name="income_increase_rate_percent" id="income_increase_rate_percent" value="{{ investment.income_increase_rate_percent }}"
                                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                        <p class="mt-1 text-xs text-gray-500">How much income increases each period (e.g., 20% means income goes from Rs 5,000 to Rs 6,000)</p>
+                                        <p class="mt-1 text-xs wt-mute">How much income increases each period (e.g., 20% means income goes from Rs 5,000 to Rs 6,000)</p>
                                     </div>
                                     <div>
-                                        <label for="income_increase_cadence" class="block text-sm font-medium text-gray-700">Income Growth Frequency</label>
+                                        <label for="income_increase_cadence" class="field-label">Income Growth Frequency</label>
                                         <select name="income_increase_cadence" id="income_increase_cadence"
                                             class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
                                             {% for option in cadence_options %}
                                             <option value="{{ option }}" {% if option == investment.income_increase_cadence.value %}selected{% endif %}>{{ option }}</option>
                                             {% endfor %}
                                         </select>
-                                        <p class="mt-1 text-xs text-gray-500">How often the income increases</p>
+                                        <p class="mt-1 text-xs wt-mute">How often the income increases</p>
                                     </div>
                                 </div>
 
                                 <!-- One-off Inflow -->
                                 <div>
-                                    <label for="one_off_inflow_value" class="block text-sm font-medium text-gray-700">One-off Inflow Value (Rs)</label>
+                                    <label for="one_off_inflow_value" class="field-label">One-off Inflow Value (Rs)</label>
                                     <input type="number" step="0.01" name="one_off_inflow_value" id="one_off_inflow_value" value="{{ investment.one_off_inflow_value }}"
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                 </div>
@@ -118,8 +118,8 @@
                                 <div>
                                     <label class="flex items-center">
                                         <input type="checkbox" id="has-salvage-check" {% if investment.salvage_value > 0 %}checked{% endif %}
-                                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                                        <span class="ml-2 text-sm text-gray-700">Asset has resale/salvage value at end</span>
+                                            class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300 rounded">
+                                        <span class="ml-2 text-sm wt-body">Asset has resale/salvage value at end</span>
                                     </label>
                                 </div>
 
@@ -128,21 +128,21 @@
                                     <div>
                                         <label class="flex items-center">
                                             <input type="checkbox" name="asset_appreciates" value="true" id="appreciation-check" {% if investment.asset_appreciates %}checked{% endif %}
-                                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                                            <span class="ml-2 text-sm text-gray-700">Asset value changes over time (appreciation/depreciation)</span>
+                                                class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300 rounded">
+                                            <span class="ml-2 text-sm wt-body">Asset value changes over time (appreciation/depreciation)</span>
                                         </label>
                                     </div>
 
                                     <!-- Appreciation Details -->
                                     <div id="appreciation-fields" class="{% if not investment.asset_appreciates %}hidden{% endif %} space-y-4">
                                         <div>
-                                            <label for="appreciation_rate_percent" class="block text-sm font-medium text-gray-700">Appreciation/Depreciation Rate (% per period)</label>
+                                            <label for="appreciation_rate_percent" class="field-label">Appreciation/Depreciation Rate (% per period)</label>
                                             <input type="number" step="0.001" name="appreciation_rate_percent" id="appreciation_rate_percent" value="{{ investment.appreciation_rate_percent }}" oninput="calculateSalvageValue()"
                                                 class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                            <p class="mt-1 text-xs text-gray-500">Positive = appreciation, Negative = depreciation</p>
+                                            <p class="mt-1 text-xs wt-mute">Positive = appreciation, Negative = depreciation</p>
                                         </div>
                                         <div>
-                                            <label for="appreciation_cadence" class="block text-sm font-medium text-gray-700">Appreciation Frequency</label>
+                                            <label for="appreciation_cadence" class="field-label">Appreciation Frequency</label>
                                             <select name="appreciation_cadence" id="appreciation_cadence" onchange="calculateSalvageValue()"
                                                 class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
                                                 {% for option in cadence_options %}
@@ -154,10 +154,10 @@
 
                                     <!-- Salvage Value -->
                                     <div>
-                                        <label for="salvage_value" class="block text-sm font-medium text-gray-700">Salvage/Resale Value (Rs)</label>
+                                        <label for="salvage_value" class="field-label">Salvage/Resale Value (Rs)</label>
                                         <input type="number" step="0.01" name="salvage_value" id="salvage_value" value="{{ investment.salvage_value }}"
                                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                        <p id="salvage-info" class="mt-1 text-xs text-blue-600">Auto-calculated based on appreciation rate</p>
+                                        <p id="salvage-info" class="mt-1 text-xs wt-info">Auto-calculated based on appreciation rate</p>
                                     </div>
                                 </div>
                                 {% else %}
@@ -170,42 +170,42 @@
 
                                 <!-- Discount Rate -->
                                 <div>
-                                    <label for="discount_rate_annual_percent" class="block text-sm font-medium text-gray-700">Discount Rate (Annual %) *</label>
+                                    <label for="discount_rate_annual_percent" class="field-label">Discount Rate (Annual %) *</label>
                                     <input type="number" step="0.001" min="0" max="200" name="discount_rate_annual_percent" id="discount_rate_annual_percent" value="{{ investment.discount_rate_annual_percent }}" required
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                    <p class="mt-1 text-xs text-gray-500">Range: 0% to 200%</p>
+                                    <p class="mt-1 text-xs wt-mute">Range: 0% to 200%</p>
                                 </div>
 
                                 <!-- Reinvestment Rate -->
                                 <div>
-                                    <label for="reinvestment_rate_annual_percent" class="block text-sm font-medium text-gray-700">Reinvestment Rate (Annual %)</label>
+                                    <label for="reinvestment_rate_annual_percent" class="field-label">Reinvestment Rate (Annual %)</label>
                                     <input type="number" step="0.001" min="0" max="200" name="reinvestment_rate_annual_percent" id="reinvestment_rate_annual_percent" value="{{ investment.reinvestment_rate_annual_percent }}"
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                 </div>
 
                                 <!-- Analysis Horizon -->
                                 <div>
-                                    <label for="analysis_horizon_months" class="block text-sm font-medium text-gray-700">Analysis Horizon (Months)</label>
+                                    <label for="analysis_horizon_months" class="field-label">Analysis Horizon (Months)</label>
                                     <input type="number" name="analysis_horizon_months" id="analysis_horizon_months" value="{{ investment.analysis_horizon_months }}"
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                 </div>
 
                                 <!-- Break-even Fields -->
                                 <div class="border-t pt-4">
-                                    <h4 class="text-sm font-medium text-gray-700 mb-2">Break-even Analysis (Optional)</h4>
+                                    <h4 class="text-sm font-medium wt-body mb-2">Break-even Analysis (Optional)</h4>
                                     <div class="space-y-4">
                                         <div>
-                                            <label for="break_even_fixed_costs" class="block text-sm font-medium text-gray-700">Fixed Costs (Rs)</label>
+                                            <label for="break_even_fixed_costs" class="field-label">Fixed Costs (Rs)</label>
                                             <input type="number" step="0.01" name="break_even_fixed_costs" id="break_even_fixed_costs" value="{{ investment.break_even_fixed_costs }}"
                                                 class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                         </div>
                                         <div>
-                                            <label for="break_even_price_per_unit" class="block text-sm font-medium text-gray-700">Price per Unit (Rs)</label>
+                                            <label for="break_even_price_per_unit" class="field-label">Price per Unit (Rs)</label>
                                             <input type="number" step="0.01" name="break_even_price_per_unit" id="break_even_price_per_unit" value="{{ investment.break_even_price_per_unit }}"
                                                 class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                         </div>
                                         <div>
-                                            <label for="break_even_variable_cost_per_unit" class="block text-sm font-medium text-gray-700">Variable Cost per Unit (Rs)</label>
+                                            <label for="break_even_variable_cost_per_unit" class="field-label">Variable Cost per Unit (Rs)</label>
                                             <input type="number" step="0.01" name="break_even_variable_cost_per_unit" id="break_even_variable_cost_per_unit" value="{{ investment.break_even_variable_cost_per_unit }}"
                                                 class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                         </div>
@@ -214,7 +214,7 @@
 
                                 <!-- Notes -->
                                 <div>
-                                    <label for="notes" class="block text-sm font-medium text-gray-700">Notes</label>
+                                    <label for="notes" class="field-label">Notes</label>
                                     <textarea name="notes" id="notes" rows="3"
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">{{ investment.notes or '' }}</textarea>
                                 </div>
@@ -222,13 +222,13 @@
                         </div>
                     </div>
                 </div>
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <div class="wt-surface-soft px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                     <button type="submit"
-                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm">
+                        class="btn-primary">
                         Update
                     </button>
                     <button type="button" onclick="document.getElementById('modal-container').innerHTML = ''"
-                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium wt-body hover:wt-surface-soft focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
                         Cancel
                     </button>
                 </div>

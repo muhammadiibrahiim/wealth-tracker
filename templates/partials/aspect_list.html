@@ -1,65 +1,65 @@
 <!-- Aspect list partial - swapped via HTMX -->
 {% for ad in aspect_data %}
-<div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-4 overflow-hidden">
-    <div class="px-5 py-3 flex items-center justify-between bg-gray-50" style="border-left: 4px solid {{ ad.aspect.color }}">
+<div class="wt-panel border border-gray-200 mb-4 overflow-hidden">
+    <div class="px-5 py-3 flex items-center justify-between wt-surface-soft" style="border-left: 4px solid {{ ad.aspect.color }}">
         <div class="flex items-center space-x-2">
             <span class="text-xl">{{ ad.aspect.icon }}</span>
-            <h3 class="text-lg font-semibold text-gray-800">{{ ad.aspect.name }}</h3>
-            <span class="text-xs text-gray-400 ml-2">{{ ad.habit_count }} habit{{ 's' if ad.habit_count != 1 }}</span>
+            <h3 class="text-lg font-semibold wt-body">{{ ad.aspect.name }}</h3>
+            <span class="text-xs wt-ash ml-2">{{ ad.habit_count }} habit{{ 's' if ad.habit_count != 1 }}</span>
         </div>
         <div class="flex items-center space-x-2">
             <button onclick="openEditAspect({{ ad.aspect.id }}, '{{ ad.aspect.name }}', '{{ ad.aspect.icon }}', '{{ ad.aspect.color }}')"
-                    class="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
+                    class="wt-info hover:wt-info text-sm font-medium">Edit</button>
             <button hx-delete="/habits/aspects/{{ ad.aspect.id }}" 
                     hx-target="#aspect-list" hx-swap="innerHTML"
                     hx-confirm="Delete '{{ ad.aspect.name }}' and all its habits?"
-                    class="text-red-600 hover:text-red-800 text-sm font-medium">Delete</button>
+                    class="wt-neg hover:wt-neg text-sm font-medium">Delete</button>
         </div>
     </div>
     
     {% if ad.habits %}
     <div class="divide-y divide-gray-100">
         {% for habit in ad.habits %}
-        <div class="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
+        <div class="px-5 py-3 flex items-center justify-between hover:wt-surface-soft">
             <div class="flex items-center space-x-3">
                 <span class="w-2 h-2 rounded-full {% if habit.is_active %}bg-green-400{% else %}bg-gray-300{% endif %}"></span>
                 <div>
-                    <span class="text-sm font-medium {% if not habit.is_active %}text-gray-400{% else %}text-gray-800{% endif %}">
+                    <span class="text-sm font-medium {% if not habit.is_active %}wt-ash{% else %}wt-body{% endif %}">
                         {{ habit.name }}
                     </span>
                     {% if not habit.is_recurring %}
-                        <span class="ml-1 px-1.5 py-0.5 text-xs bg-amber-100 text-amber-700 rounded">one-off</span>
+                        <span class="ml-1 px-1.5 py-0.5 text-xs bg-amber-100 wt-warn rounded">one-off</span>
                     {% endif %}
                     {% if not habit.is_active %}
-                        <span class="ml-1 px-1.5 py-0.5 text-xs bg-gray-100 text-gray-500 rounded">inactive</span>
+                        <span class="ml-1 px-1.5 py-0.5 text-xs bg-gray-100 wt-mute rounded">inactive</span>
                     {% endif %}
                     {% if habit.description %}
-                        <p class="text-xs text-gray-400">{{ habit.description }}</p>
+                        <p class="text-xs wt-ash">{{ habit.description }}</p>
                     {% endif %}
                 </div>
             </div>
             <div class="flex items-center space-x-3">
                 {% if habit.is_recurring %}
-                <span class="text-xs text-gray-400">{{ habit.target_per_week }}x/week</span>
+                <span class="text-xs wt-ash">{{ habit.target_per_week }}x/week</span>
                 {% endif %}
                 <button onclick="openEditHabit({{ habit.id }}, '{{ habit.name }}', '{{ habit.description or '' }}', {{ 'true' if habit.is_recurring else 'false' }}, {{ habit.target_per_week }}, {{ 'true' if habit.is_active else 'false' }})"
-                        class="text-blue-600 hover:text-blue-800 text-xs font-medium">Edit</button>
+                        class="wt-info hover:wt-info text-xs font-medium">Edit</button>
                 <button hx-delete="/habits/habits/{{ habit.id }}"
                         hx-target="#aspect-list" hx-swap="innerHTML"
                         hx-confirm="Delete habit '{{ habit.name }}'?"
-                        class="text-red-600 hover:text-red-800 text-xs font-medium">Delete</button>
+                        class="wt-neg hover:wt-neg text-xs font-medium">Delete</button>
             </div>
         </div>
         {% endfor %}
     </div>
     {% else %}
-    <div class="px-5 py-3 text-sm text-gray-400 italic">No habits added yet</div>
+    <div class="px-5 py-3 text-sm wt-ash italic">No habits added yet</div>
     {% endif %}
 </div>
 {% endfor %}
 
 {% if not aspect_data %}
-<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-    <p class="text-gray-500">No life aspects defined. Add one above to get started.</p>
+<div class="wt-panel border border-gray-200 p-8 text-center">
+    <p class="wt-mute">No life aspects defined. Add one above to get started.</p>
 </div>
 {% endif %}

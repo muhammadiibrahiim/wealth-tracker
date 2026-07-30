@@ -1,27 +1,27 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 
 {% block title %}Daily Habits - Atomic Habits Tracker{% endblock %}
 
 {% block content %}
-<div class="px-4 py-6 max-w-5xl mx-auto">
+<div class="space-y-6">
     
     <div class="flex items-center justify-between mb-6">
         <div>
-            <h1 class="text-3xl font-bold text-gray-900">🎯 1% Daily Improvement</h1>
-            <p class="text-gray-500 mt-1">Track your daily habits across life aspects</p>
+            <h1 class="text-3xl font-bold wt-ink">🎯 1% Daily Improvement</h1>
+            <p class="wt-mute mt-1">Track your daily habits across life aspects</p>
         </div>
         <div class="flex space-x-2">
-            <a href="/habits/aspects" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm">
+            <a href="/habits/aspects">
                 ⚙️ Manage Aspects
             </a>
-            <a href="/habits/stats" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm">
+            <a href="/habits/stats">
                 📊 Stats
             </a>
         </div>
     </div>
 
     <div id="daily-content">
-        {% include "partials/daily_habits_content.html" %}
+        {% include"partials/daily_habits_content.html" %}
     </div>
 </div>
 {% endblock %}

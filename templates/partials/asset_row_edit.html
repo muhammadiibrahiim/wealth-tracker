@@ -1,9 +1,9 @@
-<tr class="hover:bg-gray-50 bg-yellow-50" id="asset-row-{{ asset.asset_id }}">
-    <td class="px-6 py-4 whitespace-nowrap">
-        <div class="text-sm font-medium text-gray-900">{{ asset.asset_name }}</div>
+<tr class="hover:wt-surface-soft bg-yellow-50" id="asset-row-{{ asset.asset_id }}">
+    <td>
+        <div class="text-sm font-medium wt-ink">{{ asset.asset_name }}</div>
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-right">
-        <div class="text-sm text-gray-600">{{ format_currency(asset.prev_value) }}</div>
+        <div class="text-sm wt-mute">{{ format_currency(asset.prev_value) }}</div>
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-right">
         <form id="edit-form-{{ asset.asset_id }}" class="inline-block">
@@ -18,11 +18,11 @@
         </form>
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-right">
-        <div class="text-sm text-gray-500">—</div>
+        <div class="text-sm wt-mute">—</div>
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-right space-x-2">
         <button 
-            class="text-green-600 hover:text-green-800 text-sm font-medium"
+            class="wt-pos hover:wt-pos text-sm font-medium"
             hx-post="/wealth/entries/{{ year_month }}/update/{{ asset.asset_id }}"
             hx-include="#edit-form-{{ asset.asset_id }}"
             hx-target="closest tr"
@@ -30,7 +30,7 @@
             Save
         </button>
         <button 
-            class="text-gray-600 hover:text-gray-800 text-sm font-medium"
+            class="wt-mute hover:wt-body text-sm font-medium"
             hx-get="/wealth/entries/{{ year_month }}/cancel/{{ asset.asset_id }}"
             hx-target="closest tr"
             hx-swap="outerHTML">

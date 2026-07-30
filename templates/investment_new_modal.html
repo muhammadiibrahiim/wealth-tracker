@@ -15,10 +15,10 @@
                 <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                     <div class="sm:flex sm:items-start">
                         <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-2" id="modal-title">
+                            <h3 class="text-lg leading-6 font-medium wt-ink mb-2" id="modal-title">
                                 New {% if investment_type == 'asset' %}Asset{% else %}Business/Project{% endif %} Investment
                             </h3>
-                            <p class="text-sm text-gray-500 mb-4">
+                            <p class="text-sm wt-mute mb-4">
                                 {% if investment_type == 'asset' %}
                                 Asset with potential appreciation and salvage value
                                 {% else %}
@@ -29,23 +29,23 @@
                             <div class="space-y-4">
                                 <!-- Investment Start Date -->
                                 <div>
-                                    <label for="investment_start_date" class="block text-sm font-medium text-gray-700">Investment Start Date *</label>
+                                    <label for="investment_start_date" class="field-label">Investment Start Date *</label>
                                     <input type="date" name="investment_start_date" id="investment_start_date" required
                                         value="{{ today }}"
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                    <p class="mt-1 text-xs text-gray-500">Reference date for calculating custom leverage repayment months</p>
+                                    <p class="mt-1 text-xs wt-mute">Reference date for calculating custom leverage repayment months</p>
                                 </div>
 
                                 <!-- Name -->
                                 <div>
-                                    <label for="name" class="block text-sm font-medium text-gray-700">Name *</label>
+                                    <label for="name" class="field-label">Name *</label>
                                     <input type="text" name="name" id="name" required
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                 </div>
 
                                 <!-- Total Investment Value -->
                                 <div>
-                                    <label for="total_investment_value" class="block text-sm font-medium text-gray-700">Total Investment Value (Rs) *</label>
+                                    <label for="total_investment_value" class="field-label">Total Investment Value (Rs) *</label>
                                     <input type="number" step="0.01" name="total_investment_value" id="total_investment_value" required
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                 </div>
@@ -54,27 +54,27 @@
                                 <div>
                                     <label class="flex items-center">
                                         <input type="checkbox" name="installments" value="true" id="installments-check"
-                                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                            class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300 rounded"
                                             onchange="calculateInstallmentMonths()">
-                                        <span class="ml-2 text-sm text-gray-700">Pay investment cost in installments (spread over time)</span>
+                                        <span class="ml-2 text-sm wt-body">Pay investment cost in installments (spread over time)</span>
                                     </label>
-                                    <p class="ml-6 mt-1 text-xs text-gray-500">If unchecked, entire investment is paid upfront at month 0</p>
+                                    <p class="ml-6 mt-1 text-xs wt-mute">If unchecked, entire investment is paid upfront at month 0</p>
                                 </div>
 
                                 <!-- Installment Value & Months (shown when installments checked) -->
                                 <div id="installment-fields" class="hidden space-y-4">
                                     <div>
-                                        <label for="installment_value" class="block text-sm font-medium text-gray-700">Installment Payment (Rs per month)</label>
+                                        <label for="installment_value" class="field-label">Installment Payment (Rs per month)</label>
                                         <input type="number" step="0.01" name="installment_value" id="installment_value"
                                             oninput="calculateInstallmentMonths()"
                                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                        <p class="mt-1 text-xs text-gray-500">Amount paid each month (as outflow/cost)</p>
+                                        <p class="mt-1 text-xs wt-mute">Amount paid each month (as outflow/cost)</p>
                                     </div>
                                     <div>
-                                        <label for="installment_months" class="block text-sm font-medium text-gray-700">Number of Installment Months (auto-calculated)</label>
+                                        <label for="installment_months" class="field-label">Number of Installment Months (auto-calculated)</label>
                                         <input type="number" name="installment_months" id="installment_months" readonly
                                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-100 sm:text-sm">
-                                        <p class="mt-1 text-xs text-gray-500" id="installment-info">Calculated based on total investment ÷ monthly installment</p>
+                                        <p class="mt-1 text-xs wt-mute" id="installment-info">Calculated based on total investment ÷ monthly installment</p>
                                     </div>
                                 </div>
 
@@ -83,37 +83,37 @@
                                 <div class="border-t pt-4">
                                     <label class="flex items-center">
                                         <input type="checkbox" name="is_leveraged" value="true" id="leverage-check"
-                                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                                        <span class="ml-2 text-sm text-gray-700">Using leverage/borrowed money (loan/debt)</span>
+                                            class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300 rounded">
+                                        <span class="ml-2 text-sm wt-body">Using leverage/borrowed money (loan/debt)</span>
                                     </label>
-                                    <p class="ml-6 mt-1 text-xs text-gray-500">e.g., Taking a loan to finance part of the investment</p>
+                                    <p class="ml-6 mt-1 text-xs wt-mute">e.g., Taking a loan to finance part of the investment</p>
                                 </div>
 
                                 <!-- Leverage Details (shown when leverage checked) -->
                                 <div id="leverage-fields" class="hidden space-y-4 pl-6 border-l-2 border-orange-200">
                                     <div>
-                                        <label for="leverage_amount" class="block text-sm font-medium text-gray-700">Leverage Amount (Rs)</label>
+                                        <label for="leverage_amount" class="field-label">Leverage Amount (Rs)</label>
                                         <input type="number" step="0.01" name="leverage_amount" id="leverage_amount" value="0.00"
                                             oninput="validateCustomRepayments()"
                                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                        <p class="mt-1 text-xs text-gray-500">Amount borrowed (appears as inflow at month 0)</p>
+                                        <p class="mt-1 text-xs wt-mute">Amount borrowed (appears as inflow at month 0)</p>
                                     </div>
 
                                     <!-- Leverage Repayment Type -->
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Repayment Method</label>
+                                        <label class="field-label">Repayment Method</label>
                                         <div class="space-y-2">
                                             <label class="flex items-center">
                                                 <input type="radio" name="leverage_repayment_type" value="equal_installments" id="repayment-equal" checked
-                                                    class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                                    class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300"
                                                     onchange="toggleRepaymentFields()">
-                                                <span class="ml-2 text-sm text-gray-700">Equal monthly installments</span>
+                                                <span class="ml-2 text-sm wt-body">Equal monthly installments</span>
                                             </label>
                                             <label class="flex items-center">
                                                 <input type="radio" name="leverage_repayment_type" value="custom_schedule" id="repayment-custom"
-                                                    class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                                    class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300"
                                                     onchange="toggleRepaymentFields()">
-                                                <span class="ml-2 text-sm text-gray-700">Custom payment schedule (specify amounts and dates)</span>
+                                                <span class="ml-2 text-sm wt-body">Custom payment schedule (specify amounts and dates)</span>
                                             </label>
                                         </div>
                                     </div>
@@ -121,24 +121,24 @@
                                     <!-- Equal Installments Fields -->
                                     <div id="equal-installments-fields" class="space-y-4">
                                         <div>
-                                            <label for="leverage_repayment_months" class="block text-sm font-medium text-gray-700">Repayment Period (Months)</label>
+                                            <label for="leverage_repayment_months" class="field-label">Repayment Period (Months)</label>
                                             <input type="number" min="1" name="leverage_repayment_months" id="leverage_repayment_months" value="1"
                                                 oninput="calculateLeverageMonthlyRepayment()"
                                                 class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                            <p class="mt-1 text-xs text-gray-500">Number of months to repay the loan</p>
+                                            <p class="mt-1 text-xs wt-mute">Number of months to repay the loan</p>
                                         </div>
                                         <div>
-                                            <label for="leverage_monthly_repayment" class="block text-sm font-medium text-gray-700">Monthly Repayment (Rs) - Auto-calculated</label>
+                                            <label for="leverage_monthly_repayment" class="field-label">Monthly Repayment (Rs) - Auto-calculated</label>
                                             <input type="number" step="0.01" name="leverage_monthly_repayment" id="leverage_monthly_repayment" value="0.00" readonly
                                                 class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-100 sm:text-sm">
-                                            <p class="mt-1 text-xs text-gray-500">Calculated: Leverage Amount ÷ Repayment Months</p>
+                                            <p class="mt-1 text-xs wt-mute">Calculated: Leverage Amount ÷ Repayment Months</p>
                                         </div>
                                     </div>
 
                                     <!-- Custom Schedule Fields -->
                                     <div id="custom-schedule-fields" class="hidden space-y-4">
                                         <div class="bg-blue-50 border border-blue-200 rounded-md p-3 mb-3">
-                                            <p class="text-sm text-blue-800">
+                                            <p class="text-sm wt-info">
                                                 Add custom repayment entries below. The total of all repayments must equal the leverage amount.
                                             </p>
                                         </div>
@@ -148,7 +148,7 @@
                                         </div>
 
                                         <button type="button" onclick="addCustomRepayment()" 
-                                            class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                            class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md wt-body bg-white hover:wt-surface-soft focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                                             <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                                             </svg>
@@ -176,10 +176,10 @@
                                 <div class="border-t pt-4">
                                     <label class="flex items-center">
                                         <input type="checkbox" name="has_salvage_value" value="true" id="has-salvage-check"
-                                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                                        <span class="ml-2 text-sm text-gray-700">Asset has salvage/resale value at end of analysis period</span>
+                                            class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300 rounded">
+                                        <span class="ml-2 text-sm wt-body">Asset has salvage/resale value at end of analysis period</span>
                                     </label>
-                                    <p class="ml-6 mt-1 text-xs text-gray-500">e.g., Property can be sold, equipment has resale value</p>
+                                    <p class="ml-6 mt-1 text-xs wt-mute">e.g., Property can be sold, equipment has resale value</p>
                                 </div>
 
                                 <!-- Salvage Value and Appreciation (shown when has_salvage_value checked) -->
@@ -188,21 +188,21 @@
                                     <div>
                                         <label class="flex items-center">
                                             <input type="checkbox" name="asset_appreciates" value="true" id="appreciation-check"
-                                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                                            <span class="ml-2 text-sm text-gray-700">Asset value will change over time (appreciate/depreciate)</span>
+                                                class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300 rounded">
+                                            <span class="ml-2 text-sm wt-body">Asset value will change over time (appreciate/depreciate)</span>
                                         </label>
                                     </div>
                                     
                                     <div id="appreciation-fields" class="hidden space-y-4">
                                         <div>
-                                            <label for="appreciation_rate_percent" class="block text-sm font-medium text-gray-700">Appreciation Rate (% per period)</label>
+                                            <label for="appreciation_rate_percent" class="field-label">Appreciation Rate (% per period)</label>
                                             <input type="number" step="0.001" name="appreciation_rate_percent" id="appreciation_rate_percent" value="0.000"
                                                 oninput="calculateSalvageValue()"
                                                 class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                            <p class="mt-1 text-xs text-gray-500">Positive = appreciation, Negative = depreciation (e.g., 5.0 for 5% growth, -10.0 for 10% decline)</p>
+                                            <p class="mt-1 text-xs wt-mute">Positive = appreciation, Negative = depreciation (e.g., 5.0 for 5% growth, -10.0 for 10% decline)</p>
                                         </div>
                                         <div>
-                                            <label for="appreciation_cadence" class="block text-sm font-medium text-gray-700">Appreciation Frequency</label>
+                                            <label for="appreciation_cadence" class="field-label">Appreciation Frequency</label>
                                             <select name="appreciation_cadence" id="appreciation_cadence"
                                                 onchange="calculateSalvageValue()"
                                                 class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
@@ -210,16 +210,16 @@
                                                 <option value="{{ option }}" {% if option == 'yearly' %}selected{% endif %}>{{ option }}</option>
                                                 {% endfor %}
                                             </select>
-                                            <p class="mt-1 text-xs text-gray-500">How often the value changes</p>
+                                            <p class="mt-1 text-xs wt-mute">How often the value changes</p>
                                         </div>
                                     </div>
 
                                     <!-- Salvage Value (auto-calculated) -->
                                     <div>
-                                        <label for="salvage_value" class="block text-sm font-medium text-gray-700">Salvage/Resale Value (Rs) - Auto-calculated</label>
+                                        <label for="salvage_value" class="field-label">Salvage/Resale Value (Rs) - Auto-calculated</label>
                                         <input type="number" step="0.01" name="salvage_value" id="salvage_value" value="0.00" readonly
                                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-100 sm:text-sm">
-                                        <p class="mt-1 text-xs text-gray-500" id="salvage-info">Calculated based on initial investment and appreciation over analysis period</p>
+                                        <p class="mt-1 text-xs wt-mute" id="salvage-info">Calculated based on initial investment and appreciation over analysis period</p>
                                     </div>
                                 </div>
                                 {% else %}
@@ -233,49 +233,49 @@
                                 {% if investment_type == 'asset' %}
                                 <!-- Gain in Income -->
                                 <div>
-                                    <label for="gain_in_income_value" class="block text-sm font-medium text-gray-700">Monthly Income Generated (Rs)</label>
+                                    <label for="gain_in_income_value" class="field-label">Monthly Income Generated (Rs)</label>
                                     <input type="number" step="0.01" name="gain_in_income_value" id="gain_in_income_value" value="0.00"
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                    <p class="mt-1 text-xs text-gray-500">Income amount per period (system will calculate the % automatically)</p>
+                                    <p class="mt-1 text-xs wt-mute">Income amount per period (system will calculate the % automatically)</p>
                                 </div>
 
                                 <!-- Cadence -->
                                 <div>
-                                    <label for="cadence" class="block text-sm font-medium text-gray-700">Income Payment Frequency</label>
+                                    <label for="cadence" class="field-label">Income Payment Frequency</label>
                                     <select name="cadence" id="cadence"
                                         class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
                                         {% for option in cadence_options %}
                                         <option value="{{ option }}">{{ option }}</option>
                                         {% endfor %}
                                     </select>
-                                    <p class="mt-1 text-xs text-gray-500">How often the income is received (inflow)</p>
+                                    <p class="mt-1 text-xs wt-mute">How often the income is received (inflow)</p>
                                 </div>
 
                                 <!-- Income Growth -->
                                 <div class="border-t pt-4">
                                     <label class="flex items-center">
                                         <input type="checkbox" name="income_increases" value="true" id="income-increase-check"
-                                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                                        <span class="ml-2 text-sm text-gray-700">Income will increase over time</span>
+                                            class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300 rounded">
+                                        <span class="ml-2 text-sm wt-body">Income will increase over time</span>
                                     </label>
                                 </div>
                                 
                                 <div id="income-increase-fields" class="hidden space-y-4 mt-4">
                                     <div>
-                                        <label for="income_increase_rate_percent" class="block text-sm font-medium text-gray-700">Income Increase Rate (%)</label>
+                                        <label for="income_increase_rate_percent" class="field-label">Income Increase Rate (%)</label>
                                         <input type="number" step="0.001" name="income_increase_rate_percent" id="income_increase_rate_percent" value="0.000"
                                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                        <p class="mt-1 text-xs text-gray-500">Percentage increase each period (e.g., 5.0 for 5% annual raise)</p>
+                                        <p class="mt-1 text-xs wt-mute">Percentage increase each period (e.g., 5.0 for 5% annual raise)</p>
                                     </div>
                                     <div>
-                                        <label for="income_increase_cadence" class="block text-sm font-medium text-gray-700">Income Increase Frequency</label>
+                                        <label for="income_increase_cadence" class="field-label">Income Increase Frequency</label>
                                         <select name="income_increase_cadence" id="income_increase_cadence"
                                             class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
                                             {% for option in cadence_options %}
                                             <option value="{{ option }}" {% if option == 'yearly' %}selected{% endif %}>{{ option }}</option>
                                             {% endfor %}
                                         </select>
-                                        <p class="mt-1 text-xs text-gray-500">How often the income increases</p>
+                                        <p class="mt-1 text-xs wt-mute">How often the income increases</p>
                                     </div>
                                 </div>
                                 {% else %}
@@ -290,26 +290,26 @@
                                 <!-- Revenue Fields (for BUSINESS type only) -->
                                 {% if investment_type == 'business' %}
                                 <div class="border-t pt-4">
-                                    <h4 class="text-sm font-medium text-gray-900 mb-3">Revenue from Sale</h4>
+                                    <h4 class="text-sm font-medium wt-ink mb-3">Revenue from Sale</h4>
                                     <label class="flex items-center">
                                         <input type="checkbox" name="has_revenue" value="true" id="revenue-check"
-                                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                                        <span class="ml-2 text-sm text-gray-700">Sold the product/service (one-time revenue)</span>
+                                            class="h-4 w-4 wt-info focus:ring-blue-500 border-gray-300 rounded">
+                                        <span class="ml-2 text-sm wt-body">Sold the product/service (one-time revenue)</span>
                                     </label>
                                 </div>
                                 
                                 <div id="revenue-fields" class="hidden space-y-4 mt-4">
                                     <div>
-                                        <label for="revenue_amount" class="block text-sm font-medium text-gray-700">Total Sale Price (Rs)</label>
+                                        <label for="revenue_amount" class="field-label">Total Sale Price (Rs)</label>
                                         <input type="number" step="0.01" name="revenue_amount" id="revenue_amount" value="0.00"
                                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                        <p class="mt-1 text-xs text-gray-500">Total amount you will receive from selling the product/service</p>
+                                        <p class="mt-1 text-xs wt-mute">Total amount you will receive from selling the product/service</p>
                                     </div>
                                     <div>
-                                        <label for="revenue_installment_months" class="block text-sm font-medium text-gray-700">Payment Period (months)</label>
+                                        <label for="revenue_installment_months" class="field-label">Payment Period (months)</label>
                                         <input type="number" min="1" name="revenue_installment_months" id="revenue_installment_months" value="1"
                                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                        <p class="mt-1 text-xs text-gray-500">Over how many months will you receive the payment (equal installments)</p>
+                                        <p class="mt-1 text-xs wt-mute">Over how many months will you receive the payment (equal installments)</p>
                                     </div>
                                 </div>
                                 {% else %}
@@ -322,10 +322,10 @@
                                 <!-- One-off Inflow (Business only) -->
                                 {% if investment_type == 'business' %}
                                 <div>
-                                    <label for="one_off_inflow_value" class="block text-sm font-medium text-gray-700">One-off Inflow Value (Rs)</label>
+                                    <label for="one_off_inflow_value" class="field-label">One-off Inflow Value (Rs)</label>
                                     <input type="number" step="0.01" name="one_off_inflow_value" id="one_off_inflow_value" value="0.00"
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                    <p class="mt-1 text-xs text-gray-500">Single large return/bonus payment (e.g., final payment, exit bonus)</p>
+                                    <p class="mt-1 text-xs wt-mute">Single large return/bonus payment (e.g., final payment, exit bonus)</p>
                                 </div>
                                 {% else %}
                                 <input type="hidden" name="one_off_inflow_value" value="0.00">
@@ -333,33 +333,33 @@
 
                                 <!-- Discount Rate -->
                                 <div>
-                                    <label for="discount_rate_annual_percent" class="block text-sm font-medium text-gray-700">Discount Rate (Annual %) *</label>
+                                    <label for="discount_rate_annual_percent" class="field-label">Discount Rate (Annual %) *</label>
                                     <input type="number" step="0.001" min="0" max="200" name="discount_rate_annual_percent" id="discount_rate_annual_percent" value="15.000" required
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                    <p class="mt-1 text-xs text-gray-500">Range: 0% to 200%</p>
+                                    <p class="mt-1 text-xs wt-mute">Range: 0% to 200%</p>
                                 </div>
 
                                 <!-- Reinvestment Rate -->
                                 <div>
-                                    <label for="reinvestment_rate_annual_percent" class="block text-sm font-medium text-gray-700">Reinvestment Rate (Annual %)</label>
+                                    <label for="reinvestment_rate_annual_percent" class="field-label">Reinvestment Rate (Annual %)</label>
                                     <input type="number" step="0.001" min="0" max="200" name="reinvestment_rate_annual_percent" id="reinvestment_rate_annual_percent" value="15.000"
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                    <p class="mt-1 text-xs text-gray-500">Rate at which positive cash flows are reinvested until end of analysis period (used in MIRR calculation)</p>
+                                    <p class="mt-1 text-xs wt-mute">Rate at which positive cash flows are reinvested until end of analysis period (used in MIRR calculation)</p>
                                 </div>
 
                                 <!-- Analysis Horizon (for asset type - auto-calculated for business type) -->
                                 {% if investment_type == 'asset' %}
                                 <div>
-                                    <label for="analysis_horizon_months" class="block text-sm font-medium text-gray-700">Analysis Horizon (Months)</label>
+                                    <label for="analysis_horizon_months" class="field-label">Analysis Horizon (Months)</label>
                                     <input type="number" name="analysis_horizon_months" id="analysis_horizon_months" value="60"
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                                    <p class="mt-1 text-xs text-gray-500">Time period for analysis (default: 60 months = 5 years)</p>
+                                    <p class="mt-1 text-xs wt-mute">Time period for analysis (default: 60 months = 5 years)</p>
                                 </div>
                                 {% else %}
                                 <!-- For business type, horizon is auto-calculated based on payment periods -->
                                 <input type="hidden" name="analysis_horizon_months" id="analysis_horizon_months" value="60">
                                 <div class="bg-blue-50 border border-blue-200 rounded-md p-3">
-                                    <p class="text-sm text-blue-800">
+                                    <p class="text-sm wt-info">
                                         <strong>Analysis Horizon:</strong> Auto-calculated based on your revenue and leverage repayment periods
                                     </p>
                                 </div>
@@ -367,20 +367,20 @@
 
                                 <!-- Break-even Fields -->
                                 <div class="border-t pt-4">
-                                    <h4 class="text-sm font-medium text-gray-700 mb-2">Break-even Analysis (Optional)</h4>
+                                    <h4 class="text-sm font-medium wt-body mb-2">Break-even Analysis (Optional)</h4>
                                     <div class="space-y-4">
                                         <div>
-                                            <label for="break_even_fixed_costs" class="block text-sm font-medium text-gray-700">Fixed Costs (Rs)</label>
+                                            <label for="break_even_fixed_costs" class="field-label">Fixed Costs (Rs)</label>
                                             <input type="number" step="0.01" name="break_even_fixed_costs" id="break_even_fixed_costs" value="0.00"
                                                 class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                         </div>
                                         <div>
-                                            <label for="break_even_price_per_unit" class="block text-sm font-medium text-gray-700">Price per Unit (Rs)</label>
+                                            <label for="break_even_price_per_unit" class="field-label">Price per Unit (Rs)</label>
                                             <input type="number" step="0.01" name="break_even_price_per_unit" id="break_even_price_per_unit" value="0.00"
                                                 class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                         </div>
                                         <div>
-                                            <label for="break_even_variable_cost_per_unit" class="block text-sm font-medium text-gray-700">Variable Cost per Unit (Rs)</label>
+                                            <label for="break_even_variable_cost_per_unit" class="field-label">Variable Cost per Unit (Rs)</label>
                                             <input type="number" step="0.01" name="break_even_variable_cost_per_unit" id="break_even_variable_cost_per_unit" value="0.00"
                                                 class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                                         </div>
@@ -389,7 +389,7 @@
 
                                 <!-- Notes -->
                                 <div>
-                                    <label for="notes" class="block text-sm font-medium text-gray-700">Notes</label>
+                                    <label for="notes" class="field-label">Notes</label>
                                     <textarea name="notes" id="notes" rows="3"
                                         class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></textarea>
                                 </div>
@@ -397,13 +397,13 @@
                         </div>
                     </div>
                 </div>
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <div class="wt-surface-soft px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                     <button type="submit"
-                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm">
+                        class="btn-primary">
                         Create
                     </button>
                     <button type="button" onclick="document.getElementById('modal-container').innerHTML = ''"
-                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium wt-body hover:wt-surface-soft focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
                         Cancel
                     </button>
                 </div>
@@ -505,10 +505,10 @@
         
         const entryDiv = document.createElement('div');
         entryDiv.id = `repayment-entry-${index}`;
-        entryDiv.className = 'flex gap-3 items-start p-3 bg-gray-50 rounded-md';
+        entryDiv.className = 'flex gap-3 items-start p-3 wt-surface-soft rounded-md';
         entryDiv.innerHTML = `
             <div class="flex-1">
-                <label class="block text-xs font-medium text-gray-700 mb-1">Amount (Rs)</label>
+                <label class="block text-xs font-medium wt-body mb-1">Amount (Rs)</label>
                 <input type="number" step="0.01" min="0" 
                     name="custom_repayment_amount_${index}" 
                     id="custom_repayment_amount_${index}"
@@ -517,14 +517,14 @@
                     placeholder="0.00">
             </div>
             <div class="flex-1">
-                <label class="block text-xs font-medium text-gray-700 mb-1">Repayment Date</label>
+                <label class="block text-xs font-medium wt-body mb-1">Repayment Date</label>
                 <input type="date" 
                     name="custom_repayment_date_${index}" 
                     id="custom_repayment_date_${index}"
                     class="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm">
             </div>
             <button type="button" onclick="removeCustomRepayment(${index})" 
-                class="mt-6 inline-flex items-center p-2 border border-transparent rounded-md text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                class="mt-6 inline-flex items-center p-2 border border-transparent rounded-md wt-neg hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                 </svg>
@@ -578,15 +578,15 @@
             
             if (Math.abs(difference) < 0.01) {
                 validationDiv.className = 'bg-green-50 border border-green-200 rounded-md p-3';
-                textElement.className = 'text-sm font-medium text-green-800';
+                textElement.className = 'text-sm font-medium wt-pos';
                 textElement.textContent = `✓ Total repayments: Rs ${total.toFixed(2)} (matches leverage amount)`;
             } else if (total < leverageAmount) {
                 validationDiv.className = 'bg-yellow-50 border border-yellow-200 rounded-md p-3';
-                textElement.className = 'text-sm font-medium text-yellow-800';
+                textElement.className = 'text-sm font-medium wt-warn';
                 textElement.textContent = `⚠ Total repayments: Rs ${total.toFixed(2)} (Rs ${Math.abs(difference).toFixed(2)} short)`;
             } else {
                 validationDiv.className = 'bg-red-50 border border-red-200 rounded-md p-3';
-                textElement.className = 'text-sm font-medium text-red-800';
+                textElement.className = 'text-sm font-medium wt-neg';
                 textElement.textContent = `✗ Total repayments: Rs ${total.toFixed(2)} (Rs ${difference.toFixed(2)} over)`;
             }
         }

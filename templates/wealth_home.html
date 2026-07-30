@@ -1,61 +1,61 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 
 {% block title %}Wealth Tracker - Home{% endblock %}
 
 {% block content %}
-<div class="px-4 py-6">
-    <h1 class="text-3xl font-bold text-gray-900 mb-8">Wealth Tracker</h1>
+<div class="space-y-6">
+    <h1 class="page-title">Wealth Tracker</h1>
     
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- Assets Voucher -->
-        <div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+        <div class="wt-panel p-6 hover:shadow-lg transition-shadow">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-2xl font-semibold text-gray-800">📊 Assets</h2>
+                <h2 class="text-2xl font-semibold wt-body">📊 Assets</h2>
             </div>
-            <p class="text-gray-600 mb-4">
+            <p class="wt-mute mb-4">
                 Manage your assets - add, edit, and organize your wealth components.
             </p>
             <a href="/wealth/assets" 
-               class="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+               class="btn-primary">
                 Manage Assets →
             </a>
         </div>
 
         <!-- Wealth Voucher -->
-        <div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+        <div class="wt-panel p-6 hover:shadow-lg transition-shadow">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-2xl font-semibold text-gray-800">💵 Wealth Entries</h2>
+                <h2 class="text-2xl font-semibold wt-body">💵 Wealth Entries</h2>
             </div>
-            <p class="text-gray-600 mb-4">
+            <p class="wt-mute mb-4">
                 Track monthly valuations and see your wealth grow over time.
             </p>
             <a href="/wealth/entries" 
-               class="inline-block bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors">
+               class="btn-primary">
                 View Entries →
             </a>
         </div>
     </div>
 
     <!-- Quick Stats -->
-    <div class="mt-8 bg-white rounded-lg shadow-md p-6">
-        <h3 class="text-xl font-semibold text-gray-800 mb-4">Quick Actions</h3>
+    <div class="mt-8 wt-panel p-6">
+        <h3 class="text-xl font-semibold wt-body mb-4">Quick Actions</h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <a href="/wealth/entries/new" 
                class="block p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all">
-                <div class="font-semibold text-gray-700">➕ New Entry</div>
-                <div class="text-sm text-gray-500">Add valuations for this month</div>
+                <div class="font-semibold wt-body">➕ New Entry</div>
+                <div class="text-sm wt-mute">Add valuations for this month</div>
             </a>
             <a href="/wealth/entries/summary" 
                class="block p-4 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-all">
-                <div class="font-semibold text-gray-700">📈 View Summary</div>
-                <div class="text-sm text-gray-500">See trends and statistics</div>
+                <div class="font-semibold wt-body">📈 View Summary</div>
+                <div class="text-sm wt-mute">See trends and statistics</div>
             </a>
             <a href="/wealth/assets/new" 
                class="block p-4 border-2 border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all"
                hx-get="/wealth/assets/new"
                hx-target="#modal-container">
-                <div class="font-semibold text-gray-700">🏦 Add Asset</div>
-                <div class="text-sm text-gray-500">Create a new asset</div>
+                <div class="font-semibold wt-body">🏦 Add Asset</div>
+                <div class="text-sm wt-mute">Create a new asset</div>
             </a>
         </div>
     </div>

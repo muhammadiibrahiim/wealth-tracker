@@ -151,7 +151,7 @@
         <div class="wt-panel px-4">
           {% for p in ins.payments %}
           <div class="flex items-center justify-between gap-3 py-2.5 {{ 'border-t border-dashed' if not loop.first else '' }} {{ 'wt-warn-bg rounded px-2' if p.from_injection else '' }}">
-            <span class="text-sm"><span class="wt-neg">→</span> pay <b class="wt-ink">{{ p.vendor }}</b> <span class="wt-pill wt-pill-neutral" title="{{ p.reason }}">{{ p.tier }}</span> <b class="wt-ink tabular-nums" style="font-size:15px;">{{ cur }} {{ '{:,.0f}'.format(p.amount) }}</b> {% if p.from_injection %}<span class="text-xs font-semibold" class="wt-warn">💰 from injection (deadline reached)</span>{% else %}<span class="text-xs wt-ash">{% if p.remaining_after > 0 %}({{ cur }} {{ '{:,.0f}'.format(p.remaining_after) }} still owed){% else %}(cleared ✓){% endif %}</span>{% endif %}</span>
+            <span class="text-sm"><span class="wt-neg">→</span> pay <b class="wt-ink">{{ p.vendor }}</b> <span class="wt-pill wt-pill-neutral" title="{{ p.reason }}">{{ p.tier }}</span> <b class="wt-ink tabular-nums">{{ cur }} {{ '{:,.0f}'.format(p.amount) }}</b> {% if p.from_injection %}<span class="text-xs font-semibold" class="wt-warn">💰 from injection (deadline reached)</span>{% else %}<span class="text-xs wt-ash">{% if p.remaining_after > 0 %}({{ cur }} {{ '{:,.0f}'.format(p.remaining_after) }} still owed){% else %}(cleared ✓){% endif %}</span>{% endif %}</span>
           </div>
           {% endfor %}
         </div>

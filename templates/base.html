@@ -55,346 +55,11 @@
 
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 
-    <style>
-      :root {
-        --canvas:       #eeefe9;
-        --surface-card: #ffffff;
-        --surface-soft: #e5e7e0;
-        --surface-dark: #23251d;
-        --ink:          #23251d;
-        --body:         #4d4f46;
-        --mute:         #6c6e63;
-        --hairline:     #bfc1b7;
-        --hairline-soft:#dcdfd2;
-        --brand:        #f7a501;
-        --brand-pressed:#dd9001;
-        --brand-active: #b17816;
-        --link:         #1d4ed8;
-        --accent-green: #2c8c66;
-        --accent-red:   #cd4239;
-        --accent-blue:  #2c84e0;
-      }
-      html, body {
-        font-family: 'IBM Plex Sans', system-ui, sans-serif;
-        background: var(--canvas);
-        color: var(--body);
-        -webkit-font-smoothing: antialiased;
-      }
-      .tabular-nums { font-variant-numeric: tabular-nums; }
-
-      /* ─── Top progress bar ─── */
-      #ux-progress-bar {
-        position: fixed; top: 0; left: 0; height: 3px; width: 0%;
-        background: var(--brand);
-        z-index: 9998; opacity: 0; pointer-events: none;
-        transition: width 0.4s cubic-bezier(.4,0,.2,1), opacity 0.3s;
-      }
-      #ux-progress-bar.active { opacity: 1; }
-
-      /* ─── Sidebar — PostHog dark surface, BRAND yellow accent on active ─── */
-      .sidebar {
-        position: fixed; left: 0; top: 0; height: 100vh;
-        width: 64px; z-index: 1000;
-        background: var(--surface-dark);
-        transition: width 0.2s ease;
-        display: flex; flex-direction: column;
-        border-right: 1px solid #1a1c15;
-      }
-      .sidebar.expanded { width: 260px; }
-      .sidebar.expanded .side-text { display: inline; }
-      .sidebar .side-text { display: none; }
-      .side-header {
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 18px 16px; min-height: 64px;
-        border-bottom: 1px solid #1a1c15;
-      }
-      .side-logo { display: flex; align-items: center; gap: 10px; color: #fff; }
-      .side-logo-icon {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 32px; height: 32px; min-width: 32px; flex-shrink: 0;
-        color: var(--brand);
-      }
-      .side-logo-text {
-        font-size: 17px; font-weight: 800; color: #fff;
-        white-space: nowrap; opacity: 1; transition: opacity 0.2s ease;
-        letter-spacing: -0.02em;
-      }
-      .sidebar:not(.expanded) .side-logo-text { opacity: 0; width: 0; }
-      .side-toggle {
-        width: 28px; height: 28px; background: transparent; border: none;
-        color: #b6b7af; border-radius: 6px; cursor: pointer;
-        display: flex; align-items: center; justify-content: center;
-      }
-      .side-toggle:hover { background: #33342d; color: #fff; }
-      .sidebar:not(.expanded) .side-toggle { transform: rotate(180deg); }
-
-      .side-nav { flex: 1; overflow-y: auto; padding: 12px 8px;
-        scrollbar-width: thin; scrollbar-color: #33342d transparent; }
-      .side-nav::-webkit-scrollbar { width: 6px; }
-      .side-nav::-webkit-scrollbar-thumb { background: #33342d; border-radius: 3px; }
-
-      .side-item, .side-parent {
-        display: flex; align-items: center; gap: 12px;
-        padding: 9px 12px; margin: 1px 0;
-        color: #b6b7af; text-decoration: none;
-        border-radius: 6px; font-size: 14px; font-weight: 500;
-        transition: all 0.15s ease; border: none; background: transparent;
-        width: 100%; text-align: left; cursor: pointer; position: relative;
-      }
-      .side-item:hover, .side-parent:hover { background: #33342d; color: #fff; }
-      .side-item.active, .side-parent.active { color: #fff; background: rgba(247, 165, 1, 0.10); }
-      .side-item.active::before, .side-parent.active::before {
-        content: ''; position: absolute; left: -8px; top: 8px; bottom: 8px;
-        width: 3px; background: var(--brand); border-radius: 0 3px 3px 0;
-      }
-      .side-icon { width: 20px; height: 20px; min-width: 20px; flex-shrink: 0; }
-      .side-chev { width: 14px; height: 14px; margin-left: auto; transition: transform 0.2s; }
-      .side-parent.expanded .side-chev { transform: rotate(180deg); }
-      .side-children {
-        display: none; padding-left: 8px; margin-left: 22px;
-        border-left: 1px solid #1a1c15; margin-top: 2px; margin-bottom: 6px;
-      }
-      .side-parent.expanded + .side-children { display: block; }
-      .side-child {
-        display: flex; align-items: center; gap: 10px;
-        padding: 7px 12px; margin: 1px 0;
-        color: #9b9c92; text-decoration: none;
-        border-radius: 5px; font-size: 13px; font-weight: 500; position: relative;
-      }
-      .side-child:hover { background: #33342d; color: #fff; }
-      .side-child.active { color: #fff; }
-      .side-child.active::before {
-        content: ''; position: absolute; left: -9px; top: 6px; bottom: 6px;
-        width: 2px; background: var(--brand); border-radius: 0 2px 2px 0;
-      }
-      .side-child-dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: 0.5; }
-      .sidebar:not(.expanded) .side-children,
-      .sidebar:not(.expanded) .side-chev { display: none; }
-      .side-footer { padding: 12px 16px; border-top: 1px solid #1a1c15; font-size: 12px; color: #9b9c92; }
-
-      /* ─── Main shell ─── */
-      .main-shell { margin-left: 64px; transition: margin-left 0.2s ease; min-height: 100vh; }
-      .sidebar.expanded ~ .main-shell { margin-left: 260px; }
-      @media (max-width: 768px) {
-        .main-shell, .sidebar.expanded ~ .main-shell { margin-left: 0; }
-        .sidebar { transform: translateX(-100%); }
-        .sidebar.expanded { transform: translateX(0); box-shadow: 4px 0 20px rgba(0,0,0,0.3); }
-      }
-
-      /* ─── Typography — PostHog spec ─── */
-      .page-title {
-        font-family: 'IBM Plex Sans', sans-serif;
-        font-size: 2.25rem; font-weight: 800; color: var(--ink);
-        letter-spacing: -0.025em; line-height: 1.15;
-      }
-      .page-subtitle { font-size: 0.9375rem; color: var(--body); margin-top: 0.5rem; line-height: 1.5; }
-      h2 {
-        font-family: 'IBM Plex Sans', sans-serif;
-        font-size: 1.25rem; font-weight: 700; color: var(--ink); letter-spacing: -0.015em;
-      }
-
-      /* ─── Card surfaces ─── */
-      /* Override the generic Tailwind "bg-white" so cards keep the PostHog white tone on cream canvas. */
-      .bg-white { background-color: var(--surface-card) !important; }
-
-      /* ─── Stat card with HUGE numeric ─── */
-      .stat-card {
-        background: var(--surface-card);
-        border: 1px solid var(--hairline-soft);
-        border-radius: 6px;
-        padding: 1.25rem 1.25rem;
-        min-width: 0;             /* let grid children shrink */
-        overflow-wrap: break-word;
-      }
-      .stat-label {
-        font-family: 'IBM Plex Sans', sans-serif;
-        font-size: 0.75rem; font-weight: 700; color: var(--body);
-        text-transform: uppercase; letter-spacing: 0; margin-bottom: 0.5rem;
-        line-height: 1.33;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      }
-      .stat-value {
-        font-size: 2.25rem; font-weight: 800; color: var(--ink);
-        line-height: 1.1; font-variant-numeric: tabular-nums;
-        letter-spacing: -0.025em;
-      }
-      .stat-value.neg, .stat-value.cr { color: var(--accent-red); }
-      .stat-value .currency { font-size: 1.4rem; font-weight: 700; color: var(--mute); margin-right: 0.25rem; }
-      .stat-foot { font-size: 0.75rem; font-weight: 600; color: var(--mute); text-transform: uppercase; margin-top: 0.5rem; }
-
-      /* Compact KPI variant — for strips with 5-6 tiles where the full
-         2.25rem stat-value would overflow the column. */
-      .stat-card-sm { padding: 1rem 1rem; }
-      .stat-card-sm .stat-value { font-size: 1.5rem; line-height: 1.15; }
-      .stat-card-sm .stat-value .currency { font-size: 0.95rem; }
-      .stat-card-sm .stat-label { font-size: 0.7rem; margin-bottom: 0.375rem; }
-      .stat-card-sm .stat-foot { font-size: 0.65rem; margin-top: 0.375rem; }
-
-      /* ─── Buttons — PostHog spec: yellow primary with dark text ─── */
-      .btn-primary {
-        display: inline-flex; align-items: center; gap: 0.5rem;
-        padding: 8px 16px; height: 40px;
-        background: var(--brand); color: var(--ink);
-        border: none; border-radius: 6px;
-        font-size: 0.875rem; font-weight: 700; line-height: 1;
-        transition: background 0.15s ease;
-      }
-      .btn-primary:hover { background: var(--brand-pressed); }
-      .btn-primary:active { background: var(--brand-active); }
-      .btn-secondary {
-        display: inline-flex; align-items: center; gap: 0.5rem;
-        padding: 8px 16px; height: 40px;
-        background: var(--surface-soft); color: var(--ink);
-        border: 1px solid var(--hairline-soft); border-radius: 6px;
-        font-size: 0.875rem; font-weight: 700; line-height: 1;
-      }
-      .btn-secondary:hover { background: var(--hairline-soft); }
-
-      /* ─── DR / CR mini-pill — PostHog accent palette ─── */
-      .pill-dr, .pill-cr {
-        display: inline-flex; align-items: center; padding: 2px 8px;
-        border-radius: 999px; font-size: 0.7rem; font-weight: 700;
-        letter-spacing: 0.04em;
-      }
-      .pill-dr { background: #d9eddf; color: #1f6b4e; }
-      .pill-cr { background: #f7d6d3; color: #a52e26; }
-
-      /* ─── Accent card with brand-yellow left border ─── */
-      .accent-card {
-        background: var(--surface-card);
-        border: 1px solid var(--hairline-soft);
-        border-radius: 6px;
-        border-left: 4px solid var(--brand);
-        padding: 1.25rem 1.5rem;
-      }
-
-      /* ─── Form controls ─── */
-      /* Avoid a fixed height — let padding + line-height size the field so text
-         never clips. This handles inputs with various Tailwind py-* classes too. */
-      input[type="text"], input[type="number"], input[type="date"], input[type="email"],
-      input[type="password"], input[type="search"], input[type="tel"], input[type="url"],
-      select, textarea {
-        background-color: var(--surface-card);
-        color: var(--ink);
-        border: 1px solid var(--hairline);
-        border-radius: 6px;
-        font-size: 0.9375rem;
-        line-height: 1.4;
-        padding: 8px 12px;
-        min-height: 40px;
-        box-sizing: border-box;
-      }
-      textarea { min-height: auto; line-height: 1.5; }
-      select {
-        /* Allow native chevron, give right padding for it */
-        padding-right: 32px;
-        background-position: right 10px center;
-      }
-      input::placeholder, textarea::placeholder { color: var(--ash); }
-      input:focus, select:focus, textarea:focus {
-        outline: none !important;
-        border-color: var(--ink) !important;
-        box-shadow: 0 0 0 3px rgba(35, 37, 29, 0.12) !important;
-      }
-      .field-label {
-        font-family: 'IBM Plex Sans', sans-serif;
-        font-size: 0.75rem; font-weight: 700; color: var(--body);
-        text-transform: uppercase; letter-spacing: 0;
-        margin-bottom: 0.375rem; display: block;
-      }
-      .field-label-required::after { content: ' *'; color: var(--accent-red); }
-
-      /* ─── Tables ─── */
-      table { background: var(--surface-card); }
-      table thead {
-        background: var(--surface-soft);
-        border-bottom: 1px solid var(--hairline-soft);
-      }
-      table thead th {
-        font-family: 'IBM Plex Sans', sans-serif;
-        font-size: 0.75rem; font-weight: 700; color: var(--body);
-        text-transform: uppercase; letter-spacing: 0;
-        padding: 0.875rem 1.25rem;
-      }
-      table tbody td { padding: 1rem 1.25rem; font-size: 0.9375rem; color: var(--ink); }
-      table tbody tr { border-top: 1px solid var(--hairline-soft); }
-      table tbody tr:hover { background: #faf9f5; }
-
-      /* ─── Modal — keep white card on dimmed cream backdrop ─── */
-      .modal-backdrop {
-        background-color: rgba(35, 37, 29, 0.55) !important;
-        backdrop-filter: blur(2px);
-        /* Sit ABOVE the fixed sidebar (z-index:1000) so wide modals aren't
-           clipped/covered by it. Applies to every modal, consistently. */
-        z-index: 1100 !important;
-      }
-      #modal-container .bg-white {
-        background: var(--surface-card) !important;
-        border-radius: 8px !important;
-        box-shadow: 0 20px 40px -10px rgba(35,37,29,0.25), 0 8px 16px -8px rgba(35,37,29,0.1) !important;
-      }
-      .modal-title {
-        font-family: 'IBM Plex Sans', sans-serif;
-        font-size: 1.5rem; font-weight: 800; color: var(--ink); letter-spacing: -0.02em;
-      }
-      .modal-subtitle { font-size: 0.875rem; color: var(--body); margin-top: 0.25rem; line-height: 1.5; }
-      .modal-close { color: var(--ash); background: transparent; border: none; cursor: pointer; padding: 4px; font-size: 1.25rem; }
-      .modal-close:hover { color: var(--ink); }
-
-      /* ─── Anchor color — PostHog uses blue links ─── */
-      a { color: var(--link); }
-      a:hover { color: #0a3088; }
-
-      /* Shadows: softer per PostHog (flat-ish) */
-      .shadow-sm { box-shadow: 0 1px 2px rgba(35,37,29,0.04) !important; }
-      .shadow-md { box-shadow: 0 4px 8px -2px rgba(35,37,29,0.06) !important; }
-
-      /* ─── Searchable select (global) ─── */
-      .ss-wrap { position: relative; }
-      .ss-input {
-        background-color: var(--surface-card); color: var(--ink);
-        border: 1px solid var(--hairline); border-radius: 6px;
-        font-size: 0.9375rem; line-height: 1.4;
-        padding: 8px 12px; min-height: 40px; width: 100%;
-        box-sizing: border-box;
-      }
-      .ss-input:focus {
-        outline: none !important; border-color: var(--ink) !important;
-        box-shadow: 0 0 0 3px rgba(35, 37, 29, 0.12) !important;
-      }
-      .ss-dropdown {
-        position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
-        background: var(--surface-card); border: 1px solid var(--hairline);
-        border-top: none; border-radius: 0 0 6px 6px;
-        max-height: 280px; overflow-y: auto;
-        box-shadow: 0 8px 16px rgba(35,37,29,0.10);
-      }
-      .ss-option {
-        padding: 8px 12px; cursor: pointer; font-size: 14px;
-        border-bottom: 1px solid var(--hairline-soft);
-        color: var(--ink);
-      }
-      .ss-option:last-child { border-bottom: none; }
-      .ss-option:hover, .ss-option.active { background: #fef7e6; }
-      .ss-empty { padding: 16px; text-align: center; color: var(--mute); font-size: 13px; }
-      .ss-chip {
-        display: flex; align-items: center; gap: 8px;
-        padding: 8px 12px;
-        background: var(--surface-card);
-        border: 1px solid var(--hairline); border-radius: 6px;
-        min-height: 40px; box-sizing: border-box;
-        cursor: pointer;
-      }
-      .ss-chip:hover { border-color: var(--ink); }
-      .ss-chip-label { flex: 1; color: var(--ink); font-weight: 500; font-size: 14px;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .ss-chip-clear {
-        background: transparent; border: none; cursor: pointer;
-        color: var(--mute); padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
-      }
-      .ss-chip-clear:hover { background: #f3f4f6; color: var(--accent-red); }
-      .ss-hidden { position: absolute; opacity: 0; pointer-events: none; height: 0; width: 0; }
-    </style>
+    <!-- Design system — see static/css/wealth-design.css.
+         Loaded AFTER the Tailwind CDN so component classes win over
+         utilities, and after the tailwind.config script so the config's
+         token names are already registered. -->
+    <link rel="stylesheet" href="/static/css/wealth-design.css">
 </head>
 <body class="h-full">
 
@@ -404,12 +69,73 @@
 
     <div class="main-shell">
         <main class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+            <div class="wt-appbar">
+                <button type="button" class="wt-search-trigger" id="wtOpenPalette"
+                        title="Search pages and records (press /)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                         aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <span class="wt-search-trigger__text">Search&hellip;</span>
+                    <span class="wt-kbd">/</span>
+                </button>
+                <button type="button" class="btn-ghost btn-sm" id="wtOpenHelp"
+                        title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts">
+                    <span class="wt-kbd">?</span>
+                </button>
+            </div>
             {% block content %}{% endblock %}
         </main>
     </div>
 
     <div id="toast-container" class="fixed top-4 right-4 z-50"></div>
     <div id="modal-container"></div>
+
+    <!-- ===================== COMMAND PALETTE ===================== -->
+    <!-- Behaviour is wired in /static/js/wt-shortcuts.js. -->
+    <div class="wt-palette-overlay" id="wtPaletteOverlay">
+        <div class="wt-palette" role="dialog" aria-modal="true" aria-label="Search">
+            <div class="wt-palette-input-wrap">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input type="text" id="wtPaletteInput" autocomplete="off" spellcheck="false"
+                       placeholder="Search pages, trades, parties, accounts, items&hellip;">
+                <span class="wt-kbd">Esc</span>
+            </div>
+            <div class="wt-palette-results" id="wtPaletteResults"></div>
+            <div class="wt-palette-foot">
+                <span><span class="wt-kbd">&uarr;</span><span class="wt-kbd">&darr;</span> navigate</span>
+                <span><span class="wt-kbd">&crarr;</span> open</span>
+                <span><span class="wt-kbd">G</span> then a code &mdash; jump</span>
+                <span><span class="wt-kbd">Esc</span> close</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== SHORTCUTS HELP ===================== -->
+    <div class="wt-palette-overlay" id="wtHelpOverlay">
+        <div class="wt-palette" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts"
+             style="max-width:560px;">
+            <div class="wt-palette-input-wrap" style="justify-content:space-between;">
+                <span class="modal-title" style="font-size:1.125rem;">Keyboard shortcuts</span>
+                <button type="button" class="modal-close" id="wtHelpClose" aria-label="Close">&times;</button>
+            </div>
+            <div class="wt-palette-results">
+                <table class="wt-help-table">
+                    <tr><td><span class="wt-kbd">/</span></td><td>Open search</td></tr>
+                    <tr><td><span class="wt-kbd">?</span></td><td>Show this help</td></tr>
+                    <tr><td><span class="wt-kbd">G</span> then a code</td>
+                        <td>Jump straight to a page. Codes are listed below and in the search results.</td></tr>
+                    <tr><td><span class="wt-kbd">Enter</span> / <span class="wt-kbd">&rarr;</span></td>
+                        <td>Next field in a form</td></tr>
+                    <tr><td><span class="wt-kbd">&larr;</span></td><td>Previous field</td></tr>
+                    <tr><td><span class="wt-kbd">Esc</span></td><td>Close any dialog</td></tr>
+                </table>
+                <div id="wtGotoCodes"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="wt-toast-go" id="wtGoToast"></div>
 
     <script>
         // Sidebar persistence + interaction
@@ -817,5 +543,19 @@
             setTimeout(function() { t.remove(); }, 3000);
         }
     </script>
+
+    <!-- Chart.js + the shared chart helper (see static/js/wt-charts.js).
+         Loaded app-wide so a second chart page doesn't double-load the lib. -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="/static/js/wt-charts.js"></script>
+
+    <!-- Report toolkit: sortable tables, in-report search, CSV export,
+         date presets, print. Opt-in per table via data attributes. -->
+    <script src="/static/js/wt-report.js"></script>
+
+    <!-- Global search palette + keyboard shortcuts. Must load AFTER the inline
+         script above, because that script owns the form-navigation keydown
+         handler and wt-shortcuts.js checks the same "typing in a field" guard. -->
+    <script src="/static/js/wt-shortcuts.js"></script>
 </body>
 </html>

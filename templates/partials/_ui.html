@@ -1,0 +1,306 @@
+{# ============================================================
+   Wealth Tracker — shared UI macros.
+
+   Import what you need at the top of a page:
+     {% from "partials/_ui.html" import page_header, kpi, money %}
+
+   RULES FOR THIS FILE:
+     - Emit ONLY class names defined in static/css/wealth-design.css.
+     - NEVER emit a style="" attribute or a hex colour.
+     - Keep signatures stable — page templates call these by name.
+   ============================================================ #}
+
+
+{# --- 1. Page header — title + subtitle + right-aligned actions ------------
+   actions = [{label, href|button, primary|danger, sm, attrs, title}, ...]
+   `attrs` is raw HTML attributes (this is how HTMX is passed through). #}
+{%- macro page_header(title, subtitle='', actions=None) -%}
+<div class="wt-page-header">
+  <div>
+    <h1 class="page-title">{{ title }}</h1>
+    {%- if subtitle %}<p class="page-subtitle">{{ subtitle | safe }}</p>{% endif -%}
+  </div>
+  {%- if actions %}
+  <div class="wt-page-header__actions">
+    {%- for a in actions -%}
+      {%- set cls = 'btn-danger' if a.danger else ('btn-primary' if a.primary else 'btn-secondary') -%}
+      {%- set cls = cls ~ (' btn-sm' if a.sm else '') -%}
+      {%- if a.button -%}
+      <button type="button" class="{{ cls }}"{% if a.title %} title="{{ a.title }}"{% endif %} {{ a.attrs | safe if a.attrs else '' }}>{{ a.label | safe }}</button>
+      {%- else -%}
+      <a href="{{ a.href }}" class="{{ cls }}"{% if a.title %} title="{{ a.title }}"{% endif %} {{ a.attrs | safe if a.attrs else '' }}>{{ a.label | safe }}</a>
+      {%- endif -%}
+    {%- endfor -%}
+  </div>
+  {%- endif %}
+</div>
+{%- endmacro -%}
+
+
+{# --- 2. KPI tile ----------------------------------------------------------
+   tone   ∈ '' | pos | neg | warn | info   → colours the value
+   accent ∈ '' | pos | neg | warn | info | brand → colours the card border
+   href   → renders the whole card as a link (a.stat-card has a hover state)
+   A none/empty value renders a consistent em dash, so a row of tiles keeps
+   flat baselines instead of each page shrinking the font inline. #}
+{%- macro kpi(label, value, sub='', tone='', accent='', help='', href='') -%}
+{%- set card = 'stat-card' ~ (' wt-card-' ~ accent if accent else '') -%}
+{%- if href -%}<a href="{{ href }}" class="{{ card }}"{% if help %} title="{{ help }}"{% endif %}>
+{%- else -%}<div class="{{ card }}"{% if help %} title="{{ help }}"{% endif %}>{%- endif %}
+  <div class="stat-label">{{ label }}</div>
+  {%- if value is none or value == '' %}
+  <div class="stat-value is-empty">&mdash;</div>
+  {%- else %}
+  <div class="stat-value{{ ' wt-' ~ tone if tone }}">{{ value | safe }}</div>
+  {%- endif %}
+  {%- if sub %}<div class="stat-foot">{{ sub | safe }}</div>{% endif %}
+{%- if href -%}</a>{%- else -%}</div>{%- endif -%}
+{%- endmacro -%}
+
+
+{# --- 3. Compact KPI tile — for 5-6-up strips ---------------------------- #}
+{%- macro kpi_sm(label, value, sub='', tone='', accent='', help='', href='') -%}
+{%- set card = 'stat-card stat-card-sm' ~ (' wt-card-' ~ accent if accent else '') -%}
+{%- if href -%}<a href="{{ href }}" class="{{ card }}"{% if help %} title="{{ help }}"{% endif %}>
+{%- else -%}<div class="{{ card }}"{% if help %} title="{{ help }}"{% endif %}>{%- endif %}
+  <div class="stat-label">{{ label }}</div>
+  {%- if value is none or value == '' %}
+  <div class="stat-value is-empty">&mdash;</div>
+  {%- else %}
+  <div class="stat-value{{ ' wt-' ~ tone if tone }}">{{ value | safe }}</div>
+  {%- endif %}
+  {%- if sub %}<div class="stat-foot">{{ sub | safe }}</div>{% endif %}
+{%- if href -%}</a>{%- else -%}</div>{%- endif -%}
+{%- endmacro -%}
+
+
+{# --- 4. Emphasised KPI tile — 2px border, for the headline figure ------- #}
+{%- macro kpi_em(label, value, sub='', tone='', accent='', help='', href='') -%}
+{%- set card = 'stat-card wt-card-em' ~ (' wt-card-' ~ accent if accent else '') -%}
+{%- if href -%}<a href="{{ href }}" class="{{ card }}"{% if help %} title="{{ help }}"{% endif %}>
+{%- else -%}<div class="{{ card }}"{% if help %} title="{{ help }}"{% endif %}>{%- endif %}
+  <div class="stat-label">{{ label }}</div>
+  {%- if value is none or value == '' %}
+  <div class="stat-value is-empty">&mdash;</div>
+  {%- else %}
+  <div class="stat-value{{ ' wt-' ~ tone if tone }}">{{ value | safe }}</div>
+  {%- endif %}
+  {%- if sub %}<div class="stat-foot">{{ sub | safe }}</div>{% endif %}
+{%- if href -%}</a>{%- else -%}</div>{%- endif -%}
+{%- endmacro -%}
+
+
+{# --- 5. Money -----------------------------------------------------------
+   DIGITS DISCIPLINE: digits=0 on dashboards/KPI strips, digits=2 in
+   ledgers/statements/vouchers. abs_value shows the magnitude and lets the
+   colour carry the sign. #}
+{%- macro money(value, currency='Rs', digits=0, sign_color=False, abs_value=False) -%}
+{%- if value is none -%}<span class="wt-ash">&mdash;</span>
+{%- else -%}
+{%- set v = value | float -%}
+{%- set shown = (v | abs) if abs_value else v -%}
+{%- set cls = ('wt-pos' if v >= 0 else 'wt-neg') if sign_color else '' -%}
+<span class="tabular-nums {{ cls }}"><span class="currency">{{ currency }}</span>{{ ("{:,." ~ digits ~ "f}").format(shown) }}</span>
+{%- endif -%}
+{%- endmacro -%}
+
+
+{# --- 6. Number (no currency prefix) ------------------------------------- #}
+{%- macro num(value, digits=0, sign_color=False, abs_value=False) -%}
+{%- if value is none -%}<span class="wt-ash">&mdash;</span>
+{%- else -%}
+{%- set v = value | float -%}
+{%- set shown = (v | abs) if abs_value else v -%}
+{%- set cls = ('wt-pos' if v >= 0 else 'wt-neg') if sign_color else '' -%}
+<span class="tabular-nums {{ cls }}">{{ ("{:,." ~ digits ~ "f}").format(shown) }}</span>
+{%- endif -%}
+{%- endmacro -%}
+
+
+{# --- 7. Percentage ------------------------------------------------------
+   invert=True flips the colour meaning (for costs, where up is bad). #}
+{%- macro pct(value, digits=1, sign_color=False, invert=False) -%}
+{%- if value is none -%}<span class="wt-ash">&mdash;</span>
+{%- else -%}
+{%- set v = value | float -%}
+{%- set good = (v < 0) if invert else (v >= 0) -%}
+{%- set cls = ('wt-pos' if good else 'wt-neg') if sign_color else '' -%}
+<span class="tabular-nums {{ cls }}">{{ ("{:,." ~ digits ~ "f}").format(v) }}%</span>
+{%- endif -%}
+{%- endmacro -%}
+
+
+{# --- 8. Pill -----------------------------------------------------------
+   'dr' and 'cr' use the pre-existing .pill-dr/.pill-cr classes. #}
+{%- macro pill(text, tone='neutral') -%}
+{%- if tone == 'dr' -%}<span class="pill-dr">{{ text }}</span>
+{%- elif tone == 'cr' -%}<span class="pill-cr">{{ text }}</span>
+{%- else -%}<span class="wt-pill wt-pill-{{ tone }}">{{ text }}</span>{%- endif -%}
+{%- endmacro -%}
+
+
+{# --- 9. Empty state ----------------------------------------------------- #}
+{%- macro empty_state(title, hint='') -%}
+<div class="wt-empty">
+  <div class="wt-empty__title">{{ title }}</div>
+  {%- if hint %}<div>{{ hint | safe }}</div>{% endif %}
+</div>
+{%- endmacro -%}
+
+
+{# --- 10. Callout ------------------------------------------------------- #}
+{%- macro callout(body, tone='info', title='') -%}
+<div class="wt-callout wt-callout-{{ tone }}">
+  {%- if title %}<div class="wt-callout__title">{{ title }}</div>{% endif %}
+  <div>{{ body | safe }}</div>
+</div>
+{%- endmacro -%}
+
+
+{# --- 11. Small uppercase section label --------------------------------- #}
+{%- macro section_title(text) -%}
+<div class="wt-section-title">{{ text }}</div>
+{%- endmacro -%}
+
+
+{# --- 12. Panel — PAIR. panel_open must be matched by panel_close.
+   flush=True when the body is a table (the table supplies its own padding). #}
+{%- macro panel_open(title='', right_html='', flush=False) -%}
+<div class="wt-panel">
+  {%- if title or right_html %}
+  <div class="wt-panel__head">
+    {%- if title %}<h2>{{ title | safe }}</h2>{% endif %}
+    {%- if right_html %}<div>{{ right_html | safe }}</div>{% endif %}
+  </div>
+  {%- endif %}
+  <div class="wt-panel__body{{ ' wt-panel__body--flush' if flush else '' }}">
+{%- endmacro -%}
+
+{%- macro panel_close() -%}
+  </div>
+</div>
+{%- endmacro -%}
+
+
+{# --- 13. Table — PAIR. table_open must be matched by table_close. ------- #}
+{%- macro table_open(dense=False, id='') -%}
+<div class="wt-table-wrap"><div class="wt-table-scroll">
+<table class="wt-table{{ ' wt-table--dense' if dense else '' }}"{% if id %} id="{{ id }}"{% endif %}>
+{%- endmacro -%}
+
+{%- macro table_close() -%}
+</table>
+</div></div>
+{%- endmacro -%}
+
+
+{# --- 14. Filter bar — PAIR. --------------------------------------------- #}
+{%- macro filter_bar_open(action='', method='get') -%}
+<form class="wt-filter-bar" method="{{ method }}"{% if action %} action="{{ action }}"{% endif %}>
+{%- endmacro -%}
+
+{%- macro filter_bar_close(submit_label='Generate report', reset_href='') -%}
+  <button type="submit" class="btn-primary">{{ submit_label }}</button>
+  {%- if reset_href %}<a href="{{ reset_href }}" class="btn-secondary">Reset</a>{% endif %}
+</form>
+{%- endmacro -%}
+
+
+{# --- 15. Labelled field ------------------------------------------------- #}
+{%- macro field(name, label, type='text', value='', required=False, placeholder='', attrs='') -%}
+<div>
+  <label class="field-label{{ ' field-label-required' if required else '' }}" for="{{ name }}">{{ label }}</label>
+  <input type="{{ type }}" name="{{ name }}" id="{{ name }}" value="{{ value }}"
+         {%- if placeholder %} placeholder="{{ placeholder }}"{% endif %}
+         {%- if required %} required{% endif %} {{ attrs | safe }}>
+</div>
+{%- endmacro -%}
+
+
+{# --- 16. Hub / index card ----------------------------------------------
+   data-search feeds the client-side report filter (see trade_reports_index). #}
+{%- macro nav_card(href, title, blurb='', tag='') -%}
+<a href="{{ href }}" class="wt-panel wt-nav-card" data-search="{{ (title ~ ' ' ~ blurb) | striptags | lower }}">
+  {%- if tag %}<span class="wt-pill wt-pill-pos">{{ tag }}</span>{% endif %}
+  <h3>{{ title | safe }}</h3>
+  {%- if blurb %}<p class="wt-meta">{{ blurb }}</p>{% endif %}
+  <div class="wt-meta wt-nav-card__go">Open &rarr;</div>
+</a>
+{%- endmacro -%}
+
+
+{# --- 17. DR/CR balance — magnitude plus a side pill --------------------- #}
+{%- macro dr_cr(value, currency='Rs', digits=2) -%}
+{%- if value is none -%}<span class="wt-ash">&mdash;</span>
+{%- else -%}
+{%- set v = value | float -%}
+<span class="tabular-nums"><span class="currency">{{ currency }}</span>{{ ("{:,." ~ digits ~ "f}").format(v | abs) }}</span>
+{% if v < 0 %}<span class="pill-cr">CR</span>{% else %}<span class="pill-dr">DR</span>{% endif %}
+{%- endif -%}
+{%- endmacro -%}
+
+
+{# ============================================================
+   REPORT TOOLKIT MACROS — behaviour lives in static/js/wt-report.js
+   ============================================================ #}
+
+
+{# --- 18. Report toolbar — search + row count + CSV + print -------------- #}
+{%- macro report_toolbar(table_id, search=True, export=True, print_btn=False, count=True) -%}
+<div class="wt-report-toolbar">
+  {%- if search %}
+  <div class="wt-report-search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="search" data-table-search="{{ table_id }}" autocomplete="off"
+           placeholder="Search this report&hellip;" aria-label="Search this report">
+  </div>
+  {%- endif %}
+  {%- if count %}<span class="wt-report-count" data-table-count="{{ table_id }}"></span>{% endif %}
+  {%- if export or print_btn %}
+  <div class="wt-report-actions">
+    {%- if export %}<button type="button" class="btn-secondary btn-sm" data-table-export="{{ table_id }}">&darr; CSV</button>{% endif %}
+    {%- if print_btn %}<button type="button" class="btn-secondary btn-sm" data-print>Print</button>{% endif %}
+  </div>
+  {%- endif %}
+</div>
+{%- endmacro -%}
+
+
+{# --- 19. Date presets — the JS fills in the buttons, so the label list
+   lives in ONE place rather than duplicated across 26 templates.
+   mode='single' for as-of reports. #}
+{%- macro date_presets(start_name='date_from', end_name='date_to', mode='range') -%}
+<div class="wt-presets" data-date-presets data-mode="{{ mode }}"
+     data-start="{{ start_name }}"{% if mode != 'single' %} data-end="{{ end_name }}"{% endif %}></div>
+{%- endmacro -%}
+
+
+{# --- 20. Sortable table — PAIR with table_close(). --------------------- #}
+{%- macro sortable_table_open(id, dense=False) -%}
+<div class="wt-table-wrap"><div class="wt-table-scroll">
+<table class="wt-table{{ ' wt-table--dense' if dense else '' }}" id="{{ id }}" data-sortable>
+{%- endmacro -%}
+
+
+{# --- 21. Chart card — the height wrapper is mandatory for Chart.js
+   (maintainAspectRatio:false), so this macro makes it impossible to forget. #}
+{%- macro chart_card(chart_id, title, subtitle='', size='') -%}
+<div class="wt-chart-card">
+  <div class="wt-chart-card__head">
+    <div>
+      <h2>{{ title }}</h2>
+      {%- if subtitle %}<div class="wt-meta">{{ subtitle | safe }}</div>{% endif %}
+    </div>
+  </div>
+  <div class="wt-chart-box{{ ' wt-chart-box--' ~ size if size else '' }}">
+    <canvas id="{{ chart_id }}"></canvas>
+  </div>
+</div>
+{%- endmacro -%}
+
+
+{# --- 22. Drill-down link — one look for every report drill-through ----- #}
+{%- macro drill(href, label, title='') -%}
+<a href="{{ href }}" class="wt-drill"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</a>
+{%- endmacro -%}

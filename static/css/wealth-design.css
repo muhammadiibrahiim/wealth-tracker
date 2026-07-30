@@ -1,0 +1,849 @@
+/* ============================================================
+   Wealth Tracker — Design System
+   PostHog-inspired. Loaded on every page from base.html.
+
+   Sections:
+     1. Tokens              8. Callouts & empty states
+     2. App shell           9. Panels & sections
+     3. Typography         10. Tables
+     4. Surfaces &         11. Searchable select
+        semantic colour    12. Forms & modals
+     5. KPI tiles          13. Command palette
+     6. Buttons            14. Mobile / responsive
+     7. Pills & badges
+   ============================================================ */
+
+
+/* ============================================================
+   1. TOKENS
+   ============================================================ */
+:root {
+  --canvas:       #eeefe9;
+  --surface-card: #ffffff;
+  --surface-soft: #e5e7e0;
+  --surface-dark: #23251d;
+  --ink:          #23251d;
+  --body:         #4d4f46;
+  --mute:         #6c6e63;
+  --hairline:     #bfc1b7;
+  --hairline-soft:#dcdfd2;
+  --brand:        #f7a501;
+  --brand-pressed:#dd9001;
+  --brand-active: #b17816;
+  --link:         #1d4ed8;
+  --accent-green: #2c8c66;
+  --accent-red:   #cd4239;
+  --accent-blue:  #2c84e0;
+
+  /* Added by the design-system extraction */
+  --surface-doc:  #fcfcfa;
+  --ash:          #9b9c92;
+  --stone:        #b6b7af;
+  --accent-warn:  #b17816;
+  --accent-info:  #2c84e0;
+  --radius-sm:    4px;
+  --radius:       6px;
+  --radius-lg:    10px;
+  --pos-bg:       #d9eddf;
+  --neg-bg:       #f7d6d3;
+  --warn-bg:      #fdebc7;
+  --info-bg:      #dceaf6;
+}
+
+html, body {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  background: var(--canvas);
+  color: var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+
+/* ============================================================
+   2. APP SHELL
+   ============================================================ */
+
+/* ─── Top progress bar ─── */
+#ux-progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+  background: var(--brand);
+  z-index: 9998; opacity: 0; pointer-events: none;
+  transition: width 0.4s cubic-bezier(.4,0,.2,1), opacity 0.3s;
+}
+#ux-progress-bar.active { opacity: 1; }
+
+/* ─── Sidebar — PostHog dark surface, BRAND yellow accent on active ─── */
+.sidebar {
+  position: fixed; left: 0; top: 0; height: 100vh;
+  width: 64px; z-index: 1000;
+  background: var(--surface-dark);
+  transition: width 0.2s ease;
+  display: flex; flex-direction: column;
+  border-right: 1px solid #1a1c15;
+}
+.sidebar.expanded { width: 260px; }
+.sidebar.expanded .side-text { display: inline; }
+.sidebar .side-text { display: none; }
+.side-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 16px; min-height: 64px;
+  border-bottom: 1px solid #1a1c15;
+}
+.side-logo { display: flex; align-items: center; gap: 10px; color: #fff; }
+.side-logo-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; min-width: 32px; flex-shrink: 0;
+  color: var(--brand);
+}
+.side-logo-text {
+  font-size: 17px; font-weight: 800; color: #fff;
+  white-space: nowrap; opacity: 1; transition: opacity 0.2s ease;
+  letter-spacing: -0.02em;
+}
+.sidebar:not(.expanded) .side-logo-text { opacity: 0; width: 0; }
+.side-toggle {
+  width: 28px; height: 28px; background: transparent; border: none;
+  color: #b6b7af; border-radius: 6px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.side-toggle:hover { background: #33342d; color: #fff; }
+.sidebar:not(.expanded) .side-toggle { transform: rotate(180deg); }
+
+.side-nav { flex: 1; overflow-y: auto; padding: 12px 8px;
+  scrollbar-width: thin; scrollbar-color: #33342d transparent; }
+.side-nav::-webkit-scrollbar { width: 6px; }
+.side-nav::-webkit-scrollbar-thumb { background: #33342d; border-radius: 3px; }
+
+.side-item, .side-parent {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 12px; margin: 1px 0;
+  color: #b6b7af; text-decoration: none;
+  border-radius: 6px; font-size: 14px; font-weight: 500;
+  transition: all 0.15s ease; border: none; background: transparent;
+  width: 100%; text-align: left; cursor: pointer; position: relative;
+}
+.side-item:hover, .side-parent:hover { background: #33342d; color: #fff; }
+.side-item.active, .side-parent.active { color: #fff; background: rgba(247, 165, 1, 0.10); }
+.side-item.active::before, .side-parent.active::before {
+  content: ''; position: absolute; left: -8px; top: 8px; bottom: 8px;
+  width: 3px; background: var(--brand); border-radius: 0 3px 3px 0;
+}
+.side-icon { width: 20px; height: 20px; min-width: 20px; flex-shrink: 0; }
+.side-chev { width: 14px; height: 14px; margin-left: auto; transition: transform 0.2s; }
+.side-parent.expanded .side-chev { transform: rotate(180deg); }
+.side-children {
+  display: none; padding-left: 8px; margin-left: 22px;
+  border-left: 1px solid #1a1c15; margin-top: 2px; margin-bottom: 6px;
+}
+.side-parent.expanded + .side-children { display: block; }
+.side-child {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px; margin: 1px 0;
+  color: #9b9c92; text-decoration: none;
+  border-radius: 5px; font-size: 13px; font-weight: 500; position: relative;
+}
+.side-child:hover { background: #33342d; color: #fff; }
+.side-child.active { color: #fff; }
+.side-child.active::before {
+  content: ''; position: absolute; left: -9px; top: 6px; bottom: 6px;
+  width: 2px; background: var(--brand); border-radius: 0 2px 2px 0;
+}
+.side-child-dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: 0.5; }
+.sidebar:not(.expanded) .side-children,
+.sidebar:not(.expanded) .side-chev { display: none; }
+.side-footer { padding: 12px 16px; border-top: 1px solid #1a1c15; font-size: 12px; color: #9b9c92; }
+
+/* ─── Main shell ─── */
+.main-shell { margin-left: 64px; transition: margin-left 0.2s ease; min-height: 100vh; }
+.sidebar.expanded ~ .main-shell { margin-left: 260px; }
+@media (max-width: 768px) {
+  .main-shell, .sidebar.expanded ~ .main-shell { margin-left: 0; }
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.expanded { transform: translateX(0); box-shadow: 4px 0 20px rgba(0,0,0,0.3); }
+}
+
+
+/* ============================================================
+   3. TYPOGRAPHY
+   ============================================================ */
+.page-title {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 2.25rem; font-weight: 800; color: var(--ink);
+  letter-spacing: -0.025em; line-height: 1.15;
+}
+.page-subtitle { font-size: 0.9375rem; color: var(--body); margin-top: 0.5rem; line-height: 1.5; }
+h2 {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 1.25rem; font-weight: 700; color: var(--ink); letter-spacing: -0.015em;
+}
+
+.page-title-sm {
+  font-size: 1.5rem; font-weight: 800; color: var(--ink);
+  letter-spacing: -0.02em; line-height: 1.2;
+}
+.wt-section-title {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 0.75rem; font-weight: 700; color: var(--body);
+  text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 0.75rem;
+}
+.wt-meta { font-size: 0.8125rem; color: var(--mute); line-height: 1.5; }
+.wt-mono { font-family: 'Source Code Pro', ui-monospace, Menlo, monospace; }
+
+
+/* ============================================================
+   4. SURFACES & SEMANTIC COLOUR
+   ============================================================ */
+
+/* Override the generic Tailwind "bg-white" so cards keep the PostHog white
+   tone on cream canvas. */
+.bg-white { background-color: var(--surface-card) !important; }
+
+/* Text tone — replaces ~300 hardcoded hex values. See 00-CONVENTIONS §C1.
+   The !important is required: many pages put these on an element that also
+   carries a Tailwind text-* utility, and the CDN's utility wins otherwise. */
+.wt-pos  { color: var(--accent-green) !important; }
+.wt-neg  { color: var(--accent-red)   !important; }
+.wt-warn { color: var(--accent-warn)  !important; }
+.wt-info { color: var(--accent-info)  !important; }
+
+/* Grey ramp — replaces text-gray-*. See 00-CONVENTIONS §C3. */
+.wt-ink  { color: var(--ink)  !important; }
+.wt-body { color: var(--body) !important; }
+.wt-mute { color: var(--mute) !important; }
+.wt-ash  { color: var(--ash)  !important; }
+
+/* Soft tinted backgrounds */
+.wt-pos-bg  { background: rgba(44,140,102,0.07); }
+.wt-neg-bg  { background: rgba(205,66,57,0.07); }
+.wt-warn-bg { background: rgba(177,120,22,0.09); }
+.wt-info-bg { background: rgba(44,132,224,0.07); }
+.wt-surface-soft { background: var(--surface-soft); }
+
+
+/* ============================================================
+   5. KPI TILES
+   ============================================================ */
+.stat-card {
+  background: var(--surface-card);
+  border: 1px solid var(--hairline-soft);
+  border-radius: 6px;
+  padding: 1.25rem 1.25rem;
+  min-width: 0;             /* let grid children shrink */
+  overflow-wrap: break-word;
+}
+.stat-label {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 0.75rem; font-weight: 700; color: var(--body);
+  text-transform: uppercase; letter-spacing: 0; margin-bottom: 0.5rem;
+  line-height: 1.33;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stat-value {
+  font-size: 2.25rem; font-weight: 800; color: var(--ink);
+  line-height: 1.1; font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+}
+.stat-value.neg, .stat-value.cr { color: var(--accent-red); }
+.stat-value .currency { font-size: 1.4rem; font-weight: 700; color: var(--mute); margin-right: 0.25rem; }
+.stat-foot { font-size: 0.75rem; font-weight: 600; color: var(--mute); text-transform: uppercase; margin-top: 0.5rem; }
+
+/* Compact KPI variant — for strips with 5-6 tiles where the full
+   2.25rem stat-value would overflow the column. */
+.stat-card-sm { padding: 1rem 1rem; }
+.stat-card-sm .stat-value { font-size: 1.5rem; line-height: 1.15; }
+.stat-card-sm .stat-value .currency { font-size: 0.95rem; }
+.stat-card-sm .stat-label { font-size: 0.7rem; margin-bottom: 0.375rem; }
+.stat-card-sm .stat-foot { font-size: 0.65rem; margin-top: 0.375rem; }
+
+/* Card border accents — replaces style="border-color:#…". §C2 */
+.wt-card-pos   { border-color: var(--accent-green) !important; }
+.wt-card-neg   { border-color: var(--accent-red)   !important; }
+.wt-card-warn  { border-color: var(--accent-warn)  !important; }
+.wt-card-info  { border-color: var(--accent-info)  !important; }
+.wt-card-brand { border-color: var(--brand)        !important; }
+.wt-card-em    { border-width: 2px !important; }
+
+/* Clickable KPI (many tiles drill through to a report) */
+a.stat-card { text-decoration: none; display: block;
+              transition: border-color .15s ease, box-shadow .15s ease; }
+a.stat-card:hover { border-color: var(--ink);
+              box-shadow: 0 4px 8px -2px rgba(35,37,29,0.06); }
+
+/* A KPI whose value is not available — keeps row baselines flat instead of
+   each page shrinking the font inline. */
+.stat-value.is-empty { color: var(--ash); font-size: 1.25rem; font-weight: 700; }
+
+
+/* ============================================================
+   6. BUTTONS
+   ============================================================ */
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 8px 16px; height: 40px;
+  background: var(--brand); color: var(--ink);
+  border: none; border-radius: 6px;
+  font-size: 0.875rem; font-weight: 700; line-height: 1;
+  transition: background 0.15s ease;
+}
+.btn-primary:hover { background: var(--brand-pressed); }
+.btn-primary:active { background: var(--brand-active); }
+.btn-secondary {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 8px 16px; height: 40px;
+  background: var(--surface-soft); color: var(--ink);
+  border: 1px solid var(--hairline-soft); border-radius: 6px;
+  font-size: 0.875rem; font-weight: 700; line-height: 1;
+}
+.btn-secondary:hover { background: var(--hairline-soft); }
+
+.btn-danger {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 8px 16px; height: 40px;
+  background: var(--accent-red); color: #fff;
+  border: none; border-radius: var(--radius);
+  font-size: 0.875rem; font-weight: 700; line-height: 1;
+  transition: opacity .15s ease;
+}
+.btn-danger:hover { opacity: 0.88; }
+.btn-ghost {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 8px 12px; height: 40px;
+  background: transparent; color: var(--body);
+  border: 1px solid transparent; border-radius: var(--radius);
+  font-size: 0.875rem; font-weight: 600; line-height: 1;
+}
+.btn-ghost:hover { background: var(--surface-soft); color: var(--ink); }
+
+/* Compact modifier — replaces bolting `text-xs` onto btn-secondary */
+.btn-sm { height: 32px; padding: 6px 12px; font-size: 0.8125rem; }
+
+.btn-primary:disabled, .btn-secondary:disabled, .btn-danger:disabled {
+  opacity: .5; cursor: not-allowed;
+}
+
+/* Buttons are often <a>; kill the global link colour on them */
+a.btn-primary, a.btn-secondary, a.btn-danger, a.btn-ghost {
+  text-decoration: none; color: inherit;
+}
+a.btn-primary { color: var(--ink); }
+a.btn-danger  { color: #fff; }
+
+
+/* ============================================================
+   7. PILLS & BADGES
+   ============================================================ */
+.pill-dr, .pill-cr {
+  display: inline-flex; align-items: center; padding: 2px 8px;
+  border-radius: 999px; font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.pill-dr { background: #d9eddf; color: #1f6b4e; }
+.pill-cr { background: #f7d6d3; color: #a52e26; }
+
+.wt-pill {
+  display: inline-flex; align-items: center; padding: 2px 9px;
+  border-radius: 999px; font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.04em; white-space: nowrap; line-height: 1.6;
+}
+.wt-pill-pos     { background: var(--pos-bg);  color: #1f6b4e; }
+.wt-pill-neg     { background: var(--neg-bg);  color: #a52e26; }
+.wt-pill-warn    { background: var(--warn-bg); color: #7a5210; }
+.wt-pill-info    { background: var(--info-bg); color: #0a3088; }
+.wt-pill-neutral { background: var(--surface-soft); color: var(--body); }
+.wt-pill-strong  { background: var(--ink); color: #fff; }
+
+
+/* ============================================================
+   8. CALLOUTS & EMPTY STATES
+   ============================================================ */
+.accent-card {
+  background: var(--surface-card);
+  border: 1px solid var(--hairline-soft);
+  border-radius: 6px;
+  border-left: 4px solid var(--brand);
+  padding: 1.25rem 1.5rem;
+}
+
+.wt-callout {
+  border: 1px solid var(--hairline-soft);
+  border-left: 4px solid var(--accent-info);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  padding: 0.875rem 1.125rem;
+  font-size: 0.875rem; color: var(--body); line-height: 1.55;
+}
+.wt-callout-pos  { border-left-color: var(--accent-green); }
+.wt-callout-neg  { border-left-color: var(--accent-red); }
+.wt-callout-warn { border-left-color: var(--accent-warn); }
+.wt-callout-info { border-left-color: var(--accent-info); }
+.wt-callout__title { font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+
+.wt-empty {
+  padding: 48px 24px; text-align: center;
+  color: var(--mute); font-size: 0.875rem;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+}
+.wt-empty__title {
+  font-size: 0.9375rem; font-weight: 700; color: var(--ink);
+  margin-bottom: 6px;
+}
+
+
+/* ============================================================
+   9. PANELS & SECTIONS
+   ============================================================ */
+.wt-panel {
+  background: var(--surface-card);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.wt-panel__head {
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--hairline-soft);
+  background: var(--surface-doc);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.75rem; flex-wrap: wrap;
+}
+.wt-panel__body { padding: 1.25rem; }
+.wt-panel__body--flush { padding: 0; }
+
+/* The standard GET-filter card that opens ~30 report pages */
+.wt-filter-bar {
+  background: var(--surface-card);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap;
+}
+.wt-filter-bar .btn-primary,
+.wt-filter-bar .btn-secondary { flex: 0 0 auto; }
+
+/* Page header — the flex row that opens ~45 pages */
+.wt-page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+}
+.wt-page-header__actions {
+  display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;
+}
+
+/* Hub / index cards */
+.wt-nav-card { display: block; padding: 1.25rem; text-decoration: none;
+               transition: border-color .15s ease, box-shadow .15s ease; }
+.wt-nav-card:hover { border-color: var(--ink);
+               box-shadow: 0 4px 8px -2px rgba(35,37,29,0.06); }
+.wt-nav-card h3 { font-size: 1rem; font-weight: 700; color: var(--ink); margin: 0; }
+.wt-nav-card p  { margin: .5rem 0 0; }
+.wt-nav-card__go { margin-top: .75rem; font-weight: 600; }
+.wt-nav-card:hover .wt-nav-card__go { color: var(--brand-active); }
+
+
+/* ============================================================
+   10. TABLES
+   ============================================================ */
+.wt-table-wrap {
+  background: var(--surface-card);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.wt-table-scroll {
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  max-height: 78vh; overflow-y: auto;
+}
+.wt-table {
+  width: 100%; background: var(--surface-card);
+  border-collapse: separate; border-spacing: 0;
+  font-size: 0.9375rem;
+}
+.wt-table thead th {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 0.75rem; font-weight: 700; color: var(--body);
+  text-transform: uppercase; letter-spacing: 0;
+  padding: 0.875rem 1.25rem; text-align: left; white-space: nowrap;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--hairline-soft);
+  position: sticky; top: 0; z-index: 1;
+}
+.wt-table tbody td {
+  padding: 1rem 1.25rem; font-size: 0.9375rem; color: var(--ink);
+  vertical-align: middle; line-height: 1.4;
+  border-top: 1px solid var(--hairline-soft);
+}
+.wt-table tbody tr:hover td { background: #faf9f5; }
+.wt-table th.num, .wt-table td.num {
+  text-align: right; white-space: nowrap;
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+}
+.wt-table th.center, .wt-table td.center { text-align: center; }
+.wt-table tfoot td, .wt-table tr.wt-total td {
+  background: var(--surface-soft);
+  border-top: 2px solid var(--hairline);
+  font-weight: 700; color: var(--ink);
+  padding: 1rem 1.25rem;
+}
+/* Compact density for long ledgers */
+.wt-table--dense thead th { padding: 0.625rem 0.875rem; }
+.wt-table--dense tbody td { padding: 0.625rem 0.875rem; font-size: 0.875rem; }
+/* Group header row inside a table */
+.wt-table tr.wt-group td {
+  background: var(--surface-doc); font-weight: 700; color: var(--ink);
+  font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.02em;
+}
+
+/* ---- TEMPORARY: bare-table compatibility ------------------------------
+   Mirrors the old global `table` rules from base.html so pages not yet
+   converted to .wt-table keep their styling during the migration.
+   PROMPT 48 DELETES THIS BLOCK once every table carries .wt-table.
+   Do not write new markup that relies on it.                          */
+table:not(.wt-table) { background: var(--surface-card); }
+table:not(.wt-table) thead { background: var(--surface-soft);
+  border-bottom: 1px solid var(--hairline-soft); }
+table:not(.wt-table) thead th {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 0.75rem; font-weight: 700; color: var(--body);
+  text-transform: uppercase; padding: 0.875rem 1.25rem; }
+table:not(.wt-table) tbody td {
+  padding: 1rem 1.25rem; font-size: 0.9375rem; color: var(--ink); }
+table:not(.wt-table) tbody tr { border-top: 1px solid var(--hairline-soft); }
+table:not(.wt-table) tbody tr:hover { background: #faf9f5; }
+/* ---- END TEMPORARY ---------------------------------------------------- */
+
+
+/* ============================================================
+   11. SEARCHABLE SELECT
+   Consumed by the JS in base.html — class names are load-bearing.
+   ============================================================ */
+.ss-wrap { position: relative; }
+.ss-input {
+  background-color: var(--surface-card); color: var(--ink);
+  border: 1px solid var(--hairline); border-radius: 6px;
+  font-size: 0.9375rem; line-height: 1.4;
+  padding: 8px 12px; min-height: 40px; width: 100%;
+  box-sizing: border-box;
+}
+.ss-input:focus {
+  outline: none !important; border-color: var(--ink) !important;
+  box-shadow: 0 0 0 3px rgba(35, 37, 29, 0.12) !important;
+}
+.ss-dropdown {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
+  background: var(--surface-card); border: 1px solid var(--hairline);
+  border-top: none; border-radius: 0 0 6px 6px;
+  max-height: 280px; overflow-y: auto;
+  box-shadow: 0 8px 16px rgba(35,37,29,0.10);
+}
+.ss-option {
+  padding: 8px 12px; cursor: pointer; font-size: 14px;
+  border-bottom: 1px solid var(--hairline-soft);
+  color: var(--ink);
+}
+.ss-option:last-child { border-bottom: none; }
+.ss-option:hover, .ss-option.active { background: #fef7e6; }
+.ss-empty { padding: 16px; text-align: center; color: var(--mute); font-size: 13px; }
+.ss-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface-card);
+  border: 1px solid var(--hairline); border-radius: 6px;
+  min-height: 40px; box-sizing: border-box;
+  cursor: pointer;
+}
+.ss-chip:hover { border-color: var(--ink); }
+.ss-chip-label { flex: 1; color: var(--ink); font-weight: 500; font-size: 14px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ss-chip-clear {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--mute); padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+}
+.ss-chip-clear:hover { background: #f3f4f6; color: var(--accent-red); }
+.ss-hidden { position: absolute; opacity: 0; pointer-events: none; height: 0; width: 0; }
+
+
+/* ============================================================
+   12. FORMS & MODALS
+   ============================================================ */
+/* Avoid a fixed height — let padding + line-height size the field so text
+   never clips. This handles inputs with various Tailwind py-* classes too. */
+input[type="text"], input[type="number"], input[type="date"], input[type="email"],
+input[type="password"], input[type="search"], input[type="tel"], input[type="url"],
+input[type="month"], select, textarea {
+  background-color: var(--surface-card);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  padding: 8px 12px;
+  min-height: 40px;
+  box-sizing: border-box;
+}
+textarea { min-height: auto; line-height: 1.5; }
+select {
+  /* Allow native chevron, give right padding for it */
+  padding-right: 32px;
+  background-position: right 10px center;
+}
+input::placeholder, textarea::placeholder { color: var(--ash); }
+input:focus, select:focus, textarea:focus {
+  outline: none !important;
+  border-color: var(--ink) !important;
+  box-shadow: 0 0 0 3px rgba(35, 37, 29, 0.12) !important;
+}
+.field-label {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 0.75rem; font-weight: 700; color: var(--body);
+  text-transform: uppercase; letter-spacing: 0;
+  margin-bottom: 0.375rem; display: block;
+}
+.field-label-required::after { content: ' *'; color: var(--accent-red); }
+
+.wt-form-grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, 1fr); }
+.wt-form-grid--full { grid-column: 1 / -1; }
+@media (max-width: 768px) { .wt-form-grid { grid-template-columns: 1fr; } }
+.wt-field-error { color: var(--accent-red); font-size: 0.75rem; margin-top: 4px; }
+.wt-invalid { border-color: var(--accent-red) !important;
+              box-shadow: 0 0 0 3px rgba(205,66,57,0.15) !important; }
+
+/* Consistent focus ring on everything interactive */
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px;
+                 border-radius: var(--radius-sm); }
+
+/* ─── Modal — keep white card on dimmed cream backdrop ─── */
+.modal-backdrop {
+  background-color: rgba(35, 37, 29, 0.55) !important;
+  backdrop-filter: blur(2px);
+  /* Sit ABOVE the fixed sidebar (z-index:1000) so wide modals aren't
+     clipped/covered by it. Applies to every modal, consistently. */
+  z-index: 1100 !important;
+}
+#modal-container .bg-white {
+  background: var(--surface-card) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 20px 40px -10px rgba(35,37,29,0.25), 0 8px 16px -8px rgba(35,37,29,0.1) !important;
+}
+.modal-title {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 1.5rem; font-weight: 800; color: var(--ink); letter-spacing: -0.02em;
+}
+.modal-subtitle { font-size: 0.875rem; color: var(--body); margin-top: 0.25rem; line-height: 1.5; }
+.modal-close { color: var(--ash); background: transparent; border: none; cursor: pointer; padding: 4px; font-size: 1.25rem; }
+.modal-close:hover { color: var(--ink); }
+
+/* ─── Anchor colour — PostHog uses blue links ─── */
+a { color: var(--link); }
+a:hover { color: #0a3088; }
+
+/* Shadows: softer per PostHog (flat-ish) */
+.shadow-sm { box-shadow: 0 1px 2px rgba(35,37,29,0.04) !important; }
+.shadow-md { box-shadow: 0 4px 8px -2px rgba(35,37,29,0.06) !important; }
+
+
+/* ============================================================
+   13. COMMAND PALETTE
+   ============================================================ */
+.wt-appbar {
+  display: flex; align-items: center; gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0 0 1rem 0;
+}
+.wt-search-trigger {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  min-width: 260px; height: 36px; padding: 0 12px;
+  background: var(--surface-card);
+  border: 1px solid var(--hairline); border-radius: var(--radius);
+  color: var(--mute); font-size: 0.875rem; font-family: inherit;
+  cursor: pointer; transition: border-color .15s ease, color .15s ease;
+}
+.wt-search-trigger:hover { border-color: var(--ink); color: var(--ink); }
+.wt-search-trigger svg { width: 16px; height: 16px; flex: none; }
+.wt-search-trigger__text { flex: 1; text-align: left; }
+
+.wt-kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 5px;
+  background: var(--surface-soft); border: 1px solid var(--hairline-soft);
+  border-radius: 4px;
+  font-family: 'Source Code Pro', ui-monospace, monospace;
+  font-size: 11px; font-weight: 600; color: var(--body); line-height: 1;
+}
+
+.wt-palette-overlay {
+  position: fixed; inset: 0; z-index: 1200;
+  background: rgba(35,37,29,0.5); backdrop-filter: blur(2px);
+  display: none; align-items: flex-start; justify-content: center;
+  padding: 10vh 16px 16px;
+}
+.wt-palette-overlay.open { display: flex; }
+.wt-palette {
+  background: var(--surface-card);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 64px -12px rgba(35,37,29,0.35);
+  width: 100%; max-width: 620px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.wt-palette-input-wrap {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-bottom: 1px solid var(--hairline-soft);
+}
+.wt-palette-input-wrap svg { width: 20px; height: 20px; color: var(--mute); flex: none; }
+.wt-palette-input-wrap input {
+  flex: 1; border: none !important; background: transparent !important;
+  box-shadow: none !important; outline: none !important;
+  font-size: 1rem; color: var(--ink); padding: 0 !important;
+  min-height: auto !important;
+}
+.wt-palette-results { max-height: 52vh; overflow-y: auto; padding: 8px; }
+.wt-palette-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: var(--radius);
+  text-decoration: none; color: var(--ink); cursor: pointer;
+}
+.wt-palette-item.active { background: var(--surface-soft); }
+.wt-palette-type {
+  flex: none; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; padding: 3px 7px; border-radius: 4px;
+  background: var(--surface-soft); color: var(--mute);
+}
+.wt-palette-item.active .wt-palette-type { background: var(--ink); color: #fff; }
+.wt-palette-main { display: flex; flex-direction: column; min-width: 0; }
+.wt-palette-title { font-size: 0.9rem; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wt-palette-sub { font-size: 0.75rem; color: var(--mute);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wt-palette-code {
+  margin-left: auto; flex: none;
+  font-family: 'Source Code Pro', ui-monospace, monospace;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+  color: var(--brand-active); background: var(--warn-bg);
+  border: 1px solid #f0d9a4; border-radius: 5px; padding: 2px 7px;
+  white-space: nowrap;
+}
+.wt-palette-empty { padding: 28px; text-align: center;
+  color: var(--mute); font-size: 0.875rem; }
+.wt-palette-foot {
+  display: flex; gap: 14px; padding: 10px 16px;
+  border-top: 1px solid var(--hairline-soft);
+  background: var(--surface-doc);
+  font-size: 11px; color: var(--mute);
+}
+.wt-palette-foot .wt-kbd { margin-right: 3px; }
+
+/* Go-to toast used by the G-shortcut */
+.wt-toast-go {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+  z-index: 1300; background: var(--ink); color: #fff;
+  padding: 8px 18px; border-radius: 999px;
+  font-size: 0.8125rem; font-weight: 600;
+  opacity: 0; pointer-events: none; transition: opacity .15s ease;
+}
+.wt-toast-go.show { opacity: 1; }
+
+/* Shortcuts help modal reuses .wt-palette-overlay + .wt-palette */
+.wt-help-table { width: 100%; font-size: 0.8125rem; }
+.wt-help-table td { padding: 6px 8px; vertical-align: top; color: var(--body); }
+.wt-help-table td:first-child { width: 130px; white-space: nowrap; }
+
+
+/* ============================================================
+   14. MOBILE / RESPONSIVE
+   ============================================================ */
+@media (max-width: 640px) {
+  .page-title { font-size: 1.625rem; }
+  .stat-value { font-size: 1.625rem; }
+  .stat-card { padding: 1rem; }
+  .stat-card-sm .stat-value { font-size: 1.25rem; }
+  .wt-table thead th, .wt-table tbody td { padding: 0.75rem 0.875rem; }
+  .wt-table { font-size: 0.875rem; }
+  .wt-page-header__actions { width: 100%; }
+  .wt-search-trigger { min-width: 0; width: 100%; }
+  .wt-palette-overlay { padding: 6vh 10px 10px; }
+  /* Prevent iOS zoom-on-focus */
+  input, select, textarea { font-size: 16px !important; }
+}
+@media (max-width: 380px) {
+  .stat-value { font-size: 1.375rem; }
+  .page-title { font-size: 1.5rem; }
+}
+html, body { overflow-x: hidden; }
+
+
+/* ============================================================
+   15. REPORT TOOLKIT (see static/js/wt-report.js)
+   ============================================================ */
+
+/* --- Sortable headers --- */
+.wt-table th.wt-th-sort { cursor: pointer; user-select: none; padding-right: 22px;
+                          position: sticky; top: 0; }
+.wt-table th.wt-th-sort:hover { color: var(--ink); background: var(--hairline-soft); }
+.wt-table th.wt-th-sort:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.wt-sort-ind { position: absolute; right: 8px; opacity: .35; font-size: 9px; }
+.wt-table th[aria-sort="ascending"]  .wt-sort-ind,
+.wt-table th[aria-sort="descending"] .wt-sort-ind { opacity: 1; color: var(--brand-active); }
+.wt-table th[aria-sort="ascending"], .wt-table th[aria-sort="descending"] { color: var(--ink); }
+
+/* --- Report toolbar (search + count + export + print) --- */
+.wt-report-toolbar { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+                     margin-bottom: .75rem; }
+.wt-report-search { position: relative; flex: 1 1 260px; max-width: 380px; }
+.wt-report-search input { width: 100%; padding-left: 34px !important; }
+.wt-report-search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+                        width: 16px; height: 16px; color: var(--mute); pointer-events: none; }
+.wt-report-count { font-size: .8125rem; color: var(--mute); white-space: nowrap; }
+.wt-report-actions { margin-left: auto; display: flex; gap: .5rem; }
+
+/* --- Date presets --- */
+.wt-presets { display: flex; gap: .375rem; flex-wrap: wrap; align-items: center; }
+.wt-preset { padding: 5px 11px; border-radius: var(--radius); border: 1px solid var(--hairline);
+             background: var(--surface-card); color: var(--body);
+             font-size: .8125rem; font-weight: 600; font-family: inherit;
+             cursor: pointer; white-space: nowrap; line-height: 1.3;
+             transition: border-color .15s, color .15s, background .15s; }
+.wt-preset:hover { border-color: var(--ink); color: var(--ink); }
+.wt-preset--active { background: var(--ink); border-color: var(--ink); color: #fff; }
+.wt-preset--active:hover { color: var(--brand); }
+
+/* --- Chart card --- */
+.wt-chart-card { background: var(--surface-card); border: 1px solid var(--hairline-soft);
+                 border-radius: var(--radius); padding: 1.25rem; }
+.wt-chart-card__head { display: flex; justify-content: space-between; align-items: flex-start;
+                       gap: .75rem; flex-wrap: wrap; margin-bottom: .75rem; }
+.wt-chart-box { position: relative; height: 300px; }
+.wt-chart-box--sm { height: 220px; }
+.wt-chart-box--lg { height: 380px; }
+
+/* --- Drill-down affordance on a table cell --- */
+.wt-table td a.wt-drill { color: var(--ink); text-decoration: none;
+                          border-bottom: 1px dotted var(--hairline); }
+.wt-table td a.wt-drill:hover { color: var(--brand-active); border-bottom-color: var(--brand-active); }
+
+/* --- Inline share/concentration bar (width carries a DATA value) --- */
+.wt-minibar { display: block; height: 3px; margin-top: 3px; border-radius: 2px;
+              background: var(--hairline-soft); position: relative; }
+.wt-minibar::after { content: ""; position: absolute; inset: 0 auto 0 0;
+              width: var(--w, 0%); border-radius: 2px; background: var(--brand); }
+
+/* --- Filtered-row hiding (JS toggles this class, never inline display) --- */
+.wt-row-hidden { display: none !important; }
+
+/* --- Print --- */
+@media print {
+  .sidebar, .wt-appbar, .wt-report-toolbar, .wt-presets, .wt-filter-bar,
+  .wt-page-header__actions, #ux-progress-bar, .wt-palette-overlay,
+  .btn-primary, .btn-secondary, .btn-danger, .btn-ghost { display: none !important; }
+  .main-shell { margin-left: 0 !important; }
+  main { padding: 0 !important; max-width: none !important; }
+  .wt-table-scroll { max-height: none !important; overflow: visible !important; }
+  .wt-table thead th { position: static !important; }
+  .wt-table { font-size: 10.5pt; }
+  .wt-table thead { display: table-header-group; }
+  .wt-table tr { page-break-inside: avoid; }
+  .stat-card, .wt-panel, .wt-table-wrap { break-inside: avoid; border-color: #999 !important; }
+  .page-title { font-size: 18pt; }
+  a[href]::after { content: ""; }
+  body { background: #fff !important; }
+}

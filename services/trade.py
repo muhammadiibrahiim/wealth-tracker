@@ -2301,11 +2301,18 @@ class TradeReportService:
         if ar_sub:
             for a in session.exec(_select(_Account).where(_Account.subclass_id == ar_sub.id)).all():
                 outstanding_receivable += _balance_asof(session, a.id, today)
-        if ap_sub:
-            # AP accounts have natural CREDIT balances; flip sign so the dashboard
-            # reads as "money we owe (positive)".
-            for a in session.exec(_select(_Account).where(_Account.subclass_id == ap_sub.id)).all():
-                outstanding_payable -= _balance_asof(session, a.id, today)
+        # Only ACTUAL vendor ledgers. The A/P subclass (2100) also holds the
+        # CEO/Capital funding accounts (and can hold mis-filed party ledgers),
+        # none of which is vendor debt — the CEO account especially, which the
+        # partner contributions debit. Scope to vendor parties, and hard-exclude
+        # the funding accounts (2102/2103) even if a party links to one, so owner
+        # funding never counts as (or against) "owed to vendors". AP accounts are
+        # credit-normal; flip sign so we read positive as "money we owe".
+        _funding_ids = {a.id for a in session.exec(_select(_Account).where(
+            _Account.user_id == user_id, _Account.code.in_(("2102", "2103")))).all()}
+        for v in PartyService.list_vendors(session, user_id):
+            if v.account_id and v.account_id not in _funding_ids:
+                outstanding_payable -= _balance_asof(session, v.account_id, today)
 
         # ── Overdue is still per-trade (uses customer_due_date) ──────────
         # Net out customer-paid costs and write-offs (not just cash) so a trade

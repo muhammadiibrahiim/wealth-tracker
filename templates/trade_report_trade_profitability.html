@@ -1,71 +1,67 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Trade Profitability{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Trade Profitability</h1>
-      <p class="page-subtitle">Top earners, biggest variances, oldest unsettled.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Trade Profitability',
+      'Gross profit per trade. Click a trade reference to open it.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
+class="flex items-end gap-4 flex-wrap">
       <div><label class="field-label">From</label>
-        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+        <input type="date" name="date_from" value="{{ date_from }}"></div>
       <div><label class="field-label">To</label>
-        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
-      <button type="submit" class="btn-primary">Generate Report</button>
-      <a href="/trade/reports/trade-profitability" class="btn-secondary">Reset</a>
-    </form>
-  </div>
+        <input type="date" name="date_to" value="{{ date_to }}"></div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/trade-profitability') }}
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     {% macro card(title, rows, tone, value_attr, value_prefix) -%}
-    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-200" style="background: #fafaf9;"><h2>{{ title }}</h2></div>
-      <table class="min-w-full">
+    <div class="wt-panel">
+      <div class="wt-panel__head"><h2>{{ title }}</h2></div>
+      {{ report_toolbar('tbl-trade-profitability', print_btn=True) }}
+    {{ sortable_table_open('tbl-trade-profitability', dense=True) }}
         <tbody>
         {% for r in rows %}
         <tr>
-          <td><a class="text-indigo-600 hover:text-indigo-900 font-medium font-mono text-xs" href="/trade/trades/{{ r.trade.id }}">{{ r.trade.reference }}</a></td>
-          <td class="text-right tabular-nums font-medium" style="color: {{ tone }};">{{ value_prefix }}{{ '{:,.0f}'.format(r[value_attr]) }}</td>
+          <td>{{ drill('/trade/trades/' ~ r.trade.id, r.trade.reference, 'Open this trade') }}</td>
+          <td class="num" class="{{ tone }}">{{ value_prefix }}{{ '{:,.0f}'.format(r[value_attr]) }}</td>
         </tr>
-        {% else %}<tr><td colspan="2" class="px-6 py-10 text-center text-sm text-gray-400">— none —</td></tr>{% endfor %}
+        {% else %}<tr><td colspan="2" class=" text-center text-sm wt-ash">— none —</td></tr>{% endfor %}
         </tbody>
-      </table>
+      {{ table_close() }}
     </div>
     {%- endmacro %}
 
-    {{ card("Top by GP", report.top_by_gp, "#15803d", "gp", currency + " ") }}
-    {{ card("Biggest Qty Variances", report.biggest_variances, "#c2410c", "biggest_qty_variance", "") }}
-    {{ card("Oldest Unsettled (AR)", report.oldest_unsettled, "#b91c1c", "ar_outstanding", currency + " ") }}
+    {{ card("Top by GP", report.top_by_gp, "wt-pos", "gp", currency + " ") }}
+    {{ card("Biggest Qty Variances", report.biggest_variances, "wt-warn", "biggest_qty_variance", "") }}
+    {{ card("Oldest Unsettled (AR)", report.oldest_unsettled, "wt-neg", "ar_outstanding", currency + " ") }}
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200" style="background: #fafaf9;"><h2>Monthly Margin Trend</h2></div>
+  <div class="wt-panel">
+    <div class="wt-panel__head"><h2>Monthly Margin Trend</h2></div>
     <table class="min-w-full">
       <thead>
         <tr>
-          <th class="text-left">Month</th>
-          <th class="text-right">Revenue</th>
-          <th class="text-right">COGS</th>
-          <th class="text-right">GP</th>
-          <th class="text-right">GP%</th>
+          <th>Month</th>
+          <th class="num">Revenue</th>
+          <th class="num">COGS</th>
+          <th class="num">GP</th>
+          <th class="num">GP%</th>
         </tr>
       </thead>
       <tbody>
         {% for r in report.monthly_trend %}
         <tr>
-          <td class="font-medium text-gray-900">{{ r.month }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(r.revenue) }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(r.cogs) }}</td>
-          <td class="text-right tabular-nums font-semibold" style="color: {% if r.gp >= 0 %}#15803d{% else %}#c2410c{% endif %};">{{ currency }} {{ '{:,.0f}'.format(r.gp) }}</td>
-          <td class="text-right tabular-nums">{{ r.gp_pct }}%</td>
+          <td class="font-medium wt-ink">{{ r.month }}</td>
+          <td class="num">{{ currency }} {{ '{:,.0f}'.format(r.revenue) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.0f}'.format(r.cogs) }}</td>
+          <td class="num" class=\"{{ 'wt-pos' if r.gp >= 0 else 'wt-neg' }}\">{{ currency }} {{ '{:,.0f}'.format(r.gp) }}</td>
+          <td class="num {{ 'wt-neg' if r.gp_pct < 0 else '' }}" data-sort-value="{{ r.gp_pct }}">{{ r.gp_pct }}%</td>
         </tr>
-        {% else %}<tr><td colspan="5" class="px-6 py-10 text-center text-sm text-gray-400">No trades in range.</td></tr>{% endfor %}
+        {% else %}<tr><td colspan="5" class=" text-center text-sm wt-ash">No trades in range.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>

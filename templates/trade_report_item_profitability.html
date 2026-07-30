@@ -1,62 +1,58 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
 {% block title %}Item Profitability{% endblock %}
 {% block content %}
 
 <div class="space-y-6">
-  <div class="flex items-start justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="page-title">Item Profitability</h1>
-      <p class="page-subtitle">Revenue, GP and velocity per item — optionally broken down by spec combination.</p>
-    </div>
-    <a href="/trade/reports" class="btn-secondary">← Reports</a>
-  </div>
+  {{ page_header('Item Profitability',
+      'Revenue, margin and velocity per item and spec combination.',
+      [{'label': '← Reports', 'href': '/trade/reports'}]) }}
 
-  <div class="bg-white border border-gray-200 rounded-lg p-6">
-    <form method="get" class="flex items-end gap-4 flex-wrap">
+  {{ filter_bar_open(method='get') }}
+    <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
+class="flex items-end gap-4 flex-wrap">
       <div><label class="field-label">From</label>
-        <input type="date" name="date_from" value="{{ date_from }}" class="px-3 py-2.5"></div>
+        <input type="date" name="date_from" value="{{ date_from }}"></div>
       <div><label class="field-label">To</label>
-        <input type="date" name="date_to" value="{{ date_to }}" class="px-3 py-2.5"></div>
-      <label class="flex items-center gap-2 text-sm text-gray-700 pb-2.5">
+        <input type="date" name="date_to" value="{{ date_to }}"></div>
+      <label class="flex items-center gap-2 text-sm wt-body pb-2.5">
         <input type="checkbox" name="by_spec" value="1" {% if by_spec %}checked{% endif %}>
         Group by spec combination
       </label>
-      <button type="submit" class="btn-primary">Generate Report</button>
-      <a href="/trade/reports/item-profitability" class="btn-secondary">Reset</a>
-    </form>
-  </div>
+  {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/item-profitability') }}
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
-    <table class="min-w-full">
+  <div class="wt-panel overflow-x-auto">
+    {{ report_toolbar('tbl-item-profitability', print_btn=True) }}
+    {{ sortable_table_open('tbl-item-profitability', dense=True) }}
       <thead>
         <tr>
-          <th class="text-left">{% if by_spec %}Item · Specs{% else %}Item{% endif %}</th>
-          <th class="text-right">Units</th>
-          <th class="text-right">Trades</th>
-          <th class="text-right">Revenue</th>
-          <th class="text-right">COGS</th>
-          <th class="text-right">GP</th>
-          <th class="text-right">GP%</th>
-          <th class="text-right">Velocity /mo</th>
+          <th>{% if by_spec %}Item · Specs{% else %}Item{% endif %}</th>
+          <th class="num">Units</th>
+          <th class="num">Trades</th>
+          <th class="num">Revenue</th>
+          <th class="num">COGS</th>
+          <th class="num">GP</th>
+          <th class="num">GP%</th>
+          <th class="num">Velocity /mo</th>
         </tr>
       </thead>
       <tbody>
         {% for r in report.rows %}
         <tr>
-          <td class="font-medium text-gray-900">{{ r.label }}</td>
-          <td class="text-right tabular-nums">{{ '{:g}'.format(r.units) }}</td>
+          <td class="font-medium wt-ink">{{ r.label }}</td>
+          <td class="num">{{ '{:g}'.format(r.units) }}</td>
           <td class="text-right">{{ r.trade_count }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(r.revenue) }}</td>
-          <td class="text-right tabular-nums">{{ currency }} {{ '{:,.0f}'.format(r.cogs) }}</td>
-          <td class="text-right tabular-nums font-semibold" style="color: {% if r.gp >= 0 %}#15803d{% else %}#c2410c{% endif %};">{{ currency }} {{ '{:,.0f}'.format(r.gp) }}</td>
-          <td class="text-right tabular-nums">{{ r.gp_pct }}%</td>
-          <td class="text-right tabular-nums">{{ r.velocity_per_month }}</td>
+          <td class="num">{{ currency }} {{ '{:,.0f}'.format(r.revenue) }}</td>
+          <td class="num">{{ currency }} {{ '{:,.0f}'.format(r.cogs) }}</td>
+          <td class="num" class=\"{{ 'wt-pos' if r.gp >= 0 else 'wt-neg' }}\">{{ currency }} {{ '{:,.0f}'.format(r.gp) }}</td>
+          <td class="num {{ 'wt-neg' if r.gp_pct < 0 else '' }}" data-sort-value="{{ r.gp_pct }}">{{ r.gp_pct }}%</td>
+          <td class="num">{{ r.velocity_per_month }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="px-6 py-16 text-center text-sm text-gray-500">No item activity in range.</td></tr>
+        <tr><td colspan="8" class=" text-center text-sm wt-mute">No item activity in range.</td></tr>
         {% endfor %}
       </tbody>
-    </table>
+    {{ table_close() }}
   </div>
 </div>
 

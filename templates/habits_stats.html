@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/_ui.html" import chart_card %}
 
 {% block title %}Habit Stats - Atomic Habits Tracker{% endblock %}
 
@@ -106,15 +107,9 @@
         {% endif %}
     </div>
 
-    <!-- Progress Chart -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
-        <h2 class="text-lg font-semibold text-gray-800 mb-4">📈 30-Day Progress</h2>
-        <div style="height: 250px;">
-            <canvas id="progressChart"></canvas>
-        </div>
-    </div>
+    {{ chart_card('progressChart', '30-Day Progress', 'Daily completion score.', 'sm') }}
 
-    <!-- Calendar Heatmap -->
+<!-- Calendar Heatmap -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
         <h2 class="text-lg font-semibold text-gray-800 mb-4">🗓️ Activity Heatmap (Last 6 Months)</h2>
         <div id="heatmap" class="overflow-x-auto">
@@ -143,50 +138,15 @@
     </div>
 </div>
 
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
-    const ctx = document.getElementById('progressChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: {{ chart_data.labels | tojson }},
-            datasets: [{
-                label: 'Daily Score %',
-                data: {{ chart_data.scores | tojson }},
-                borderColor: '#3B82F6',
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                fill: true,
-                tension: 0.3,
-                pointRadius: 2,
-                pointHoverRadius: 5
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 100,
-                    ticks: { callback: v => v + '%' }
-                },
-                x: {
-                    ticks: {
-                        maxTicksLimit: 10,
-                        maxRotation: 0
-                    }
-                }
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => ctx.parsed.y + '%'
-                    }
-                }
-            }
-        }
-    });
+document.addEventListener('DOMContentLoaded', function () {
+  if (!window.WTCharts) return;
+  WTCharts.line('progressChart', {
+    labels: {{ chart_data.labels | tojson }},
+    series: [{ name: 'Daily score', data: {{ chart_data.scores | tojson }} }],
+    percent: true, currency: false, showLegend: false,
+    overrides: { scales: { y: { max: 100 } } }
+  });
+});
 </script>
 {% endblock %}

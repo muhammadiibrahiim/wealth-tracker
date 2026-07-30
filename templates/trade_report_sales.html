@@ -38,6 +38,10 @@ class="flex items-end gap-4 flex-wrap">
     </div>
   </div>
 
+  {% if report.rows %}
+  {{ chart_card('sales-trend-chart', 'Sales, cost and profit by month', '', 'lg') }}
+  {% endif %}
+
   <div class="wt-panel overflow-x-auto">
     {% if report.rows %}
     {{ report_toolbar('tbl-sales', print_btn=True) }}

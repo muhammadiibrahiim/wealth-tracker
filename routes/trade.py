@@ -1773,17 +1773,33 @@ async def partners_page(request: Request, session: Session = Depends(get_session
     PS.run_due_allocations(session, user_id)
     cap = PS.cap_table(session, user_id)
     history = PS.allocation_history(session, user_id)
-    # "received into" options for an optional opening contribution
-    funding = []
-    for a in CashAccountService.list(session, user_id, active_only=True):
-        if getattr(a, "account_id", None):
-            funding.append({"account_id": a.account_id, "label": a.name})
-    ceo = session.exec(select(Account).where(Account.user_id == user_id, Account.code == "2103")).first()
-    if ceo:
-        funding.append({"account_id": ceo.id, "label": "Owner funding (CEO)"})
+    # "Received into" — where an optional opening contribution's cash landed.
+    # Offer the user's real accounts, grouped, cash/bank first. Exclude reversal/
+    # P&L-clearing and the partner capital accounts themselves.
+    from models import AccountSubClass
+    partner_acct_ids = {p["account_id"] for p in cap["partners"] if p.get("account_id")}
+    owner_p = PS._owner_partner(session, user_id)
+    if owner_p and owner_p.account_id:
+        partner_acct_ids.add(owner_p.account_id)
+    sub_by_id = {s.id: s.code for s in session.exec(select(AccountSubClass).where(AccountSubClass.user_id == user_id)).all()}
+    vendor_acct_ids = {v.account_id for v in PartyService.list_vendors(session, user_id) if v.account_id}
+    cash_bank, funding, vendors = [], [], []
+    for a in session.exec(select(Account).where(Account.user_id == user_id, Account.is_active == True)).all():  # noqa: E712
+        if a.id in partner_acct_ids:
+            continue
+        sub_code = sub_by_id.get(a.subclass_id, "")
+        if sub_code == "1100":                              # cash / bank (assets)
+            cash_bank.append({"account_id": a.id, "label": a.name})
+        elif a.code == "2103":                              # owner funding conduit
+            funding.append({"account_id": a.id, "label": "Owner funding (CEO)"})
+        elif a.id in vendor_acct_ids and a.code not in ("2102", "2103"):   # an actual vendor's ledger
+            vendors.append({"account_id": a.id, "label": a.name})
+    groups = [g for g in (("Cash & Bank", cash_bank),
+                          ("Owner funding", funding),
+                          ("Pay a vendor directly", vendors)) if g[1]]
     return templates.TemplateResponse(
         "trade_partners.html",
-        _ctx(request, cap=cap, history=history, funding=funding, today=date.today()),
+        _ctx(request, cap=cap, history=history, funding_groups=groups, today=date.today()),
     )
 
 

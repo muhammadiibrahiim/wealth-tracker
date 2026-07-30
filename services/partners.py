@@ -98,9 +98,11 @@ def add_partner(session, user_id, name, pct, joined_on=None,
 
     contribution = Decimal(str(contribution or 0))
     if contribution > 0 and contribution_account_id:
+        # Tagged PARTNER_ALLOCATION so the whole partner sub-ledger (contributions
+        # + monthly splits + the capital move) stays invisible to the dashboard.
         PostingEngine.post(
             session, user_id, entry_date=p.joined_on,
-            entry_type=JournalEntryType.CAPITAL_INJECTION,
+            entry_type=JournalEntryType.PARTNER_ALLOCATION,
             description=f"Capital contribution · {name}",
             lines=[
                 {"account_id": int(contribution_account_id), "debit": contribution, "credit": 0},

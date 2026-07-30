@@ -1,6 +1,16 @@
 {% extends "base.html" %}
 {% from "partials/_ui.html" import page_header, kpi, kpi_sm, money, num, pct, pill, filter_bar_open, filter_bar_close, date_presets, report_toolbar, sortable_table_open, table_open, table_close, empty_state, callout, panel_open, panel_close, drill, section_title, chart_card, dr_cr %}
-{% block title %}Trade {{ trade.reference }}{% endblock %}
+{% block title %}Trade {{ trade.reference }}
+<script>
+/* Sections here are conditional (a trade with no partial receipts has no
+   Receipts block), so drop jump links whose target isn't on the page. */
+(function () {
+  document.querySelectorAll('.wt-presets a[href^="#sec-"]').forEach(function (a) {
+    if (!document.querySelector(a.getAttribute('href'))) a.remove();
+  });
+})();
+</script>
+{% endblock %}
 {% block content %}
 
 {# Status may come back from the DB as a raw string OR as the TradeStatus enum;
@@ -200,7 +210,7 @@
           <div class="font-medium wt-ink">Invoice</div>
           <div class="text-xs wt-mute">Customer invoice — sent to the buyer for collection.</div>
         </div>
-        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/invoice.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/invoice.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/invoice.pdf?img=1" target="_blank">Open</a> <a class="text-xs hover:underline wt-mute ml-1.5" href="/trade/trades/{{ trade.id }}/invoice.pdf" target="_blank">PDF</a>
       </div>
       <div class=" flex items-center gap-3">
         <span class="text-lg">📨</span>
@@ -208,7 +218,7 @@
           <div class="font-medium wt-ink">Order Confirmation</div>
           <div class="text-xs wt-mute">Confirms the order back to the customer with terms, totals and item details.</div>
         </div>
-        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/order-confirmation.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/order-confirmation.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/order-confirmation.pdf?img=1" target="_blank">Open</a> <a class="text-xs hover:underline wt-mute ml-1.5" href="/trade/trades/{{ trade.id }}/order-confirmation.pdf" target="_blank">PDF</a>
       </div>
       <div class=" flex items-center gap-3">
         <span class="text-lg">🚚</span>
@@ -220,7 +230,7 @@
           </div>
           {% if not trade.delivered_at %}<div class="text-xs wt-neg mt-1">Trade not yet marked delivered — doc will say "Delivery in progress".</div>{% endif %}
         </div>
-        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/delivery-pack.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/delivery-pack.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/delivery-pack.pdf?img=1" target="_blank">Open</a> <a class="text-xs hover:underline wt-mute ml-1.5" href="/trade/trades/{{ trade.id }}/delivery-pack.pdf" target="_blank">PDF</a>
       </div>
       {% for d in receipt_dates %}
       <div class=" flex items-center gap-3">
@@ -229,7 +239,7 @@
           <div class="font-medium wt-ink">Delivery + Packing · {{ d }}</div>
           <div class="text-xs wt-mute">For the partial receive event on this date — quantities reflect what was received that day only.</div>
         </div>
-        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/delivery-pack/by-date/{{ d }}.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/delivery-pack/by-date/{{ d }}.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/delivery-pack/by-date/{{ d }}.pdf?img=1" target="_blank">Open</a> <a class="text-xs hover:underline wt-mute ml-1.5" href="/trade/trades/{{ trade.id }}/delivery-pack/by-date/{{ d }}.pdf" target="_blank">PDF</a>
       </div>
       <div class=" flex items-center gap-3">
         <span class="text-lg">🧾</span>
@@ -237,7 +247,7 @@
           <div class="font-medium wt-ink">Invoice · {{ d }}</div>
           <div class="text-xs wt-mute">Customer invoice for the partial delivery on this date.</div>
         </div>
-        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/invoice/by-date/{{ d }}.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/invoice/by-date/{{ d }}.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/invoice/by-date/{{ d }}.pdf?img=1" target="_blank">Open</a> <a class="text-xs hover:underline wt-mute ml-1.5" href="/trade/trades/{{ trade.id }}/invoice/by-date/{{ d }}.pdf" target="_blank">PDF</a>
       </div>
       {% endfor %}
 
@@ -247,7 +257,7 @@
           <div class="font-medium wt-ink">Vendor Purchase Order</div>
           <div class="text-xs wt-mute">Our PO to {{ vendor.name if vendor else 'the vendor' }} at cost terms.</div>
         </div>
-        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/vendor-po.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/vendor-po.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/vendor-po.pdf?img=1" target="_blank">Open</a> <a class="text-xs hover:underline wt-mute ml-1.5" href="/trade/trades/{{ trade.id }}/vendor-po.pdf" target="_blank">PDF</a>
       </div>
 
       {% for p in inbound_payments %}
@@ -261,7 +271,7 @@
             — applied to {{ trade.reference }}.
           </div>
         </div>
-        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/payments/{{ p.id }}/receipt.pdf?img=1" target="_blank">Open</a> <a href="/trade/trades/{{ trade.id }}/payments/{{ p.id }}/receipt.pdf" target="_blank" class="text-xs hover:underline" style="color: var(--mute); margin-left: 6px;">PDF</a>
+        <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/payments/{{ p.id }}/receipt.pdf?img=1" target="_blank">Open</a> <a class="text-xs hover:underline wt-mute ml-1.5" href="/trade/trades/{{ trade.id }}/payments/{{ p.id }}/receipt.pdf" target="_blank">PDF</a>
       </div>
       {% endfor %}
       {% if not inbound_payments %}

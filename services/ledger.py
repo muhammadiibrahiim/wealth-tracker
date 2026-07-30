@@ -387,10 +387,26 @@ def balance_sheet(session: Session, user_id: int, as_of: Optional[date] = None) 
             equity.append({"account": a, "balance": amt})
             total_e += amt
 
-    pl = profit_and_loss(session, user_id, from_date=None, to_date=as_of)
-    retained = pl["net_income"]
+    # Retained trade profit is ALREADY closed into the Capital account (trade P&L
+    # routes through the P&L A/C — an equity account — and is swept to Capital on
+    # completion), so it's captured in the equity balances above. Using
+    # profit_and_loss's net income here double-counts it (that was the balance
+    # sheet's ~Rs 137k imbalance). Add only the net of INCOME/EXPENSE class
+    # accounts that have NOT been closed to equity — direct expenses / write-offs.
+    ie_classes = list(session.exec(select(AccountClass).where(
+        AccountClass.user_id == user_id,
+        AccountClass.nature.in_([AccountNature.INCOME, AccountNature.EXPENSE]))).all())
+    retained = ZERO
+    if ie_classes:
+        ie_accts = list(session.exec(select(Account).where(
+            Account.user_id == user_id,
+            Account.class_id.in_([c.id for c in ie_classes]))).all())
+        ie_bal = balances_for_accounts(session, [a.id for a in ie_accts], as_of) if ie_accts else {}
+        # income = credit-normal (raw −), expense = debit-normal (raw +);
+        # net (income − expenses) = −Σ raw.
+        retained = -sum((ie_bal.get(a.id, ZERO) for a in ie_accts), ZERO)
     if retained != 0:
-        equity.append({"account": None, "label": "Retained Earnings (computed)", "balance": retained})
+        equity.append({"account": None, "label": "Retained Earnings (unclosed P&L)", "balance": retained})
         total_e += retained
 
     diff = (total_a - (total_l + total_e)).quantize(Decimal("0.01"))

@@ -632,6 +632,49 @@ class TradeLineSpec(SQLModel, table=True):
     line: Optional[TradeLine] = Relationship(back_populates="specs")
 
 
+class Partner(SQLModel, table=True):
+    """An equity partner (investor). Each partner owns a fixed % of the business
+    and has an equity capital account. The OWNER is NOT stored here — the owner is
+    the implicit remainder (100% − sum of partner %s) and keeps all pre-existing
+    capital. Monthly profit is split into partner capital accounts by their %.
+    """
+    __tablename__ = "partners"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    name: str = Field(max_length=160)
+    account_id: Optional[int] = Field(
+        default=None, sa_column=Column(ForeignKey("accounts.id", ondelete="SET NULL")))
+    pct: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(7, 4)))  # ownership %
+    joined_on: date = Field(default_factory=date.today, sa_column=Column(Date))
+    is_active: bool = Field(default=True)
+    notes: Optional[str] = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (Index("idx_partner_user", "user_id"),)
+
+
+class PartnerAllocation(SQLModel, table=True):
+    """One monthly profit/loss allocation posted to partner capital accounts.
+
+    period = the FIRST day of the allocated calendar month. The unique (user,
+    period) index makes the monthly run idempotent — it can only post once per
+    month, so opening the app repeatedly (or catching up missed months) never
+    double-counts. profit is signed (negative in a loss month).
+    """
+    __tablename__ = "partner_allocations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    period: date = Field(sa_column=Column(Date))
+    profit: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(15, 2)))
+    journal_entry_id: Optional[int] = Field(
+        default=None, sa_column=Column(ForeignKey("journal_entries.id", ondelete="SET NULL")))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (Index("idx_partner_alloc_period", "user_id", "period", unique=True),)
+
+
 # ────────────────────────── Quotations ──────────────────────────
 
 

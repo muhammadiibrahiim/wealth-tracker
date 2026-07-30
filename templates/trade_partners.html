@@ -135,7 +135,7 @@
         <form method="post" action="/trade/partners/allocate"><button type="submit" class="btn-secondary btn-sm">Run now</button></form>
       </div>
       {% if history %}
-      <table class="min-w-full text-sm">
+      <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
         <thead><tr class="wt-group"><th class="text-left py-1">Month</th><th class="text-right py-1">Profit</th><th class="text-right py-1">Posted</th></tr></thead>
         <tbody>
           {% for h in history %}
@@ -146,7 +146,7 @@
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
       {% else %}
       <p class="text-sm wt-ash">No allocations yet. The first runs automatically after the first full month with a partner completes.</p>
       {% endif %}

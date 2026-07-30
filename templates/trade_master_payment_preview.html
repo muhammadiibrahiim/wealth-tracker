@@ -17,7 +17,7 @@
         <td class="px-3 py-1.5 text-right tabular-nums font-semibold">
           {% if r.apply > 0 %}
             <span class="wt-pos">apply {{ currency }} {{ '{:,.0f}'.format(r.apply) }}</span>
-            {% if r.fully_paid %}<span style="color:#166534; font-weight:700;"> ✓ paid</span>{% else %}<span class="wt-warn"> (part)</span>{% endif %}
+            {% if r.fully_paid %}<span class="wt-pos font-bold"> ✓ paid</span>{% else %}<span class="wt-warn"> (part)</span>{% endif %}
           {% else %}<span class="wt-ash">—</span>{% endif %}
         </td>
       </tr>

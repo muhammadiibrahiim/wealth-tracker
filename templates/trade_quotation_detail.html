@@ -13,10 +13,10 @@
       <div class="flex items-center gap-3 flex-wrap">
         <h1 class="page-title">{{ quotation.reference }}</h1>
         {% if _st == 'draft' %}<span class="pill-dr">Draft</span>
-        {% elif _st == 'sent' %}<span style="background:#dbeafe;color:#1e40af" class="inline-block text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded">Sent</span>
-        {% elif _st == 'accepted' %}<span style="background:#dcfce7;color:#166534" class="inline-block text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded">Accepted</span>
+        {% elif _st == 'sent' %}<span class="wt-pill wt-pill-neutral">Sent</span>
+        {% elif _st == 'accepted' %}<span class="wt-pill wt-pill-pos">Accepted</span>
         {% elif _st == 'rejected' %}<span class="pill-cr">Rejected</span>
-        {% elif _st == 'expired' %}<span style="background:#fef3c7;color:#92400e" class="inline-block text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded">Expired</span>
+        {% elif _st == 'expired' %}<span class="wt-pill wt-pill-neutral">Expired</span>
         {% endif %}
       </div>
       <p class="page-subtitle">Quote date {{ quotation.quote_date }}{% if quotation.valid_until %} · Valid until {{ quotation.valid_until }}{% endif %}</p>
@@ -43,7 +43,7 @@
       {% endif %}
       {% if not quotation.trade_id %}
       <form hx-post="/trade/quotations/{{ quotation.id }}/delete" hx-confirm="Permanently delete this quotation?">
-        <button class="btn-secondary" style="color: #fff; background: #b91c1c; border-color: #b91c1c;">Delete</button>
+        <button class="btn-danger">Delete</button>
       </form>
       {% endif %}
     </div>
@@ -108,7 +108,7 @@
   </div>
 
   {% if quotation.terms_text %}
-  <div class="accent-card" style="border-left-color: #ca8a04;">
+  <div class="accent-card wt-card-warn">
     <div class="stat-label">Terms &amp; Conditions</div>
     <p class="wt-body mt-2 whitespace-pre-line text-sm">{{ quotation.terms_text }}</p>
   </div>
@@ -122,7 +122,7 @@
   {% endif %}
 
   {% if quotation.trade_id %}
-  <div class="accent-card" style="border-left-color: #16a34a; background: #dcfce7;">
+  <div class="accent-card wt-card-pos wt-pos-bg">
     <p class="text-sm">
       <strong>Converted to trade.</strong> This quotation was accepted on {{ quotation.accepted_at }}.
       <a href="/trade/trades/{{ quotation.trade_id }}" class="wt-info hover:underline font-medium">Open the linked trade →</a>

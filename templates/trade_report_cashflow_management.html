@@ -200,7 +200,7 @@
       {% if report.applied_injection > 0 %}<a href="/trade/reports/cashflow-management" class="btn-secondary btn-sm">Clear</a>{% endif %}
     </form>
     <div class="wt-table-scroll">
-    <table class="min-w-full text-xs">
+    <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
       <thead><tr class="text-left wt-mute"><th class="py-1 pr-4">Date</th><th class="py-1 pr-4 text-right">In</th><th class="py-1 pr-4 text-right">Out</th><th class="py-1 text-right">Running</th></tr></thead>
       <tbody>
         {% for e in report.timeline %}

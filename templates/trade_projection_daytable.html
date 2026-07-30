@@ -31,11 +31,11 @@
             </div>
             {% endfor %}
           </td>
-          <td class="num" style="color:{% if r.cash_in %}#15803d{% else %}#9ca3af{% endif %};">{% if r.cash_in %}+ {{ currency }} {{ '{:,.0f}'.format(r.cash_in) }}{% else %}—{% endif %}</td>
-          <td class="num" style="color:{% if r.cash_out %}#b91c1c{% else %}#9ca3af{% endif %};">{% if r.cash_out %}− {{ currency }} {{ '{:,.0f}'.format(r.cash_out) }}{% else %}—{% endif %}</td>
-          <td class="num" style="color:{% if r.net < 0 %}#c2410c{% else %}#15803d{% endif %};">{{ '{:,.0f}'.format(r.net) }}</td>
-          <td class="num" style="color:{% if r.running < 0 %}#c2410c{% else %}#111827{% endif %};">{{ currency }} {{ '{:,.0f}'.format(r.running) }}</td>
-          <td class="num" style="color:{% if r.extra_needed > 0 %}#c2410c{% else %}#9ca3af{% endif %};">{% if r.extra_needed > 0 %}{{ currency }} {{ '{:,.0f}'.format(r.extra_needed) }}{% else %}—{% endif %}</td>
+          <td class="num {{ 'wt-pos' if r.cash_in else 'wt-ash' }}" data-sort-value="{{ r.cash_in or 0 }}">{% if r.cash_in %}+ {{ currency }} {{ '{:,.0f}'.format(r.cash_in) }}{% else %}—{% endif %}</td>
+          <td class="num {{ 'wt-neg' if r.cash_out else 'wt-ash' }}" data-sort-value="{{ r.cash_out or 0 }}">{% if r.cash_out %}− {{ currency }} {{ '{:,.0f}'.format(r.cash_out) }}{% else %}—{% endif %}</td>
+          <td class="num {{ 'wt-neg' if r.net < 0 else 'wt-pos' }}" data-sort-value="{{ r.net }}">{{ '{:,.0f}'.format(r.net) }}</td>
+          <td class="num {{ 'wt-neg' if r.running < 0 else 'wt-ink' }}" data-sort-value="{{ r.running }}">{{ currency }} {{ '{:,.0f}'.format(r.running) }}</td>
+          <td class="num {{ 'wt-neg' if r.extra_needed > 0 else 'wt-ash' }}" data-sort-value="{{ r.extra_needed or 0 }}">{% if r.extra_needed > 0 %}{{ currency }} {{ '{:,.0f}'.format(r.extra_needed) }}{% else %}—{% endif %}</td>
         </tr>
         {% else %}<tr><td colspan="7" class=" text-center text-sm wt-ash">Add products above — the calendar recalculates as you type.</td></tr>{% endfor %}
       </tbody>

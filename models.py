@@ -648,6 +648,10 @@ class Partner(SQLModel, table=True):
     pct: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(7, 4)))  # ownership %
     joined_on: date = Field(default_factory=date.today, sa_column=Column(Date))
     is_active: bool = Field(default=True)
+    # The OWNER's own capital account (e.g. "Ibrahim Capital"). Exactly one row
+    # should carry this. Its % is the remainder (100 − Σ others); the monthly
+    # split routes the owner's share here so the Capital A/C pool empties.
+    is_owner: bool = Field(default=False)
     notes: Optional[str] = Field(default=None, max_length=500)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -846,6 +850,7 @@ class JournalEntryType(str, Enum):
     CONTRA = "contra"
     JOURNAL = "journal"
     REVERSAL = "reversal"
+    PARTNER_ALLOCATION = "partner_allocation"  # equity split among partners — hidden from dashboard
 
 
 class AccountClass(SQLModel, table=True):

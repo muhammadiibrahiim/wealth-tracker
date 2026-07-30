@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 {% block title %}Accounts — Net Worth{% endblock %}
 {% block content %}
 {% set cur = currency %}
@@ -17,18 +17,18 @@
   </div>
 
   {% if sync and not sync.error and sync.inserted %}
-  <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-800">
+  <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm wt-pos">
     ✓ Auto-synced <b>{{ sync.file }}</b> — added <b>{{ '{:,}'.format(sync.inserted) }}</b> new transaction(s){% if sync.new_accounts %}, {{ sync.new_accounts }} new account(s){% endif %}.
   </div>
   {% elif sync and sync.error %}
-  <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">✕ {{ sync.error }}</div>
+  <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm wt-neg">✕ {{ sync.error }}</div>
   {% endif %}
 
   {% if not has_data %}
-  <div class="bg-white border border-gray-200 rounded-lg p-10 text-center">
+  <div class="wt-panel p-10 text-center">
     <div class="text-5xl mb-3">🗂️</div>
-    <h2 class="text-lg font-bold text-gray-900">No accounts yet</h2>
-    <p class="text-sm text-gray-500 mt-1 mb-4">Import your Money Manager cashbook export to see your accounts and net worth.</p>
+    <h2 class="text-lg font-bold wt-ink">No accounts yet</h2>
+    <p class="text-sm wt-mute mt-1 mb-4">Import your Money Manager cashbook export to see your accounts and net worth.</p>
     <a href="/accounts/import" class="btn-primary">Import your cashbook</a>
   </div>
   {% else %}

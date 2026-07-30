@@ -1,78 +1,78 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 {% block title %}{{ led.account.name }}{% endblock %}
 {% block content %}
 {% set cur = currency %}
 {% set a = led.account %}
-<div class="space-y-6" style="max-width:980px;">
+<div class="space-y-6">
   <div class="flex items-start justify-between flex-wrap gap-4">
     <div>
-      <a href="/accounts" class="text-xs text-indigo-600 hover:underline">← All accounts</a>
+      <a href="/accounts" class="text-xs wt-info hover:underline">← All accounts</a>
       <h1 class="page-title">{{ a.name }}</h1>
       <p class="page-subtitle">{{ led.count }} transactions · type <b>{{ a.type.value }}</b></p>
     </div>
-    <div class="stat-card" style="min-width:200px; border-color:{% if led.balance >= 0 %}#16a34a{% else %}#dc2626{% endif %};">
+    <div class="stat-card {{ 'wt-card-pos' if led.balance >= 0 else 'wt-card-neg' }}">
       <div class="stat-label">Current balance</div>
-      <div class="stat-value" style="color:{% if led.balance >= 0 %}#15803d{% else %}#b91c1c{% endif %};"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(led.balance) }}</div>
+      <div class="stat-value {{ 'wt-pos' if led.balance >= 0 else 'wt-neg' }}"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(led.balance) }}</div>
     </div>
   </div>
 
   <!-- Edit account -->
-  <form hx-post="/accounts/{{ a.id }}/edit" hx-swap="none" class="bg-white border border-gray-200 rounded-lg p-4 flex items-end gap-3 flex-wrap">
+  <form hx-post="/accounts/{{ a.id }}/edit" hx-swap="none" class="wt-panel p-4 flex items-end gap-3 flex-wrap">
     <div>
-      <label class="block text-xs text-gray-500 mb-1">Name</label>
-      <input name="name" value="{{ a.name }}" class="px-2 py-1.5 text-sm border border-gray-300 rounded" style="min-width:200px;">
+      <label class="block text-xs wt-mute mb-1">Name</label>
+      <input name="name" value="{{ a.name }}" class="px-2 py-1.5 text-sm border border-gray-300 rounded">
     </div>
     <div>
-      <label class="block text-xs text-gray-500 mb-1">Type (changes how it's grouped)</label>
+      <label class="block text-xs wt-mute mb-1">Type (changes how it's grouped)</label>
       <select name="type" class="px-2 py-1.5 text-sm border border-gray-300 rounded">
         {% for t in types %}<option value="{{ t.value }}" {% if t == a.type %}selected{% endif %}>{{ t.value }}</option>{% endfor %}
       </select>
     </div>
     <div>
-      <label class="block text-xs text-gray-500 mb-1">Group</label>
-      <input name="group_name" value="{{ a.group_name or '' }}" list="mm-groups" placeholder="e.g. Friends" class="px-2 py-1.5 text-sm border border-gray-300 rounded" style="width:150px;">
+      <label class="block text-xs wt-mute mb-1">Group</label>
+      <input name="group_name" value="{{ a.group_name or '' }}" list="mm-groups" placeholder="e.g. Friends" class="px-2 py-1.5 text-sm border border-gray-300 rounded">
       <datalist id="mm-groups">{% for g in groups %}<option value="{{ g }}">{% endfor %}</datalist>
     </div>
-    <div class="flex-1" style="min-width:140px;">
-      <label class="block text-xs text-gray-500 mb-1">Notes</label>
+    <div class="flex-1">
+      <label class="block text-xs wt-mute mb-1">Notes</label>
       <input name="notes" value="{{ a.notes or '' }}" placeholder="optional" class="px-2 py-1.5 text-sm border border-gray-300 rounded w-full">
     </div>
-    <label class="flex items-center gap-2 text-sm text-gray-700 pb-1.5" title="Uncheck for accounts you deleted in Money Manager — history is kept, but it leaves net worth and moves to the bottom">
+    <label class="flex items-center gap-2 text-sm wt-body pb-1.5" title="Uncheck for accounts you deleted in Money Manager — history is kept, but it leaves net worth and moves to the bottom">
       <input type="checkbox" name="is_active" {% if a.is_active %}checked{% endif %}> Active
     </label>
     <button type="submit" class="btn-secondary">Save</button>
   </form>
 
   <!-- Ledger -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-5 py-3 border-b border-gray-200" style="background:#fafaf9;"><h2 class="text-sm font-bold text-gray-800">Transactions</h2></div>
-    <div style="overflow-x:auto;">
-    <table class="min-w-full text-sm">
+  <div class="wt-panel">
+    <div class="px-5 py-3 border-b border-gray-200 wt-surface-soft"><h2 class="text-sm font-bold wt-body">Transactions</h2></div>
+    <div class="wt-table-scroll">
+    <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
       <thead>
-        <tr class="text-left" style="color:#6b7280; font-size:11px; text-transform:uppercase;">
+        <tr class="text-left wt-section-title">
           <th class="px-4 py-2">Date</th>
           <th class="px-4 py-2">Kind</th>
           <th class="px-4 py-2">Counter / Category</th>
           <th class="px-4 py-2">Note</th>
-          <th class="px-4 py-2 text-right">In</th>
-          <th class="px-4 py-2 text-right">Out</th>
-          <th class="px-4 py-2 text-right">Running</th>
+          <th class="num">In</th>
+          <th class="num">Out</th>
+          <th class="num">Running</th>
         </tr>
       </thead>
       <tbody>
         {% for r in led.rows %}
         <tr class="border-t border-gray-100">
-          <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ r.txn.occurred_at.strftime('%d %b %Y') }}<span class="text-gray-400 text-xs ml-1">{{ r.txn.occurred_at.strftime('%H:%M') }}</span></td>
-          <td class="px-4 py-2"><span class="text-[10px] uppercase tracking-wide text-gray-500 border border-gray-200 rounded px-1.5 py-0.5">{{ r.txn.kind.value }}</span></td>
-          <td class="px-4 py-2 text-gray-700">{{ r.counter }}</td>
-          <td class="px-4 py-2 text-gray-500">{{ r.txn.note or r.txn.description or '' }}</td>
-          <td class="px-4 py-2 text-right tabular-nums" style="color:{% if r.txn.direction == 'in' %}#15803d{% else %}#d1d5db{% endif %};">{% if r.txn.direction == 'in' %}{{ '{:,.0f}'.format(r.txn.amount) }}{% else %}—{% endif %}</td>
-          <td class="px-4 py-2 text-right tabular-nums" style="color:{% if r.txn.direction == 'out' %}#b91c1c{% else %}#d1d5db{% endif %};">{% if r.txn.direction == 'out' %}{{ '{:,.0f}'.format(r.txn.amount) }}{% else %}—{% endif %}</td>
-          <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:{% if r.running >= 0 %}#111827{% else %}#b91c1c{% endif %};">{{ '{:,.0f}'.format(r.running) }}</td>
+          <td class="px-4 py-2 whitespace-nowrap wt-body">{{ r.txn.occurred_at.strftime('%d %b %Y') }}<span class="wt-ash text-xs ml-1">{{ r.txn.occurred_at.strftime('%H:%M') }}</span></td>
+          <td class="px-4 py-2"><span class="text-[10px] uppercase tracking-wide wt-mute border border-gray-200 rounded px-1.5 py-0.5">{{ r.txn.kind.value }}</span></td>
+          <td class="px-4 py-2 wt-body">{{ r.counter }}</td>
+          <td class="px-4 py-2 wt-mute">{{ r.txn.note or r.txn.description or '' }}</td>
+          <td class="num {{ 'wt-pos' if r.txn.direction == 'in' else 'wt-ash' }}">{% if r.txn.direction == 'in' %}{{ '{:,.0f}'.format(r.txn.amount) }}{% else %}—{% endif %}</td>
+          <td class="num {{ 'wt-neg' if r.txn.direction == 'out' else 'wt-ash' }}">{% if r.txn.direction == 'out' %}{{ '{:,.0f}'.format(r.txn.amount) }}{% else %}—{% endif %}</td>
+          <td class="num {{ 'wt-ink' if r.running >= 0 else 'wt-neg' }}">{{ '{:,.0f}'.format(r.running) }}</td>
         </tr>
-        {% else %}<tr><td colspan="7" class="px-4 py-10 text-center text-gray-400">No transactions.</td></tr>{% endfor %}
+        {% else %}<tr><td colspan="7" class="px-4 py-10 text-center wt-ash">No transactions.</td></tr>{% endfor %}
       </tbody>
-    </table>
+    </table></div>
     </div>
   </div>
 </div>

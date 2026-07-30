@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 {% block title %}Monthly Cash Flow{% endblock %}
 {% block content %}
 {% set cur = currency %}
-<div class="space-y-6" style="max-width:820px;">
+<div class="space-y-6">
   <div class="flex items-start justify-between flex-wrap gap-4">
     <div>
       <h1 class="page-title">Monthly Cash Flow</h1>
@@ -12,47 +12,47 @@
   </div>
 
   <div class="grid grid-cols-3 gap-4">
-    <div class="stat-card" style="border-color:#16a34a;"><div class="stat-label">Total Income</div>
-      <div class="stat-value" style="color:#15803d;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.total_income) }}</div></div>
-    <div class="stat-card" style="border-color:#dc2626;"><div class="stat-label">Total Expense</div>
-      <div class="stat-value" style="color:#b91c1c;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.total_expense) }}</div></div>
-    <div class="stat-card" style="border-color:#4f46e5;"><div class="stat-label">Net</div>
-      <div class="stat-value" style="color:{% if rep.net>=0 %}#4338ca{% else %}#b91c1c{% endif %};"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.net) }}</div></div>
+    <div class="stat-card wt-card-pos"><div class="stat-label">Total Income</div>
+      <div class="stat-value wt-pos"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.total_income) }}</div></div>
+    <div class="stat-card wt-card-neg"><div class="stat-label">Total Expense</div>
+      <div class="stat-value wt-neg"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.total_expense) }}</div></div>
+    <div class="stat-card wt-card-info"><div class="stat-label">Net</div>
+      <div class="stat-value {{ 'wt-info' if rep.net>=0 else 'wt-neg' }}"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.net) }}</div></div>
   </div>
 
   {% set maxv = namespace(v=1) %}
   {% for m in rep.months %}{% if m.income > maxv.v %}{% set maxv.v = m.income %}{% endif %}{% if m.expense > maxv.v %}{% set maxv.v = m.expense %}{% endif %}{% endfor %}
 
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <table class="min-w-full text-sm">
+  <div class="wt-panel">
+    <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
       <thead>
-        <tr class="text-left" style="color:#6b7280; font-size:11px; text-transform:uppercase;">
+        <tr class="text-left wt-section-title">
           <th class="px-5 py-2">Month</th>
-          <th class="px-5 py-2 text-right">Income</th>
-          <th class="px-5 py-2 text-right">Expense</th>
-          <th class="px-5 py-2 text-right">Net</th>
-          <th class="px-5 py-2" style="width:180px;"></th>
+          <th class="num">Income</th>
+          <th class="num">Expense</th>
+          <th class="num">Net</th>
+          <th class="px-5 py-2"></th>
         </tr>
       </thead>
       <tbody>
         {% for m in rep.months %}
         <tr class="border-t border-gray-100">
-          <td class="px-5 py-2 font-medium text-gray-800">{{ m.label }}</td>
-          <td class="px-5 py-2 text-right tabular-nums text-green-700">{{ '{:,.0f}'.format(m.income) }}</td>
-          <td class="px-5 py-2 text-right tabular-nums text-red-700">{{ '{:,.0f}'.format(m.expense) }}</td>
-          <td class="px-5 py-2 text-right tabular-nums font-semibold" style="color:{% if m.net>=0 %}#15803d{% else %}#b91c1c{% endif %};">{{ '{:,.0f}'.format(m.net) }}</td>
+          <td class="px-5 py-2 font-medium wt-body">{{ m.label }}</td>
+          <td class="num">{{ '{:,.0f}'.format(m.income) }}</td>
+          <td class="num">{{ '{:,.0f}'.format(m.expense) }}</td>
+          <td class="num {{ 'wt-pos' if m.net>=0 else 'wt-neg' }}">{{ '{:,.0f}'.format(m.net) }}</td>
           <td class="px-5 py-2">
-            <div style="display:flex; gap:2px; align-items:center; height:16px;">
+            <div class="flex items-center gap-2">
               <div style="height:8px; background:#16a34a; border-radius:2px; width:{{ (m.income / maxv.v * 100)|round(1) }}%;"></div>
             </div>
-            <div style="display:flex; gap:2px; align-items:center; height:16px;">
+            <div class="flex items-center gap-2">
               <div style="height:8px; background:#dc2626; border-radius:2px; width:{{ (m.expense / maxv.v * 100)|round(1) }}%;"></div>
             </div>
           </td>
         </tr>
-        {% else %}<tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No income/expense data.</td></tr>{% endfor %}
+        {% else %}<tr><td colspan="5" class="px-5 py-10 text-center wt-ash">No income/expense data.</td></tr>{% endfor %}
       </tbody>
-    </table>
+    </table></div>
   </div>
 </div>
 {% endblock %}

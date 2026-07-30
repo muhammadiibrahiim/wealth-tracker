@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 {% block title %}Import Cashbook{% endblock %}
 {% block content %}
-<div class="space-y-6" style="max-width:820px;">
+<div class="space-y-6">
   <div class="flex items-start justify-between flex-wrap gap-4">
     <div>
       <h1 class="page-title">Import / Sync Cashbook</h1>
@@ -12,9 +12,9 @@
 
   {% if result %}
     {% if result.error %}
-    <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">✕ {{ result.error }}</div>
+    <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm wt-neg">✕ {{ result.error }}</div>
     {% else %}
-    <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+    <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm wt-pos">
       ✓ Imported. <b>{{ '{:,}'.format(result.inserted) }}</b> new transaction(s) added,
       <b>{{ '{:,}'.format(result.skipped) }}</b> already present (skipped),
       <b>{{ result.new_accounts }}</b> new account(s). You now have {{ result.total_accounts }} accounts.
@@ -24,18 +24,18 @@
   {% endif %}
 
   <!-- Detected files -->
-  <div class="bg-white border border-gray-200 rounded-lg p-5">
-    <h2 class="text-base font-bold text-gray-900 mb-1">Detected in Downloads</h2>
-    <p class="text-xs text-gray-500 mb-3">Money Manager exports found on this Mac. Pick the newest.</p>
+  <div class="wt-panel p-5">
+    <h2 class="text-base font-bold wt-ink mb-1">Detected in Downloads</h2>
+    <p class="text-xs wt-mute mb-3">Money Manager exports found on this Mac. Pick the newest.</p>
     {% if detected %}
     <form method="post" action="/accounts/import">
       <div class="space-y-2">
         {% for f in detected %}
-        <label class="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50 cursor-pointer">
+        <label class="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2 hover:wt-surface-soft cursor-pointer">
           <input type="radio" name="server_path" value="{{ f.path }}" {% if loop.first %}checked{% endif %}>
           <span class="flex-1">
-            <span class="font-medium text-gray-800">{{ f.name }}</span>
-            <span class="text-xs text-gray-400 ml-2">{{ f.size_kb }} KB · modified {{ f.mtime.strftime('%d %b %Y, %H:%M') }}</span>
+            <span class="font-medium wt-body">{{ f.name }}</span>
+            <span class="text-xs wt-ash ml-2">{{ f.size_kb }} KB · modified {{ f.mtime.strftime('%d %b %Y, %H:%M') }}</span>
           </span>
         </label>
         {% endfor %}
@@ -43,13 +43,13 @@
       <button type="submit" class="btn-primary mt-4">Import selected file</button>
     </form>
     {% else %}
-    <p class="text-sm text-gray-400">No <code>CASHBOOK_*.xlsx</code> found in ~/Downloads. Use upload below.</p>
+    <p class="text-sm wt-ash">No <code>CASHBOOK_*.xlsx</code> found in ~/Downloads. Use upload below.</p>
     {% endif %}
   </div>
 
   <!-- Manual upload -->
-  <div class="bg-white border border-gray-200 rounded-lg p-5">
-    <h2 class="text-base font-bold text-gray-900 mb-3">Or upload a file</h2>
+  <div class="wt-panel p-5">
+    <h2 class="text-base font-bold wt-ink mb-3">Or upload a file</h2>
     <form method="post" action="/accounts/import" enctype="multipart/form-data" class="flex items-center gap-3 flex-wrap">
       <input type="file" name="upload" accept=".xlsx,.xls" class="text-sm">
       <button type="submit" class="btn-secondary">Upload &amp; import</button>
@@ -57,7 +57,7 @@
   </div>
 
   {% if ov and ov.account_count %}
-  <p class="text-sm text-gray-500">Currently loaded: <b>{{ ov.account_count }}</b> accounts, <b>{{ '{:,}'.format(ov.txn_count) }}</b> transactions{% if ov.last_txn %}, latest {{ ov.last_txn.strftime('%d %b %Y') }}{% endif %}. Net worth <b>{{ currency }} {{ '{:,.0f}'.format(ov.net_worth) }}</b>.</p>
+  <p class="text-sm wt-mute">Currently loaded: <b>{{ ov.account_count }}</b> accounts, <b>{{ '{:,}'.format(ov.txn_count) }}</b> transactions{% if ov.last_txn %}, latest {{ ov.last_txn.strftime('%d %b %Y') }}{% endif %}. Net worth <b>{{ currency }} {{ '{:,.0f}'.format(ov.net_worth) }}</b>.</p>
   {% endif %}
 </div>
 {% endblock %}

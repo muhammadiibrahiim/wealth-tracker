@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 {% block title %}Account Reports{% endblock %}
 {% block content %}
 <div class="space-y-6">
@@ -12,12 +12,12 @@
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
     {% macro card(href, title, desc, emoji) %}
-    <a href="{{ href }}" class="block bg-white border border-gray-200 rounded-lg p-5 hover:border-indigo-300 hover:shadow-sm transition">
+    <a href="{{ href }}" class="block wt-panel p-5 hover:border-indigo-300 hover:shadow-sm transition">
       <div class="flex items-start gap-3">
         <div class="text-2xl">{{ emoji }}</div>
         <div>
-          <div class="font-bold text-gray-900">{{ title }}</div>
-          <div class="text-sm text-gray-500 mt-0.5">{{ desc }}</div>
+          <div class="font-bold wt-ink">{{ title }}</div>
+          <div class="text-sm wt-mute mt-0.5">{{ desc }}</div>
         </div>
       </div>
     </a>
@@ -29,6 +29,6 @@
     {{ card('/accounts/reports/cashflow', 'Monthly Cash Flow', 'Money earned vs spent each month, with the net.', '📈') }}
   </div>
 
-  <p class="text-xs text-gray-400">Loaded: {{ ov.account_count }} accounts · {{ '{:,}'.format(ov.txn_count) }} transactions{% if ov.last_txn %} · latest {{ ov.last_txn.strftime('%d %b %Y') }}{% endif %}.</p>
+  <p class="text-xs wt-ash">Loaded: {{ ov.account_count }} accounts · {{ '{:,}'.format(ov.txn_count) }} transactions{% if ov.last_txn %} · latest {{ ov.last_txn.strftime('%d %b %Y') }}{% endif %}.</p>
 </div>
 {% endblock %}

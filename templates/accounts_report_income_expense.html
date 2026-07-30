@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{% extends"base.html" %}
 {% block title %}Income & Expense{% endblock %}
 {% block content %}
 {% set cur = currency %}
-<div class="space-y-6" style="max-width:900px;">
+<div class="space-y-6">
   <div class="flex items-start justify-between flex-wrap gap-4">
     <div>
       <h1 class="page-title">Income &amp; Expense</h1>
@@ -11,41 +11,41 @@
     <a href="/accounts/reports" class="btn-secondary">← Reports</a>
   </div>
 
-  <form method="get" action="/accounts/reports/income-expense" class="bg-white border border-gray-200 rounded-lg p-4 flex items-end gap-3 flex-wrap">
-    <div><label class="block text-xs text-gray-500 mb-1">From</label>
+  <form method="get" action="/accounts/reports/income-expense" class="wt-panel p-4 flex items-end gap-3 flex-wrap">
+    <div><label class="block text-xs wt-mute mb-1">From</label>
       <input type="date" name="from" value="{{ from_date.isoformat() if from_date else '' }}" class="px-2 py-1.5 text-sm border border-gray-300 rounded"></div>
-    <div><label class="block text-xs text-gray-500 mb-1">To</label>
+    <div><label class="block text-xs wt-mute mb-1">To</label>
       <input type="date" name="to" value="{{ to_date.isoformat() if to_date else '' }}" class="px-2 py-1.5 text-sm border border-gray-300 rounded"></div>
     <button type="submit" class="btn-secondary">Apply</button>
   </form>
 
   <div class="grid grid-cols-3 gap-4">
-    <div class="stat-card" style="border-color:#16a34a;"><div class="stat-label">Total Income</div>
-      <div class="stat-value" style="color:#15803d;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.total_income) }}</div></div>
-    <div class="stat-card" style="border-color:#dc2626;"><div class="stat-label">Total Expense</div>
-      <div class="stat-value" style="color:#b91c1c;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.total_expense) }}</div></div>
-    <div class="stat-card" style="border-color:#4f46e5;"><div class="stat-label">Net</div>
-      <div class="stat-value" style="color:{% if rep.net>=0 %}#4338ca{% else %}#b91c1c{% endif %};"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.net) }}</div></div>
+    <div class="stat-card wt-card-pos"><div class="stat-label">Total Income</div>
+      <div class="stat-value wt-pos"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.total_income) }}</div></div>
+    <div class="stat-card wt-card-neg"><div class="stat-label">Total Expense</div>
+      <div class="stat-value wt-neg"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.total_expense) }}</div></div>
+    <div class="stat-card wt-card-info"><div class="stat-label">Net</div>
+      <div class="stat-value {{ 'wt-info' if rep.net>=0 else 'wt-neg' }}"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(rep.net) }}</div></div>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <div class="px-5 py-3 border-b border-gray-200 flex justify-between" style="background:#fafaf9;"><h2 class="text-sm font-bold text-green-800">Income by category</h2><span class="text-sm font-bold text-green-700">{{ cur }} {{ '{:,.0f}'.format(rep.total_income) }}</span></div>
-      <table class="min-w-full text-sm"><tbody>
+    <div class="wt-panel">
+      <div class="px-5 py-3 border-b border-gray-200 flex justify-between wt-surface-soft"><h2 class="text-sm font-bold wt-pos">Income by category</h2><span class="text-sm font-bold wt-pos">{{ cur }} {{ '{:,.0f}'.format(rep.total_income) }}</span></div>
+      <div class="wt-table-scroll"><table class="wt-table wt-table--dense"><tbody>
         {% for r in rep.income %}
-        <tr class="border-t border-gray-100"><td class="px-5 py-1.5 text-gray-700">{{ r.category }}</td>
-          <td class="px-5 py-1.5 text-right tabular-nums text-green-700">{{ '{:,.0f}'.format(r.amount) }}</td></tr>
-        {% else %}<tr><td class="px-5 py-6 text-center text-gray-400">No income in range.</td></tr>{% endfor %}
-      </tbody></table>
+        <tr class="border-t border-gray-100"><td class="px-5 py-1.5 wt-body">{{ r.category }}</td>
+          <td class="num">{{ '{:,.0f}'.format(r.amount) }}</td></tr>
+        {% else %}<tr><td class="px-5 py-6 text-center wt-ash">No income in range.</td></tr>{% endfor %}
+      </tbody></table></div>
     </div>
-    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <div class="px-5 py-3 border-b border-gray-200 flex justify-between" style="background:#fafaf9;"><h2 class="text-sm font-bold text-red-800">Expense by category</h2><span class="text-sm font-bold text-red-700">{{ cur }} {{ '{:,.0f}'.format(rep.total_expense) }}</span></div>
-      <table class="min-w-full text-sm"><tbody>
+    <div class="wt-panel">
+      <div class="px-5 py-3 border-b border-gray-200 flex justify-between wt-surface-soft"><h2 class="text-sm font-bold wt-neg">Expense by category</h2><span class="text-sm font-bold wt-neg">{{ cur }} {{ '{:,.0f}'.format(rep.total_expense) }}</span></div>
+      <div class="wt-table-scroll"><table class="wt-table wt-table--dense"><tbody>
         {% for r in rep.expense %}
-        <tr class="border-t border-gray-100"><td class="px-5 py-1.5 text-gray-700">{{ r.category }}</td>
-          <td class="px-5 py-1.5 text-right tabular-nums text-red-700">{{ '{:,.0f}'.format(r.amount) }}</td></tr>
-        {% else %}<tr><td class="px-5 py-6 text-center text-gray-400">No expense in range.</td></tr>{% endfor %}
-      </tbody></table>
+        <tr class="border-t border-gray-100"><td class="px-5 py-1.5 wt-body">{{ r.category }}</td>
+          <td class="num">{{ '{:,.0f}'.format(r.amount) }}</td></tr>
+        {% else %}<tr><td class="px-5 py-6 text-center wt-ash">No expense in range.</td></tr>{% endfor %}
+      </tbody></table></div>
     </div>
   </div>
 </div>

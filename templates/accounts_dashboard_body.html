@@ -2,47 +2,47 @@
   {% set cur = currency %}
   <!-- Net worth hero -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-    <div class="stat-card md:col-span-1" style="border-color:#4f46e5;">
+    <div class="stat-card md:col-span-1 wt-card-info">
       <div class="stat-label">Net Worth</div>
-      <div class="stat-value" style="color:{% if ov.net_worth >= 0 %}#4338ca{% else %}#b91c1c{% endif %};"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(ov.net_worth) }}</div>
-      <div class="stat-foot text-gray-500">{{ ov.active_count - ov.excluded_count }} of {{ ov.active_count }} active counted{% if ov.excluded_count %} · {{ ov.excluded_count }} excluded{% endif %}{% if ov.inactive %} · {{ ov.inactive|length }} inactive{% endif %}</div>
+      <div class="stat-value {{ 'wt-info' if ov.net_worth >= 0 else 'wt-neg' }}"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(ov.net_worth) }}</div>
+      <div class="stat-foot wt-mute">{{ ov.active_count - ov.excluded_count }} of {{ ov.active_count }} active counted{% if ov.excluded_count %} · {{ ov.excluded_count }} excluded{% endif %}{% if ov.inactive %} · {{ ov.inactive|length }} inactive{% endif %}</div>
     </div>
-    <div class="stat-card" style="border-color:#16a34a;">
+    <div class="stat-card wt-card-pos">
       <div class="stat-label">Assets (positive)</div>
-      <div class="stat-value" style="color:#15803d;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(ov.total_assets) }}</div>
-      <div class="stat-foot text-gray-500">what's owed to you / on hand</div>
+      <div class="stat-value wt-pos"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(ov.total_assets) }}</div>
+      <div class="stat-foot wt-mute">what's owed to you / on hand</div>
     </div>
-    <div class="stat-card" style="border-color:#dc2626;">
+    <div class="stat-card wt-card-neg">
       <div class="stat-label">Liabilities (negative)</div>
-      <div class="stat-value" style="color:#b91c1c;"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(ov.total_liabilities) }}</div>
-      <div class="stat-foot text-gray-500">what you owe</div>
+      <div class="stat-value wt-neg"><span class="currency">{{ cur }}</span>{{ '{:,.0f}'.format(ov.total_liabilities) }}</div>
+      <div class="stat-foot wt-mute">what you owe</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Transactions</div>
       <div class="stat-value">{{ '{:,}'.format(ov.txn_count) }}</div>
-      <div class="stat-foot text-gray-500">{% if ov.last_txn %}latest {{ ov.last_txn.strftime('%d %b %Y') }}{% endif %}</div>
+      <div class="stat-foot wt-mute">{% if ov.last_txn %}latest {{ ov.last_txn.strftime('%d %b %Y') }}{% endif %}</div>
     </div>
   </div>
 
-  <p class="text-xs text-gray-500">Untick an account to leave it out of totals. Use <b>⊘ Archive</b> for accounts you deleted in Money Manager — history is kept, it drops from net worth and moves to the bottom. Changes save instantly.</p>
+  <p class="text-xs wt-mute">Untick an account to leave it out of totals. Use <b>⊘ Archive</b> for accounts you deleted in Money Manager — history is kept, it drops from net worth and moves to the bottom. Changes save instantly.</p>
 
   <!-- Ungrouped accounts needing a group (e.g. new from a sync) -->
   {% if ov.ungrouped %}
-  <div class="bg-white border-2 rounded-lg overflow-hidden" style="border-color:#f59e0b;">
-    <div class="px-5 py-3 border-b border-amber-200 flex items-center justify-between" style="background:#fffbeb;">
-      <h2 class="text-sm font-bold text-amber-800">⚠ Needs a group <span class="text-amber-500 font-normal">· {{ ov.ungrouped|length }}</span></h2>
-      <span class="text-xs text-amber-600">new accounts from a sync — pick a group to file them</span>
+  <div class="bg-white border-2 rounded-lg overflow-hidden wt-card-warn">
+    <div class="px-5 py-3 border-b border-amber-200 flex items-center justify-between wt-warn-bg">
+      <h2 class="text-sm font-bold wt-warn">⚠ Needs a group <span class="wt-warn font-normal">· {{ ov.ungrouped|length }}</span></h2>
+      <span class="text-xs wt-warn">new accounts from a sync — pick a group to file them</span>
     </div>
-    <table class="min-w-full text-sm">
+    <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
       <tbody>
         {% for a in ov.ungrouped %}
         <tr class="border-t border-gray-100 hover:bg-amber-50">
           <td class="px-5 py-2">
-            <a href="/accounts/{{ a.acct.id }}" class="text-indigo-700 hover:text-indigo-900 font-medium">{{ a.acct.name }}</a>
-            <span class="ml-2 text-[10px] uppercase tracking-wide text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{{ a.acct.type.value }}</span>
+            <a href="/accounts/{{ a.acct.id }}" class="wt-info hover:text-indigo-900 font-medium">{{ a.acct.name }}</a>
+            <span class="ml-2 text-[10px] uppercase tracking-wide wt-ash border border-gray-200 rounded px-1.5 py-0.5">{{ a.acct.type.value }}</span>
           </td>
-          <td class="px-3 py-2 text-right tabular-nums font-medium" style="color:{% if a.balance >= 0 %}#111827{% else %}#b91c1c{% endif %};">{{ cur }} {{ '{:,.0f}'.format(a.balance) }}</td>
-          <td class="px-4 py-2 text-right" style="width:200px;">
+          <td class="num {{ 'wt-ink' if a.balance >= 0 else 'wt-neg' }}">{{ cur }} {{ '{:,.0f}'.format(a.balance) }}</td>
+          <td class="px-4 py-2 text-right">
             <select class="px-2 py-1 text-xs border border-gray-300 rounded"
                     hx-post="/accounts/{{ a.acct.id }}/set-group" name="group_name"
                     hx-target="#dashboard-body" hx-swap="outerHTML">
@@ -53,35 +53,35 @@
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   </div>
   {% endif %}
 
   <!-- Group breakdown (active accounts) -->
   {% for g in ov.groups %}
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between" style="background:#fafaf9;">
-      <h2 class="text-sm font-bold text-gray-800">{{ g.name }} <span class="text-gray-400 font-normal">· {{ g.accounts|length }}</span></h2>
-      <div class="tabular-nums font-bold" style="color:{% if g.total >= 0 %}#15803d{% else %}#b91c1c{% endif %};">{{ cur }} {{ '{:,.0f}'.format(g.total) }}</div>
+  <div class="wt-panel">
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between wt-surface-soft">
+      <h2 class="text-sm font-bold wt-body">{{ g.name }} <span class="wt-ash font-normal">· {{ g.accounts|length }}</span></h2>
+      <div class="tabular-nums font-bold {{ 'wt-pos' if g.total >= 0 else 'wt-neg' }}">{{ cur }} {{ '{:,.0f}'.format(g.total) }}</div>
     </div>
-    <table class="min-w-full text-sm">
+    <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
       <tbody>
         {% for a in g.accounts %}
-        <tr class="border-t border-gray-100 hover:bg-gray-50 group" {% if not a.included %}style="opacity:0.5;"{% endif %}>
-          <td class="px-5 py-2" style="width:34px;">
+        <tr class="border-t border-gray-100 hover:wt-surface-soft group opacity-60" {% if not a.included %}{% endif %}>
+          <td class="px-5 py-2">
             <input type="checkbox" title="Include in net worth"
                    hx-post="/accounts/{{ a.acct.id }}/toggle-networth"
                    hx-target="#dashboard-body" hx-swap="outerHTML"
                    {% if a.included %}checked{% endif %}>
           </td>
           <td class="px-1 py-2">
-            <a href="/accounts/{{ a.acct.id }}" class="text-indigo-700 hover:text-indigo-900 font-medium">{{ a.acct.name }}</a>
-            <span class="ml-2 text-[10px] uppercase tracking-wide text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{{ a.acct.type.value }}</span>
-            {% if not a.included %}<span class="ml-1 text-[10px] uppercase tracking-wide text-amber-600">excluded</span>{% endif %}
+            <a href="/accounts/{{ a.acct.id }}" class="wt-info hover:text-indigo-900 font-medium">{{ a.acct.name }}</a>
+            <span class="ml-2 text-[10px] uppercase tracking-wide wt-ash border border-gray-200 rounded px-1.5 py-0.5">{{ a.acct.type.value }}</span>
+            {% if not a.included %}<span class="ml-1 text-[10px] uppercase tracking-wide wt-warn">excluded</span>{% endif %}
           </td>
-          <td class="px-3 py-2 text-right tabular-nums font-medium" style="color:{% if not a.included %}#9ca3af{% elif a.balance >= 0 %}#111827{% else %}#b91c1c{% endif %};">{{ cur }} {{ '{:,.0f}'.format(a.balance) }}</td>
-          <td class="px-4 py-2 text-right" style="width:90px;">
-            <button type="button" class="text-xs text-gray-400 hover:text-amber-700"
+          <td class="num {{ 'wt-ash' if not a.included else ('wt-ink' if a.balance >= 0 else 'wt-neg') }}">{{ cur }} {{ '{:,.0f}'.format(a.balance) }}</td>
+          <td class="px-4 py-2 text-right">
+            <button type="button" class="text-xs wt-ash hover:wt-warn"
                     title="Archive (deleted in Money Manager) — keeps history, drops from net worth"
                     hx-post="/accounts/{{ a.acct.id }}/toggle-active"
                     hx-target="#dashboard-body" hx-swap="outerHTML"
@@ -90,37 +90,37 @@
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   </div>
   {% endfor %}
 
   <!-- Inactive / archived accounts -->
   {% if ov.inactive %}
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden" style="border-style:dashed;">
-    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between" style="background:#f9fafb;">
-      <h2 class="text-sm font-bold text-gray-500">Inactive · deleted in Money Manager <span class="text-gray-400 font-normal">· {{ ov.inactive|length }}</span></h2>
-      <span class="text-xs text-gray-400">not counted in net worth</span>
+  <div class="wt-panel border-dashed">
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between wt-surface-soft">
+      <h2 class="text-sm font-bold wt-mute">Inactive · deleted in Money Manager <span class="wt-ash font-normal">· {{ ov.inactive|length }}</span></h2>
+      <span class="text-xs wt-ash">not counted in net worth</span>
     </div>
-    <table class="min-w-full text-sm">
+    <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
       <tbody>
         {% for a in ov.inactive %}
-        <tr class="border-t border-gray-100" style="opacity:0.6;">
+        <tr class="border-t border-gray-100 opacity-60">
           <td class="px-5 py-2">
-            <a href="/accounts/{{ a.acct.id }}" class="text-gray-600 hover:text-indigo-700 font-medium line-through">{{ a.acct.name }}</a>
-            <span class="ml-2 text-[10px] uppercase tracking-wide text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{{ a.acct.type.value }}</span>
+            <a href="/accounts/{{ a.acct.id }}" class="wt-mute hover:wt-info font-medium line-through">{{ a.acct.name }}</a>
+            <span class="ml-2 text-[10px] uppercase tracking-wide wt-ash border border-gray-200 rounded px-1.5 py-0.5">{{ a.acct.type.value }}</span>
           </td>
-          <td class="px-3 py-2 text-right tabular-nums text-gray-500">{{ cur }} {{ '{:,.0f}'.format(a.balance) }}</td>
-          <td class="px-4 py-2 text-right" style="width:90px;">
-            <button type="button" class="text-xs text-indigo-500 hover:text-indigo-800"
+          <td class="num">{{ cur }} {{ '{:,.0f}'.format(a.balance) }}</td>
+          <td class="px-4 py-2 text-right">
+            <button type="button" class="text-xs wt-info hover:wt-info"
                     hx-post="/accounts/{{ a.acct.id }}/toggle-active"
                     hx-target="#dashboard-body" hx-swap="outerHTML">↺ Restore</button>
           </td>
         </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   </div>
   {% endif %}
 
-  <p class="text-xs text-gray-400">Balances are computed from every transaction (sum of money in − out). Transfers between your own accounts net to zero. Re-import anytime — it only adds new transactions, never duplicates.</p>
+  <p class="text-xs wt-ash">Balances are computed from every transaction (sum of money in − out). Transfers between your own accounts net to zero. Re-import anytime — it only adds new transactions, never duplicates.</p>
 </div>

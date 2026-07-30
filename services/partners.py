@@ -186,6 +186,30 @@ def cap_table(session, user_id, as_of=None) -> dict:
     }
 
 
+def owner_returns(session, user_id, ni_from, ni_to) -> list[dict]:
+    """Return on equity per owner for the period: each owner's share of the
+    period's profit (their ownership %) ÷ their own capital account. Shows how
+    hard each rupee of each owner's capital worked — the operator's small book
+    capital earns a high return; an investor who paid a premium earns less."""
+    from services.ledger import profit_and_loss
+    pl = profit_and_loss(session, user_id, from_date=ni_from, to_date=ni_to)
+    ni = Decimal(str(pl.get("net_income", 0) or 0))
+    ct = cap_table(session, user_id, as_of=ni_to)
+    rows = []
+
+    def _row(name, pct, equity, is_owner=False):
+        share = (ni * Decimal(pct) / Decimal(100)).quantize(CENT)
+        roe = (share / equity * 100) if equity and equity > 0 else None
+        rows.append({"name": name, "pct": Decimal(pct), "profit_share": share,
+                     "equity": equity, "roe": (round(float(roe), 2) if roe is not None else None),
+                     "is_owner": is_owner})
+
+    _row(ct["owner_name"], ct["owner_pct"], ct["owner_capital"], is_owner=True)
+    for p in ct["partners"]:
+        _row(p["name"], p["pct"], p["capital"])
+    return rows
+
+
 # ── owner capital account setup (one-time) ───────────────────────────────
 def setup_owner_capital(session, user_id, name, joined_on=None) -> Partner:
     """Create the owner's own capital account and move ALL current retained

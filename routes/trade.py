@@ -98,6 +98,8 @@ async def dashboard(request: Request, month: str = Query(None),
     cap = capital_utilization(session, user_id, as_of=as_of,
                               ni_from=sel_start, ni_to=as_of)
     perf = time_based_performance(session, user_id, as_of=as_of)
+    from services import partners as PS
+    owner_roe = PS.owner_returns(session, user_id, sel_start, as_of) if PS._owner_partner(session, user_id) or PS._non_owner_partners(session, user_id) else []
     return templates.TemplateResponse(
         "trade_dashboard.html",
         _ctx(
@@ -112,6 +114,7 @@ async def dashboard(request: Request, month: str = Query(None),
             wc=wc,
             cap=cap,
             perf=perf,
+            owner_roe=owner_roe,
             selected_month=sel_start.strftime("%Y-%m"),
             month_label=sel_start.strftime("%B %Y"),
             month_short=sel_start.strftime("%b %Y"),

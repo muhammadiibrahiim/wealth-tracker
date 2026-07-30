@@ -125,6 +125,24 @@
     </div>
   </div>
 
+  {% if owner_roe %}
+  <!-- Return on equity by owner -->
+  <div>
+    <div class="stat-label mb-3">Return on Equity by Owner · {{ month_short }}</div>
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+      {% for o in owner_roe %}
+      <div class="stat-card stat-card-sm{% if o.is_owner %} border-indigo-300{% endif %}"
+           title="{{ o.name }} owns {{ '{:g}'.format(o.pct) }}%. Their share of {{ month_label }} profit ({{ currency }} {{ '{:,.0f}'.format(o.profit_share) }}) ÷ their own capital account ({{ currency }} {{ '{:,.0f}'.format(o.equity) }}) = return on THEIR equity.">
+        <div class="stat-label">{{ o.name }}{% if o.is_owner %} <span class="text-gray-400">(you)</span>{% endif %}</div>
+        <div class="stat-value" style="color: {% if o.roe is not none and o.roe >= 0 %}#4338ca{% elif o.roe is not none %}#a52e26{% else %}#6b7280{% endif %};">{% if o.roe is not none %}{{ '%.2f'|format(o.roe) }}%{% else %}—{% endif %}</div>
+        <div class="text-xs text-gray-500 mt-1">{{ '{:g}'.format(o.pct) }}% · {{ currency }} {{ '{:,.0f}'.format(o.profit_share) }} on {{ currency }} {{ '{:,.0f}'.format(o.equity) }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="text-xs text-gray-400 mt-2">Each owner's share of this month's profit ÷ their own capital account. A small book capital earning most of the profit (the operator) shows a high return; an investor who paid a premium for a small stake shows a low one.</p>
+  </div>
+  {% endif %}
+
   <!-- Profitability over time -->
   <div>
     <div class="stat-label mb-3">Profitability Over Time</div>

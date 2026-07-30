@@ -27,8 +27,8 @@ from services.ledger import profit_and_loss
 
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
-POOL_CODE = "2102"          # Capital A/C — owner's retained earnings pool
-OWNER_CODES = ("2102", "2103")   # Capital A/C + CEO funding = owner's equity
+POOL_CODE = "2102"          # Capital A/C — owner's retained-earnings pool + capital
+FUNDING_CODE = "2103"       # CEO — owner's funding/drawings current account (NOT capital)
 
 
 # ── date helpers ─────────────────────────────────────────────────────────
@@ -145,14 +145,18 @@ def cap_table(session, user_id, as_of=None) -> dict:
             "capital": cap, "joined_on": p.joined_on, "account_id": p.account_id,
         })
     owner_pct = (Decimal(100) - partner_total_pct)
-    owner_cap = ZERO
-    for code in OWNER_CODES:
-        a = _account_by_code(session, user_id, code)
-        if a:
-            owner_cap += _equity_balance(session, a.id, as_of)
+    # Owner's CAPITAL = retained-earnings/capital pool (2102) only. The CEO
+    # funding account (2103) is the owner's fluctuating funding/drawings current
+    # account — money pushed in / pulled out for cashflow — NOT capital, so it's
+    # excluded from the cap table (shown separately, for reference).
+    pool = _account_by_code(session, user_id, POOL_CODE)
+    owner_cap = _equity_balance(session, pool.id, as_of) if pool else ZERO
+    fund_acct = _account_by_code(session, user_id, FUNDING_CODE)
+    owner_funding = _equity_balance(session, fund_acct.id, as_of) if fund_acct else ZERO
     total_cap = owner_cap + partner_total_cap
     return {
         "owner_pct": owner_pct, "owner_capital": owner_cap,
+        "owner_funding": owner_funding,   # CEO current account — info only, not equity
         "partners": rows,
         "partner_total_pct": partner_total_pct,
         "partner_total_capital": partner_total_cap,

@@ -21,7 +21,7 @@
   <div class="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
     <div class="px-6 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2" style="background:#fafaf9;">
       <div class="stat-label">Cap table</div>
-      <div class="text-sm text-gray-600">Total equity <b>{{ cur }} {{ '{:,.0f}'.format(cap.total_capital) }}</b> · as of {{ cap.as_of.strftime('%d %b %Y') }}</div>
+      <div class="text-sm text-gray-600">Total capital <b>{{ cur }} {{ '{:,.0f}'.format(cap.total_capital) }}</b> · as of {{ cap.as_of.strftime('%d %b %Y') }}</div>
     </div>
     <table class="min-w-full">
       <thead>
@@ -37,7 +37,7 @@
         <tr style="background:#eef2ff;">
           <td class="font-bold text-gray-900">You <span class="text-xs font-normal text-gray-500">(owner · remainder)</span></td>
           <td class="text-right tabular-nums font-bold">{{ '{:g}'.format(cap.owner_pct) }}%</td>
-          <td class="text-right tabular-nums font-bold">{{ cur }} {{ '{:,.2f}'.format(cap.owner_capital) }}</td>
+          <td class="text-right tabular-nums font-bold">{{ cur }} {{ '{:,.2f}'.format(cap.owner_capital) }}<div class="text-xs font-normal text-gray-400">retained profit</div></td>
           <td class="text-gray-400 text-sm">—</td>
           <td></td>
         </tr>
@@ -70,6 +70,10 @@
       </tfoot>
     </table>
   </div>
+
+  <p class="text-xs text-gray-500 -mt-3">
+    Your <b>funding / current account</b> (CEO) holds {{ cur }} {{ '{:,.0f}'.format(cap.owner_funding) }} — money you push in and pull out for cashflow. It fluctuates, so it's <b>not counted as capital</b> here. "Capital" = retained profit + partner contributions + each partner's allocated profit.
+  </p>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <!-- Add partner -->

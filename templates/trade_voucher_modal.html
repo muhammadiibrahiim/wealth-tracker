@@ -45,7 +45,7 @@
               <option value="">— pick account —</option>
               {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
             </select>
-            <p class="text-xs mt-1" style="color: var(--mute);">This account will be <strong>credited</strong> (balance reduces / liability increases).</p>
+            <p class="text-xs mt-1 wt-mute">This account will be <strong>credited</strong> (balance reduces / liability increases).</p>
           </div>
 
           <div>
@@ -54,7 +54,7 @@
               <option value="">— pick account —</option>
               {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
             </select>
-            <p class="text-xs mt-1" style="color: var(--mute);">This account will be <strong>debited</strong> (balance increases / liability reduces).</p>
+            <p class="text-xs mt-1 wt-mute">This account will be <strong>debited</strong> (balance increases / liability reduces).</p>
           </div>
         </div>
 
@@ -71,8 +71,8 @@
           </div>
         </div>
 
-        <div class="accent-card" style="border-left-color: #2c84e0; background: #dceaf6;">
-          <p class="text-sm" style="color: #08245f;">
+        <div class="accent-card wt-card-info wt-info-bg">
+          <p class="text-sm wt-ink">
             <strong>Journal that will post:</strong><br>
             DR <span id="prev-to">— {{ _meta.to_label|lower }} —</span> &nbsp;·&nbsp; <span id="prev-amt-dr">0.00</span><br>
             CR <span id="prev-from">— {{ _meta.from_label|lower }} —</span> &nbsp;·&nbsp; <span id="prev-amt-cr">0.00</span>
@@ -145,13 +145,13 @@
               <tr>
                 <th class="text-left" style="width:42%">Account</th>
                 <th class="text-left">Description</th>
-                <th class="text-right" style="width:140px">Debit</th>
-                <th class="text-right" style="width:140px">Credit</th>
-                <th style="width:40px"></th>
+                <th class="text-right">Debit</th>
+                <th class="text-right">Credit</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="voucher-lines"></tbody>
-            <tfoot style="background: #fafaf9;">
+            <tfoot class="wt-info-bg">
               <tr>
                 <td colspan="2" class="text-right text-xs uppercase tracking-widest font-bold wt-body">Totals</td>
                 <td class="num" id="total-dr">{{ currency }} 0.00</td>
@@ -169,7 +169,7 @@
 
         <div class="flex items-center justify-between">
           <button type="button" class="wt-info hover:text-indigo-900 text-sm font-medium" onclick="addLine()">+ Add line</button>
-          <p id="warn" class="text-sm font-medium" style="display:none; color: #c2410c;">Debit and credit must match before submit.</p>
+          <p id="warn" class="text-sm font-medium" style="display:none; color: #cd4239;">Debit and credit must match before submit.</p>
         </div>
 
         <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
@@ -216,7 +216,7 @@
           const diff = tdr - tcr;
           const dc = document.getElementById('diff-cell');
           dc.textContent = fmt(diff);
-          dc.style.color = Math.abs(diff) < 0.005 ? '#15803d' : '#c2410c';
+          dc.style.color = Math.abs(diff) < 0.005 ? '#2c8c66' : '#cd4239';
           document.getElementById('warn').style.display = Math.abs(diff) < 0.005 ? 'none' : 'block';
           document.getElementById('submit-btn').disabled = Math.abs(diff) >= 0.005 || (tdr === 0 && tcr === 0);
         }

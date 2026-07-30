@@ -23,7 +23,7 @@
       <div class="space-y-4">
       {% for r in line_info %}
         {% set ln = r.line %}
-        <div class="border border-gray-200 rounded-lg p-4" style="background: #fafaf9;">
+        <div class="border border-gray-200 rounded-lg p-4 wt-info-bg">
           <div class="flex items-start justify-between mb-3 gap-4">
             <div class="flex-1 min-w-0">
               <div class="font-semibold wt-ink">{{ ln.item_name }}</div>
@@ -52,14 +52,14 @@
             <div>
               <label class="field-label">Vendor Invoice (optional)</label>
               <div class="paste-zone" data-line-id="{{ ln.id }}" tabindex="0">
-                <input type="file" name="line_{{ ln.id }}_invoice" accept="image/*,application/pdf" style="display:none">
+                <input type="file" name="line_{{ ln.id }}_invoice" accept="image/*,application/pdf" hidden>
                 <div class="paste-placeholder">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                   <div><div style="font-weight:600; color:var(--ink); font-size:12px;">Click / paste</div></div>
                 </div>
-                <div class="paste-preview" style="display:none">
-                  <img class="paste-thumb" alt="" style="display:none">
-                  <div class="paste-info"><div class="paste-filename" style="font-weight:600; font-size:12px; color:var(--ink);"></div><div class="paste-size" style="font-size:11px; color:var(--mute);"></div></div>
+                <div class="paste-preview" hidden>
+                  <img class="paste-thumb" alt="" hidden>
+                  <div class="paste-info"><div class="paste-filename" style="font-weight:600; font-size:12px; color:var(--ink);"></div><div class="paste-size text-xs wt-mute"></div></div>
                   <button type="button" class="paste-clear" title="Remove">✕</button>
                 </div>
               </div>
@@ -99,14 +99,14 @@
 <style>
   .paste-zone { position:relative; min-height:44px; padding:8px 10px; background:#fff; border:1px dashed var(--hairline); border-radius:6px; cursor:pointer; outline:none; }
   .paste-zone:hover, .paste-zone:focus { border-color:var(--ink); background:#fcfcfa; }
-  .paste-zone.drag-over { border-color:var(--brand); background:#fff7e6; }
+  .paste-zone.drag-over { border-color:var(--brand); background:#fdebc7; }
   .paste-placeholder { display:flex; align-items:center; gap:8px; color:var(--mute); }
   .paste-preview { display:flex; align-items:center; gap:8px; }
   .paste-thumb { width:34px; height:34px; object-fit:cover; border-radius:4px; border:1px solid var(--hairline-soft); }
   .paste-info { flex:1; min-width:0; overflow:hidden; }
   .paste-filename { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .paste-clear { background:transparent; border:none; cursor:pointer; color:var(--mute); font-size:14px; padding:2px 6px; border-radius:4px; }
-  .paste-clear:hover { background:#f3f4f6; color:var(--accent-red); }
+  .paste-clear:hover { background:#e5e7e0; color:var(--accent-red); }
 </style>
 
 <script>

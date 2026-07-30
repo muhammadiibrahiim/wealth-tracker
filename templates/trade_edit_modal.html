@@ -24,13 +24,13 @@
         </div>
       </div>
 
-      <div class="border border-gray-200 rounded-lg p-3" style="background:#fafaf9;">
+      <div class="border border-gray-200 rounded-lg p-3 wt-info-bg">
         <div class="text-xs wt-mute mb-2">Payment split — <b>Advance</b> on the trade date, <b>On delivery</b> when goods move, <b>Credit</b> the"credit days" above after delivery. Each row should total 100%.</div>
         <div class="grid grid-cols-12 gap-2 items-end mb-1.5">
           <div class="col-span-3 text-xs font-semibold wt-body pb-1.5">Customer pays you</div>
-          <div class="col-span-3"><label class="field-label" style="font-size:10px;">Advance %</label><input type="number" min="0" step="1" name="cust_advance_pct" value="{{ '{:g}'.format(trade.cust_advance_pct) }}" class="w-full text-sm split-pct" data-side="cust"></div>
-          <div class="col-span-3"><label class="field-label" style="font-size:10px;">On delivery %</label><input type="number" min="0" step="1" name="cust_delivery_pct" value="{{ '{:g}'.format(trade.cust_delivery_pct) }}" class="w-full text-sm split-pct" data-side="cust"></div>
-          <div class="col-span-3"><label class="field-label" style="font-size:10px;">Credit %</label><input type="number" min="0" step="1" name="cust_credit_pct" value="{{ '{:g}'.format(trade.cust_credit_pct) }}" class="w-full text-sm split-pct" data-side="cust"></div>
+          <div class="col-span-3"><label class="field-label text-xs">Advance %</label><input type="number" min="0" step="1" name="cust_advance_pct" value="{{ '{:g}'.format(trade.cust_advance_pct) }}" class="w-full text-sm split-pct" data-side="cust"></div>
+          <div class="col-span-3"><label class="field-label text-xs">On delivery %</label><input type="number" min="0" step="1" name="cust_delivery_pct" value="{{ '{:g}'.format(trade.cust_delivery_pct) }}" class="w-full text-sm split-pct" data-side="cust"></div>
+          <div class="col-span-3"><label class="field-label text-xs">Credit %</label><input type="number" min="0" step="1" name="cust_credit_pct" value="{{ '{:g}'.format(trade.cust_credit_pct) }}" class="w-full text-sm split-pct" data-side="cust"></div>
         </div>
         <div class="grid grid-cols-12 gap-2 items-end">
           <div class="col-span-3 text-xs font-semibold wt-body pb-1.5">You pay vendor</div>

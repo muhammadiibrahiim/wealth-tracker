@@ -50,7 +50,7 @@
             </tr>
             {% endfor %}
           </tbody>
-          <tfoot style="background: #fafaf9;">
+          <tfoot class="wt-info-bg">
             <tr>
               <td colspan="3" class="text-right text-xs uppercase tracking-widest font-bold wt-body">New cost / sale / profit</td>
               <td class="num" id="new-cost-cell">—</td>
@@ -61,7 +61,7 @@
         {{ table_close() }}
       </div>
 
-      <div class="accent-card" style="border-left-color: #4f46e5; background: #eef2ff;">
+      <div class="accent-card wt-card-info wt-info-bg">
         <p class="text-sm text-indigo-900">💡 Common in print/packaging — vendors over- or under-deliver. The final quantity is what gets billed; the original order is kept for reference.</p>
       </div>
 
@@ -99,18 +99,18 @@
       } else if (delta > 0) {
         dcell.textContent = '+' + delta.toLocaleString();
         dcell.className = 'text-right tabular-nums delta-cell font-medium';
-        dcell.style.color = '#15803d';
+        dcell.style.color = '#2c8c66';
       } else {
         dcell.textContent = delta.toLocaleString();
         dcell.className = 'text-right tabular-nums delta-cell font-medium';
-        dcell.style.color = '#c2410c';
+        dcell.style.color = '#cd4239';
       }
     });
     newCost.textContent = fmt(totalCost);
     newSale.textContent = fmt(totalSale);
     const profit = totalSale - totalCost;
     newProfit.textContent = fmt(profit);
-    newProfit.style.color = profit >= 0 ? '#15803d' : '#c2410c';
+    newProfit.style.color = profit >= 0 ? '#2c8c66' : '#cd4239';
   }
   rows.forEach(r => r.querySelector('.qty-input').addEventListener('input', recalc));
   recalc();

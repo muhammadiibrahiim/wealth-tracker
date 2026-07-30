@@ -9,8 +9,8 @@
     </div>
 
     {% if not capital_acct %}
-    <div class="accent-card" style="border-left-color: #cd4239; background: #f7d6d3;">
-      <p class="text-sm" style="color: #722024;">⚠️ Capital A/C not found. Create or rename an account to <strong>Capital A/C</strong> in <a href="/trade/coa" class="underline">Chart of A/Cs</a> first.</p>
+    <div class="accent-card wt-card-info wt-info-bg">
+      <p class="text-sm wt-ink">⚠️ Capital A/C not found. Create or rename an account to <strong>Capital A/C</strong> in <a href="/trade/coa" class="underline">Chart of A/Cs</a> first.</p>
     </div>
     {% else %}
     <form hx-post="/trade/trades/{{ trade.id }}/cost" class="space-y-4">
@@ -19,11 +19,11 @@
         <input name="description" required placeholder="e.g. Bilty Karachi → Lahore" class="w-full">
       </div>
 
-      <label class="flex items-start gap-2 cursor-pointer p-3 border border-gray-200 rounded" style="background: #fefce8;">
+      <label class="flex items-start gap-2 cursor-pointer p-3 border border-gray-200 rounded wt-info-bg">
         <input type="checkbox" name="paid_by_customer" id="paid-by-customer" value="on" class="mt-1">
         <span class="text-sm">
           <strong>Customer paid this on our behalf</strong>
-          <span class="block text-xs mt-1" style="color: var(--mute);">
+          <span class="block text-xs mt-1 wt-mute">
             Tick if <strong>{{ purchaser.name if purchaser else 'the customer' }}</strong> paid this cost out of pocket. The amount will be deducted from their outstanding on this trade instead of from a cash/bank/vendor account.
           </span>
         </span>
@@ -38,14 +38,14 @@
                  placeholder="Type to search accounts… (e.g. cash, bilty, ahmed)"
                  class="w-full">
           <input type="hidden" name="payee_account_id" id="payee-account-id">
-          <div id="payee-dropdown" class="payee-dropdown" style="display:none"></div>
-          <div id="payee-selected" class="payee-selected" style="display:none">
+          <div id="payee-dropdown" class="payee-dropdown" hidden></div>
+          <div id="payee-selected" class="payee-selected" hidden>
             <span class="payee-code"></span>
             <span class="payee-name"></span>
             <button type="button" class="payee-clear" title="Change">✕</button>
           </div>
         </div>
-        <p class="text-xs mt-1" style="color: var(--mute);">
+        <p class="text-xs mt-1 wt-mute">
           Pick a <strong>cash / bank account</strong> if you already paid (that account goes down)
           — or pick a <strong>vendor / party</strong> if you haven't paid yet and now owe them (their balance goes up).
           Capital A/C will be debited; the account you pick here will be credited.
@@ -63,8 +63,8 @@
         </div>
       </div>
 
-      <div class="accent-card" style="border-left-color: #2c84e0; background: #dceaf6;">
-        <p class="text-sm" style="color: #08245f;">
+      <div class="accent-card wt-card-info wt-info-bg">
+        <p class="text-sm wt-ink">
           <strong>Journal that will post:</strong><br>
           DR Capital A/C ({{ capital_acct.code }}) — <span id="preview-amount">0.00</span><br>
           CR <span id="preview-payee">— pick payee —</span> — <span id="preview-amount2">0.00</span>
@@ -101,7 +101,7 @@
     border-bottom: 1px solid var(--hairline-soft);
   }
   .payee-option:last-child { border-bottom: none; }
-  .payee-option:hover, .payee-option.active { background: #fef7e6; }
+  .payee-option:hover, .payee-option.active { background: #fdebc7; }
   .payee-option .code {
     font-family: 'Source Code Pro', monospace;
     font-size: 11px; color: var(--mute); min-width: 50px;
@@ -110,7 +110,7 @@
   .payee-empty { padding: 16px; text-align: center; color: var(--mute); font-size: 13px; }
   .payee-selected {
     display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px; background: #f4f5f8;
+    padding: 8px 12px; background: #e5e7e0;
     border: 1px solid var(--hairline); border-radius: 6px;
     margin-top: 6px;
   }

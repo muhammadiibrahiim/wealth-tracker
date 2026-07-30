@@ -14,7 +14,7 @@
     </div>
 
     {% if not accounts and not gl_groups %}
-    <div class="accent-card" style="border-left-color: #ca8a04; background: #fef9c3;">
+    <div class="accent-card wt-card-warn wt-warn-bg">
       <p class="text-sm text-yellow-900">You need at least one account first. <a href="/trade/accounts" class="underline font-medium">Add a cash account →</a></p>
     </div>
     {% else %}
@@ -71,14 +71,14 @@
       <div>
         <label class="field-label">Payment Screenshot / Proof</label>
         <div id="pay-proof-drop" tabindex="0"
-             style="border:2px dashed #d1d5db; border-radius:8px; padding:14px; text-align:center; cursor:pointer; background:#fafafa; outline:none;">
+             style="border:2px dashed #bfc1b7; border-radius:8px; padding:14px; text-align:center; cursor:pointer; background:#fcfcfa; outline:none;">
           <div id="pay-proof-empty" class="text-sm wt-mute select-none">
             📎 Click to choose, drag in, or <b>paste a screenshot</b> (⌘V / Ctrl-V)
           </div>
-          <img id="pay-proof-preview" alt="proof preview" style="display:none; max-height:170px; margin:4px auto 0; border-radius:6px; border:1px solid #e5e7eb;">
+          <img id="pay-proof-preview" alt="proof preview" style="display:none; max-height:170px; margin:4px auto 0; border-radius:6px; border:1px solid #dcdfd2;">
           <div id="pay-proof-name" class="text-xs wt-ash mt-1"></div>
         </div>
-        <input type="file" name="proof" id="pay-proof-input" accept="image/*" style="display:none;">
+        <input type="file" name="proof" id="pay-proof-input" accept="image/*" hidden>
       </div>
 
       <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
@@ -110,9 +110,9 @@
   }
   drop.addEventListener('click', function(){ input.click(); });
   input.addEventListener('change', function(){ if(input.files&&input.files[0]) render(input.files[0]); });
-  drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.style.background='#eef2ff'; });
-  drop.addEventListener('dragleave', function(){ drop.style.background='#fafafa'; });
-  drop.addEventListener('drop', function(e){ e.preventDefault(); drop.style.background='#fafafa';
+  drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.style.background='#dceaf6'; });
+  drop.addEventListener('dragleave', function(){ drop.style.background='#fcfcfa'; });
+  drop.addEventListener('drop', function(e){ e.preventDefault(); drop.style.background='#fcfcfa';
     if(e.dataTransfer.files&&e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
   // Paste a screenshot anywhere while this modal is open. Self-cleans when the
   // modal is removed so listeners don't pile up across opens.

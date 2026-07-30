@@ -9,13 +9,13 @@
     </div>
 
     {% if prefill %}
-    <div class="accent-card mb-4" style="border-left-color:#4f46e5; background:#eef2ff;">
-      <p class="text-sm" style="color:#3730a3;">Pre-filled from your <b>Projection</b> — {{ prefill.lines|length }} product(s) with buy/sale rates and vendor terms. <b>Pick a vendor and customer</b>, tweak anything, then Create Trade.</p>
+    <div class="accent-card mb-4 wt-card-info wt-info-bg">
+      <p class="text-sm wt-ink">Pre-filled from your <b>Projection</b> — {{ prefill.lines|length }} product(s) with buy/sale rates and vendor terms. <b>Pick a vendor and customer</b>, tweak anything, then Create Trade.</p>
     </div>
     {% endif %}
 
     {% if not vendors or not customers %}
-    <div class="accent-card mb-4" style="border-left-color: #ca8a04; background: #fef9c3;">
+    <div class="accent-card mb-4 wt-card-warn wt-warn-bg">
       <p class="text-sm text-yellow-900">You need at least one vendor and one customer first. <a href="/trade/parties" class="underline font-medium">Manage parties →</a></p>
     </div>
     {% endif %}
@@ -35,8 +35,8 @@
             <label class="field-label field-label-required">Vendor</label>
             <div style="position:relative;">
               <input type="text" id="vendor_input" autocomplete="off" placeholder="Type or select vendor" class="w-full" style="padding-right:34px;">
-              <span id="vendor_caret" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6b7280; font-size:11px; padding:5px; user-select:none;">▼</span>
-              <div id="vendor_dropdown" style="display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:230px; overflow-y:auto;"></div>
+              <span id="vendor_caret" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6c6e63; font-size:11px; padding:5px; user-select:none;">▼</span>
+              <div id="vendor_dropdown" style="display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid #dcdfd2; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:230px; overflow-y:auto;"></div>
             </div>
             <div class="hidden text-xs mt-1 font-medium wt-warn" id="vendor_new_hint">➕ New vendor — you'll add its details next</div>
           </div>
@@ -44,8 +44,8 @@
             <label class="field-label field-label-required">Purchaser (Customer)</label>
             <div style="position:relative;">
               <input type="text" id="customer_input" autocomplete="off" placeholder="Type or select customer" class="w-full" style="padding-right:34px;">
-              <span id="customer_caret" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6b7280; font-size:11px; padding:5px; user-select:none;">▼</span>
-              <div id="customer_dropdown" style="display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:230px; overflow-y:auto;"></div>
+              <span id="customer_caret" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6c6e63; font-size:11px; padding:5px; user-select:none;">▼</span>
+              <div id="customer_dropdown" style="display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid #dcdfd2; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:230px; overflow-y:auto;"></div>
             </div>
             <div class="hidden text-xs mt-1 font-medium wt-warn" id="customer_new_hint">➕ New customer — you'll add its details next</div>
           </div>
@@ -66,13 +66,13 @@
             </div>
           </div>
 
-          <div class="mt-3 border border-gray-200 rounded-lg p-3" style="background:#fafaf9;">
+          <div class="mt-3 border border-gray-200 rounded-lg p-3 wt-info-bg">
             <div class="text-xs wt-mute mb-2">Payment split — how each side pays. <b>Advance</b> on the trade date, <b>On delivery</b> when goods move, <b>Credit</b> the"credit days" above after delivery. Each row should total 100%.</div>
             <div class="grid grid-cols-12 gap-2 items-end mb-1.5">
               <div class="col-span-3 text-xs font-semibold wt-body pb-1.5">Customer pays you</div>
-              <div class="col-span-3"><label class="field-label" style="font-size:10px;">Advance %</label><input type="number" min="0" step="1" name="cust_advance_pct" value="0" class="w-full text-sm split-pct" data-side="cust"></div>
-              <div class="col-span-3"><label class="field-label" style="font-size:10px;">On delivery %</label><input type="number" min="0" step="1" name="cust_delivery_pct" value="0" class="w-full text-sm split-pct" data-side="cust"></div>
-              <div class="col-span-3"><label class="field-label" style="font-size:10px;">Credit %</label><input type="number" min="0" step="1" name="cust_credit_pct" value="100" class="w-full text-sm split-pct" data-side="cust"></div>
+              <div class="col-span-3"><label class="field-label text-xs">Advance %</label><input type="number" min="0" step="1" name="cust_advance_pct" value="0" class="w-full text-sm split-pct" data-side="cust"></div>
+              <div class="col-span-3"><label class="field-label text-xs">On delivery %</label><input type="number" min="0" step="1" name="cust_delivery_pct" value="0" class="w-full text-sm split-pct" data-side="cust"></div>
+              <div class="col-span-3"><label class="field-label text-xs">Credit %</label><input type="number" min="0" step="1" name="cust_credit_pct" value="100" class="w-full text-sm split-pct" data-side="cust"></div>
             </div>
             <div class="grid grid-cols-12 gap-2 items-end">
               <div class="col-span-3 text-xs font-semibold wt-body pb-1.5">You pay vendor</div>
@@ -97,7 +97,7 @@
           <textarea name="notes" rows="2" class="w-full" placeholder="Optional"></textarea>
         </div>
 
-        <div id="trade-form-error" class="hidden accent-card" style="border-left-color: #dc2626; background: #fef2f2;">
+        <div class="hidden accent-card wt-card-neg wt-neg-bg" id="trade-form-error">
           <p class="text-sm font-medium wt-neg">
             <span id="trade-form-error-msg">Something went wrong.</span>
           </p>
@@ -115,7 +115,7 @@
           <h3 class="text-base font-bold wt-ink">New Party Details</h3>
           <p class="modal-subtitle">These parties don't exist yet — add their details, then the trade is created.</p>
         </div>
-        <div id="np-vendor" class="hidden accent-card space-y-3" style="border-left-color:#b45309; background:#fffbeb;">
+        <div class="hidden accent-card space-y-3 wt-card-warn wt-warn-bg" id="np-vendor">
           <div class="font-bold wt-ink">Vendor: <span id="np-vendor-name" class="wt-warn"></span></div>
           <div class="grid grid-cols-2 gap-3">
             <input name="vendor_new_contact" placeholder="Contact person" class="">
@@ -123,7 +123,7 @@
             <input name="vendor_new_city" placeholder="City" class="">
           </div>
         </div>
-        <div id="np-customer" class="hidden accent-card space-y-3" style="border-left-color:#b45309; background:#fffbeb;">
+        <div class="hidden accent-card space-y-3 wt-card-warn wt-warn-bg" id="np-customer">
           <div class="font-bold wt-ink">Customer: <span id="np-customer-name" class="wt-warn"></span></div>
           <div class="grid grid-cols-2 gap-3">
             <input name="customer_new_contact" placeholder="Contact person" class="">
@@ -232,14 +232,14 @@
              if (it) { input.value = it.name; hidId.value = it.id; prefill(it); } }
       dd.style.display = 'none'; active = -1;
     }
-    function highlight(i){ opts.forEach((o,j)=>o.style.background=j===i?'#eef2ff':''); if(opts[i])opts[i].scrollIntoView({block:'nearest'}); active=i; }
+    function highlight(i){ opts.forEach((o,j)=>o.style.background=j===i?'#dceaf6':''); if(opts[i])opts[i].scrollIntoView({block:'nearest'}); active=i; }
     function render() {
       const q = input.value.trim().toLowerCase();
       const matches = ITEM_CATALOG.filter(it => it.name.toLowerCase().includes(q));
       let html = matches.map(it => `<div class="item-opt" style="${OPT_STYLE}" data-id="${it.id}">${esc(it.name)}</div>`).join('');
       const exact = ITEM_CATALOG.some(it => it.name.toLowerCase() === q);
-      if (q && !exact) html += `<div class="item-opt" style="${OPT_STYLE}color:#b45309;font-weight:500;border-top:1px solid #f0f0f0;" data-new="1">➕ Create"${esc(input.value.trim())}"</div>`;
-      if (!html) html = `<div style="padding:9px 12px;font-size:13px;color:#9ca3af;">No items yet — type a name to create one.</div>`;
+      if (q && !exact) html += `<div class="item-opt" style="${OPT_STYLE}color:#b17816;font-weight:500;border-top:1px solid #e5e7e0;" data-new="1">➕ Create"${esc(input.value.trim())}"</div>`;
+      if (!html) html = `<div style="padding:9px 12px;font-size:13px;color:#9b9c92;">No items yet — type a name to create one.</div>`;
       dd.innerHTML = html;
       opts = Array.from(dd.querySelectorAll('.item-opt')); active = -1;
       opts.forEach((el,i)=>{
@@ -266,15 +266,15 @@
     const idx = lineCounter++;
     const wrap = document.createElement('div');
     wrap.className = 'border border-gray-200 rounded-lg p-4 mb-3';
-    wrap.style.background = '#fafaf9';
+    wrap.style.background = '#fcfcfa';
     wrap.innerHTML = `
       <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
         <div class="md:col-span-8">
           <label class="field-label field-label-required">Item</label>
           <div style="position:relative;">
             <input name="line_${idx}_item_name" class="item-combo-input w-full text-sm" autocomplete="off" placeholder="Type or pick an item…" style="padding-right:26px;">
-            <span class="item-combo-caret" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6b7280; font-size:11px; padding:5px; user-select:none;">▼</span>
-            <div class="item-combo-dd" style="display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:2px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,.12); max-height:220px; overflow:auto;"></div>
+            <span class="item-combo-caret" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6c6e63; font-size:11px; padding:5px; user-select:none;">▼</span>
+            <div class="item-combo-dd" style="display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:2px; background:#fff; border:1px solid #dcdfd2; border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,.12); max-height:220px; overflow:auto;"></div>
           </div>
           <input type="hidden" name="line_${idx}_item_id" value="">
           <div class="text-xs wt-ash mt-1">Pick an item, or type a new name and choose “Create”.</div>
@@ -330,7 +330,7 @@
     valueInput.classList.remove('flex-1');
     valueInput.style.width = '100%';
     const dd = document.createElement('div');
-    dd.style.cssText = 'display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:3px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:200px; overflow-y:auto;';
+    dd.style.cssText = 'display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:3px; background:#fff; border:1px solid #dcdfd2; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:200px; overflow-y:auto;';
     wrapper.appendChild(dd);
     function render() {
       const label = (labelInput.value || '').trim().toLowerCase();
@@ -339,10 +339,10 @@
       const matches = vals.filter(v => v.toLowerCase().includes(q));
       if (!matches.length) { dd.style.display = 'none'; return; }
       dd.innerHTML = matches.map(v =>
-        `<div class="spec-opt" style="padding:8px 11px;cursor:pointer;font-size:13px;color:#111827;" data-v="${esc(v)}">${esc(v)}</div>`
+        `<div class="spec-opt" style="padding:8px 11px;cursor:pointer;font-size:13px;color:#23251d;" data-v="${esc(v)}">${esc(v)}</div>`
       ).join('');
       dd.querySelectorAll('.spec-opt').forEach(el => {
-        el.addEventListener('mouseenter', () => el.style.background = '#f3f4f6');
+        el.addEventListener('mouseenter', () => el.style.background = '#e5e7e0');
         el.addEventListener('mouseleave', () => el.style.background = '');
         el.addEventListener('mousedown', e => { e.preventDefault(); valueInput.value = el.dataset.v; dd.style.display = 'none'; });
       });
@@ -385,7 +385,7 @@
   }
   const resolveParty = syncHidden;
 
-  const OPT_STYLE = 'padding:9px 12px;cursor:pointer;font-size:14px;color:#111827;';
+  const OPT_STYLE = 'padding:9px 12px;cursor:pointer;font-size:14px;color:#23251d;';
   function setupCombo(role) {
     const items = role === 'vendor' ? VENDORS_LIST : CUSTOMERS_LIST;
     const input = document.getElementById(role + '_input');
@@ -400,7 +400,7 @@
       active = -1;
     }
     function highlight(i) {
-      opts.forEach((o, idx) => o.style.background = idx === i ? '#eef2ff' : '');
+      opts.forEach((o, idx) => o.style.background = idx === i ? '#dceaf6' : '');
       if (opts[i]) opts[i].scrollIntoView({ block: 'nearest' });
       active = i;
     }
@@ -412,8 +412,8 @@
         `<div class="party-opt" style="${OPT_STYLE}" data-name="${esc(it.name)}">${esc(it.name)}</div>`
       ).join('');
       const exact = items.some(it => it.name.toLowerCase() === q);
-      if (q && !exact) html += `<div class="party-opt" style="${OPT_STYLE}color:#b45309;font-weight:500;border-top:1px solid #f0f0f0;" data-new="1">➕ Create"${esc(input.value.trim())}"</div>`;
-      if (!html) html = `<div style="padding:9px 12px;font-size:13px;color:#9ca3af;">No parties yet — type a name to create one.</div>`;
+      if (q && !exact) html += `<div class="party-opt" style="${OPT_STYLE}color:#b17816;font-weight:500;border-top:1px solid #e5e7e0;" data-new="1">➕ Create"${esc(input.value.trim())}"</div>`;
+      if (!html) html = `<div style="padding:9px 12px;font-size:13px;color:#9b9c92;">No parties yet — type a name to create one.</div>`;
       dd.innerHTML = html;
       opts = Array.from(dd.querySelectorAll('.party-opt'));
       active = -1;

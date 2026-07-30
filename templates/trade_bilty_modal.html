@@ -15,8 +15,8 @@
     </div>
 
     {% if not pl_acct %}
-    <div class="accent-card" style="border-left-color: #cd4239; background: #f7d6d3;">
-      <p class="text-sm" style="color: #722024;">⚠️ Profit / Loss A/C (3903) not found. Seed it in <a href="/trade/coa" class="underline">Chart of A/Cs</a> first.</p>
+    <div class="accent-card wt-card-info wt-info-bg">
+      <p class="text-sm wt-ink">⚠️ Profit / Loss A/C (3903) not found. Seed it in <a href="/trade/coa" class="underline">Chart of A/Cs</a> first.</p>
     </div>
     {% else %}
 
@@ -29,11 +29,11 @@
                class="w-full">
       </div>
 
-      <label class="flex items-start gap-2 cursor-pointer p-3 border border-gray-200 rounded" style="background: #fefce8;">
+      <label class="flex items-start gap-2 cursor-pointer p-3 border border-gray-200 rounded wt-info-bg">
         <input type="checkbox" name="paid_by_customer" id="paid-by-customer" value="on" {% if existing_by_customer %}checked{% endif %} class="mt-1">
         <span class="text-sm">
           <strong>Customer paid this on our behalf</strong>
-          <span class="block text-xs mt-1" style="color: var(--mute);">
+          <span class="block text-xs mt-1 wt-mute">
             Tick if <strong>{{ purchaser.name if purchaser else 'the customer' }}</strong> paid this bilty out of pocket.
             The amount is deducted from their outstanding on this trade — the CR side becomes their receivable
             instead of a cash account.
@@ -55,14 +55,14 @@
             </option>
             {% endfor %}
           </select>
-          <p class="text-xs mt-1" style="color: var(--mute);">This account will be <strong>credited</strong> (cash out).</p>
+          <p class="text-xs mt-1 wt-mute">This account will be <strong>credited</strong> (cash out).</p>
         </div>
         <div>
           <label class="field-label">Expense Account · locked</label>
-          <div class="w-full rounded" style="background: #f4f5f8; border: 1px solid var(--hairline); color: var(--ink);">
+          <div class="w-full rounded" style="background: #e5e7e0; border: 1px solid var(--hairline); color: var(--ink);">
             🔒 {{ pl_acct.code }} — {{ pl_acct.name }}
           </div>
-          <p class="text-xs mt-1" style="color: var(--mute);">
+          <p class="text-xs mt-1 wt-mute">
             Trade-related cost — always routes through <strong>P&amp;L A/C</strong> per convention. This account will be <strong>debited</strong>.
           </p>
         </div>
@@ -75,7 +75,7 @@
                  name="amount"
                  value="{% if existing %}{% for ln in existing.lines if ln.debit > 0 %}{{ ln.debit }}{% endfor %}{% else %}0{% endif %}"
                  class="w-full text-right tabular-nums" placeholder="0.00">
-          <p class="text-xs mt-1" style="color: var(--mute);">
+          <p class="text-xs mt-1 wt-mute">
             Enter <strong>0</strong> for"no bilty".
             {% if existing %}Saving with 0 will <strong>reverse</strong> the existing bilty.{% endif %}
           </p>
@@ -86,7 +86,7 @@
                  name="weight_kgs"
                  value="{% if existing_meta and existing_meta.weight_kgs is not none %}{{ existing_meta.weight_kgs }}{% endif %}"
                  placeholder="e.g. 250" class="w-full text-right tabular-nums">
-          <p class="text-xs mt-1" style="color: var(--mute);">Optional — for record-keeping &amp; reporting.</p>
+          <p class="text-xs mt-1 wt-mute">Optional — for record-keeping &amp; reporting.</p>
         </div>
         <div>
           <label class="field-label">Terminal / Carrier</label>
@@ -98,12 +98,12 @@
           <datalist id="bilty-terminals">
             {% for t in terminals %}<option value="{{ t.name }}">{% endfor %}
           </datalist>
-          <p class="text-xs mt-1" style="color: var(--mute);">Type a new name to create, or pick from previously-used terminals.</p>
+          <p class="text-xs mt-1 wt-mute">Type a new name to create, or pick from previously-used terminals.</p>
         </div>
       </div>
 
-      <div class="accent-card" style="border-left-color: #2c84e0; background: #dceaf6;">
-        <p class="text-sm" style="color: #08245f;">
+      <div class="accent-card wt-card-info wt-info-bg">
+        <p class="text-sm wt-ink">
           <strong>Journal that will post:</strong><br>
           DR <span id="prev-exp">{{ pl_acct.code }} — {{ pl_acct.name }}</span> &nbsp;·&nbsp; <span id="prev-amt-dr">{{ currency }} 0.00</span><br>
           CR <span id="prev-cash">— pick cash / bank —</span> &nbsp;·&nbsp; <span id="prev-amt-cr">{{ currency }} 0.00</span>

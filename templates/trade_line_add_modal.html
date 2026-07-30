@@ -13,8 +13,8 @@
         <label class="field-label field-label-required">Item</label>
         <div style="position:relative;">
           <input name="item_name" id="al-item-input" autocomplete="off" required class="w-full" placeholder="Type or pick an item…" style="padding-right:30px;">
-          <span id="al-item-caret" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6b7280; font-size:11px; padding:5px; user-select:none;">▼</span>
-          <div id="al-item-dd" style="display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:2px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,.12); max-height:220px; overflow:auto;"></div>
+          <span id="al-item-caret" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#6c6e63; font-size:11px; padding:5px; user-select:none;">▼</span>
+          <div id="al-item-dd" style="display:none; position:absolute; z-index:60; left:0; right:0; top:100%; margin-top:2px; background:#fff; border:1px solid #dcdfd2; border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,.12); max-height:220px; overflow:auto;"></div>
         </div>
         <input type="hidden" name="item_id" id="al-item-id" value="">
         <div class="text-xs wt-ash mt-1">Pick an existing item to prefill unit, price &amp; specs — or type a new name.</div>
@@ -112,14 +112,14 @@
     else { const it = CATALOG.find(x=>String(x.id)===el.dataset.id); if(it){ input.value=it.name; hid.value=it.id; prefill(it); } }
     dd.style.display='none'; active=-1;
   }
-  function highlight(i){ opts.forEach((o,j)=>o.style.background=j===i?'#eef2ff':''); if(opts[i])opts[i].scrollIntoView({block:'nearest'}); active=i; }
+  function highlight(i){ opts.forEach((o,j)=>o.style.background=j===i?'#dceaf6':''); if(opts[i])opts[i].scrollIntoView({block:'nearest'}); active=i; }
   function render(){
     const q = input.value.trim().toLowerCase();
     const matches = CATALOG.filter(it=>it.name.toLowerCase().includes(q));
     let html = matches.map(it=>`<div class="al-opt" style="${OPT_STYLE}" data-id="${it.id}">${esc(it.name)}</div>`).join('');
     const exact = CATALOG.some(it=>it.name.toLowerCase()===q);
-    if (q && !exact) html += `<div class="al-opt" style="${OPT_STYLE}color:#b45309;font-weight:500;border-top:1px solid #f0f0f0;" data-new="1">➕ Create"${esc(input.value.trim())}"</div>`;
-    if (!html) html = `<div style="padding:9px 12px;font-size:13px;color:#9ca3af;">No items yet — type a name to create one.</div>`;
+    if (q && !exact) html += `<div class="al-opt" style="${OPT_STYLE}color:#b17816;font-weight:500;border-top:1px solid #e5e7e0;" data-new="1">➕ Create"${esc(input.value.trim())}"</div>`;
+    if (!html) html = `<div style="padding:9px 12px;font-size:13px;color:#9b9c92;">No items yet — type a name to create one.</div>`;
     dd.innerHTML = html;
     opts = Array.from(dd.querySelectorAll('.al-opt')); active=-1;
     opts.forEach((el,i)=>{ el.addEventListener('mouseenter',()=>highlight(i)); el.addEventListener('mousedown',e=>{e.preventDefault();choose(el);}); });

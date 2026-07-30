@@ -9,7 +9,7 @@
     </div>
 
     {% if not vendors or not customers %}
-    <div class="accent-card mb-4" style="border-left-color: #ca8a04; background: #fef9c3;">
+    <div class="accent-card mb-4 wt-card-warn wt-warn-bg">
       <p class="text-sm text-yellow-900">You need at least one vendor and one customer first. <a href="/trade/parties" class="underline font-medium">Manage parties →</a></p>
     </div>
     {% endif %}
@@ -90,7 +90,7 @@
     const idx = lineCounter++;
     const wrap = document.createElement('div');
     wrap.className = 'border border-gray-200 rounded-lg p-4 mb-3';
-    wrap.style.background = '#fafaf9';
+    wrap.style.background = '#fcfcfa';
     wrap.innerHTML = `
       <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
         <div class="md:col-span-4">

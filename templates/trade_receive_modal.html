@@ -23,7 +23,7 @@
       <div class="space-y-4">
       {% for r in line_info %}
         {% set ln = r.line %}
-        <div class="border border-gray-200 rounded-lg p-4" style="background: #fafaf9;">
+        <div class="border border-gray-200 rounded-lg p-4 wt-info-bg">
           <div class="flex items-start justify-between mb-3 gap-4">
             <div class="flex-1 min-w-0">
               <div class="font-semibold wt-ink">{{ ln.item_name }}</div>
@@ -44,19 +44,19 @@
             <div>
               <label class="field-label">Vendor Invoice (image / PDF)</label>
               <div class="paste-zone" data-line-id="{{ ln.id }}" tabindex="0">
-                <input type="file" name="line_{{ ln.id }}_invoice" accept="image/*,application/pdf" style="display:none">
+                <input type="file" name="line_{{ ln.id }}_invoice" accept="image/*,application/pdf" hidden>
                 <div class="paste-placeholder">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                   <div>
                     <div style="font-weight: 600; color: var(--ink);">Click, drop, or paste image</div>
-                    <div style="font-size: 11px; color: var(--mute);">⌘V / Ctrl+V works after clicking here</div>
+                    <div class="text-xs wt-mute">⌘V / Ctrl+V works after clicking here</div>
                   </div>
                 </div>
-                <div class="paste-preview" style="display:none">
-                  <img class="paste-thumb" alt="" style="display:none">
+                <div class="paste-preview" hidden>
+                  <img class="paste-thumb" alt="" hidden>
                   <div class="paste-info">
                     <div class="paste-filename" style="font-weight: 600; font-size: 13px; color: var(--ink);"></div>
-                    <div class="paste-size" style="font-size: 11px; color: var(--mute);"></div>
+                    <div class="paste-size text-xs wt-mute"></div>
                   </div>
                   <button type="button" class="paste-clear" title="Remove">✕</button>
                 </div>
@@ -86,8 +86,8 @@
       {% endfor %}
       </div>
 
-      <div class="accent-card" style="border-left-color: #2c84e0; background: #dceaf6;">
-        <p class="text-sm" style="color: #08245f;">💡 Click <strong>Mark Complete</strong> on the trade detail page once everything has arrived to finalize and post the journal entries.</p>
+      <div class="accent-card wt-card-info wt-info-bg">
+        <p class="text-sm wt-ink">💡 Click <strong>Mark Complete</strong> on the trade detail page once everything has arrived to finalize and post the journal entries.</p>
       </div>
 
       <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
@@ -110,7 +110,7 @@
     outline: none;
   }
   .paste-zone:hover, .paste-zone:focus { border-color: var(--ink); background: #fcfcfa; }
-  .paste-zone.drag-over { border-color: var(--brand); background: #fff7e6; }
+  .paste-zone.drag-over { border-color: var(--brand); background: #fdebc7; }
   .paste-placeholder {
     display: flex; align-items: center; gap: 10px;
     color: var(--mute); font-size: 13px;
@@ -128,7 +128,7 @@
     background: transparent; border: none; cursor: pointer;
     color: var(--mute); font-size: 14px; padding: 2px 6px; border-radius: 4px;
   }
-  .paste-clear:hover { background: #f3f4f6; color: var(--accent-red); }
+  .paste-clear:hover { background: #e5e7e0; color: var(--accent-red); }
 </style>
 
 <script>

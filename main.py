@@ -128,11 +128,22 @@ async def pdf_as_image(request: Request, call_next):
         if len(pages) == 1:
             img = pages[0]
         else:
-            # Stack multi-page docs into one tall image.
-            width = max(p.width for p in pages)
-            img = Image.new("RGB", (width, sum(p.height for p in pages)), "white")
+            # Stack multi-page docs into one tall image. Every page after the
+            # first repeats the exact same branded header band (brand / title
+            # / timestamp) — worth keeping on paper where pages get separated,
+            # pure dead weight once flattened into one scrolling image. Crop
+            # it off pages 2+. 242px is that band's height at this render
+            # scale (scale=4 above); it's tied to pdf_helper.py's page_chrome
+            # geometry (22mm top margin) — re-measure if that geometry changes.
+            HEADER_CROP_PX = 242
+            cropped = [pages[0]] + [
+                p.crop((0, min(HEADER_CROP_PX, p.height - 1), p.width, p.height))
+                for p in pages[1:]
+            ]
+            width = max(p.width for p in cropped)
+            img = Image.new("RGB", (width, sum(p.height for p in cropped)), "white")
             y = 0
-            for p in pages:
+            for p in cropped:
                 img.paste(p, (0, y))
                 y += p.height
         # Snap near-white tints to pure white — removes faint banding the

@@ -85,9 +85,9 @@
     <div class="stat-card">
       <div class="stat-label">Customer Terms</div>
       <div class="text-sm font-bold wt-ink mt-1">{{ cust_terms_label }}</div>
-      {% if trade.customer_due_date %}
-      <div class="text-xs mt-1 {% if trade.customer_due_date < today and customer_outstanding > 0 %}wt-neg font-semibold{% else %}wt-mute{% endif %}">
-        Due: {{ trade.customer_due_date }}
+      {% if due_status and due_status.due %}
+      <div class="text-xs mt-1 {% if due_status.overdue %}wt-neg font-semibold{% else %}wt-mute{% endif %}">
+        Due: {{ due_status.due }}{% if due_status.overdue %} (overdue){% endif %}
       </div>
       {% endif %}
     </div>
@@ -204,7 +204,7 @@
       </div>
     </div>
     <div id="trade-documents" class="divide-y divide-gray-100">
-      <div class=" flex items-center gap-3">
+      <div class="px-5 py-3 flex items-center gap-3">
         <span class="text-lg">🧾</span>
         <div class="flex-1">
           <div class="font-medium wt-ink">Invoice</div>
@@ -212,7 +212,7 @@
         </div>
         <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/invoice.pdf?img=1" target="_blank">Open</a> <a class="text-xs hover:underline wt-mute ml-1.5" href="/trade/trades/{{ trade.id }}/invoice.pdf" target="_blank">PDF</a>
       </div>
-      <div class=" flex items-center gap-3">
+      <div class="px-5 py-3 flex items-center gap-3">
         <span class="text-lg">📨</span>
         <div class="flex-1">
           <div class="font-medium wt-ink">Order Confirmation</div>
@@ -220,7 +220,7 @@
         </div>
         <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/order-confirmation.pdf?img=1" target="_blank">Open</a> <a class="text-xs hover:underline wt-mute ml-1.5" href="/trade/trades/{{ trade.id }}/order-confirmation.pdf" target="_blank">PDF</a>
       </div>
-      <div class=" flex items-center gap-3">
+      <div class="px-5 py-3 flex items-center gap-3">
         <span class="text-lg">🚚</span>
         <div class="flex-1">
           <div class="font-medium wt-ink">Delivery Note + Packing Slip</div>
@@ -233,7 +233,7 @@
         <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/delivery-pack.pdf?img=1" target="_blank">Open</a> <a class="text-xs hover:underline wt-mute ml-1.5" href="/trade/trades/{{ trade.id }}/delivery-pack.pdf" target="_blank">PDF</a>
       </div>
       {% for d in receipt_dates %}
-      <div class=" flex items-center gap-3">
+      <div class="px-5 py-3 flex items-center gap-3">
         <span class="text-lg">🚚</span>
         <div class="flex-1">
           <div class="font-medium wt-ink">Delivery + Packing · {{ d }}</div>
@@ -241,7 +241,7 @@
         </div>
         <a class="btn-secondary no-underline" href="/trade/trades/{{ trade.id }}/delivery-pack/by-date/{{ d }}.pdf?img=1" target="_blank">Open</a> <a class="text-xs hover:underline wt-mute ml-1.5" href="/trade/trades/{{ trade.id }}/delivery-pack/by-date/{{ d }}.pdf" target="_blank">PDF</a>
       </div>
-      <div class=" flex items-center gap-3">
+      <div class="px-5 py-3 flex items-center gap-3">
         <span class="text-lg">🧾</span>
         <div class="flex-1">
           <div class="font-medium wt-ink">Invoice · {{ d }}</div>
@@ -251,7 +251,7 @@
       </div>
       {% endfor %}
 
-      <div class=" flex items-center gap-3">
+      <div class="px-5 py-3 flex items-center gap-3">
         <span class="text-lg">🏷️</span>
         <div class="flex-1">
           <div class="font-medium wt-ink">Vendor Purchase Order</div>
@@ -261,7 +261,7 @@
       </div>
 
       {% for p in inbound_payments %}
-      <div class=" flex items-center gap-3">
+      <div class="px-5 py-3 flex items-center gap-3">
         <span class="text-lg">🧾</span>
         <div class="flex-1">
           <div class="font-medium wt-ink">Payment Receipt · {{ p.paid_on }}</div>
@@ -275,7 +275,7 @@
       </div>
       {% endfor %}
       {% if not inbound_payments %}
-      <div class="flex items-center gap-3 opacity-60">
+      <div class="px-5 py-3 flex items-center gap-3 opacity-60">
         <span class="text-lg">🧾</span>
         <div class="flex-1">
           <div class="font-medium wt-mute">Payment Receipts</div>
@@ -406,7 +406,7 @@
       </tbody>
     {{ table_close() }}
     {% else %}
-    <div class=" text-sm wt-ash">No customer POs yet. Upload the customer's PO below.</div>
+    <div class="text-sm wt-ash">No customer POs yet. Upload the customer's PO below.</div>
     {% endif %}
 
     <div class="p-6 border-t border-gray-200">
@@ -496,7 +496,7 @@
       </tbody>
     {{ table_close() }}
     {% else %}
-    <div class=" text-sm wt-ash">No designs uploaded yet. Drop the artwork below — it'll appear inside the Vendor PO PDF for the supplier.</div>
+    <div class="text-sm wt-ash">No designs uploaded yet. Drop the artwork below — it'll appear inside the Vendor PO PDF for the supplier.</div>
     {% endif %}
 
     <div class="p-6 border-t border-gray-200">
@@ -589,7 +589,7 @@
       </tbody>
     {{ table_close() }}
     {% else %}
-    <div class=" text-center text-sm wt-ash">
+    <div class="text-center text-sm wt-ash">
       No costs recorded for this trade yet. Click <strong>+ Record Cost</strong> above to add bilty, loading, broker commission, etc.
     </div>
     {% endif %}
@@ -644,7 +644,7 @@
         {% endfor %}
       </tbody>
     {{ table_close() }}
-    {% else %}<div class=" text-center text-sm wt-ash">No customer payments yet.</div>{% endif %}
+    {% else %}<div class="text-center text-sm wt-ash">No customer payments yet.</div>{% endif %}
   </div>
 
   <div class="accent-card wt-surface-soft">
@@ -681,7 +681,7 @@
     transition: border-color .15s, background .15s;
     outline: none;
   }
-  .paste-zone:hover, .paste-zone:focus { border-color: var(--ink); background: #fcfcfa; }
+  .paste-zone:hover, .paste-zone:focus { border-color: var(--ink); background: #ffffff; }
   .paste-zone.drag-over { border-color: var(--brand); background: #fff7e6; }
   .paste-placeholder { display: flex; align-items: center; gap: 10px; color: var(--mute); font-size: 13px; }
   .paste-preview    { display: flex; align-items: center; gap: 10px; }

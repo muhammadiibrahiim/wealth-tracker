@@ -1,5 +1,10 @@
 {# Trade row — shared between the flat trades table and the by-party groups.
-   Expects: t, party_map, trade_items, trade_metrics, currency, today, dot_palette.
+   Expects: t, party_map, trade_items, trade_metrics, due_status, currency,
+   today, dot_palette. due_status[t.id] is computed from real delivery
+   events (services/trade.py: TradeService.customer_due_status) — NOT
+   t.customer_due_date, which only gets set by the manual "Mark Trade
+   Complete" step and stays empty for weeks after real, dated invoices
+   already exist and are due.
    Set `show_name = False` before including to hide the buyer name/dot (used
    inside a by-party group where the header already names the party). #}
 {% set buyer = party_map.get(t.purchaser_id) %}
@@ -33,9 +38,10 @@
   <td class="num wt-info text-sm" title="Net profit ÷ money invested (cost + trade costs)">{% if m and m.roi is not none %}{{ '{:,.1f}'.format(m.roi) }}%{% else %}—{% endif %}</td>
   <td>{% include "partials/trade_status_badge.html" %}</td>
   <td class="wt-mute whitespace-nowrap">
-    {% if t.customer_due_date %}
-      {{ t.customer_due_date.strftime('%d %b') }}
-      {% if t.customer_due_date < today and (t.total_sale - t.paid_by_customer) > 0 %}<span class="pill-cr ml-1">OVERDUE</span>{% endif %}
+    {% set ds = due_status.get(t.id) if due_status else None %}
+    {% if ds and ds.due %}
+      {{ ds.due.strftime('%d %b') }}
+      {% if ds.overdue %}<span class="pill-cr ml-1">OVERDUE</span>{% endif %}
     {% else %}<span class="wt-ash">—</span>{% endif %}
   </td>
   <td class="text-right whitespace-nowrap" onclick="event.stopPropagation()">

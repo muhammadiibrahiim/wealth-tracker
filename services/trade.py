@@ -1369,6 +1369,57 @@ class TradeService:
         ).quantize(Decimal("0.01"))
 
     @staticmethod
+    def customer_billing_events(trade: Trade) -> list[dict]:
+        """One entry per distinct delivery date, billed at that day's
+        delivered qty × unit price, due `customer_terms_days` after that
+        date — exactly what services/trade_docs.py's per-date invoices
+        actually bill and the due date they actually print on the invoice.
+
+        This is the real per-invoice truth. `trade.customer_due_date` is
+        only ever set by the manual "Mark Trade Complete" step and must
+        NOT be read directly to ask "is this due / overdue" — a trade can
+        be fully (or over-) delivered via individual receipts for weeks
+        before anyone clicks that button, during which the field stays
+        empty even though real, dated invoices already exist and are due.
+        """
+        by_date: dict[date, Decimal] = {}
+        for ln in trade.lines:
+            for r in (ln.receipts or []):
+                by_date[r.received_on] = by_date.get(r.received_on, ZERO) + (
+                    Decimal(r.received_qty) * Decimal(ln.unit_price)
+                )
+        terms = int(trade.customer_terms_days or 0)
+        return [
+            {"event_date": d, "amount": amt.quantize(Decimal("0.01")),
+             "due_date": d + timedelta(days=terms)}
+            for d, amt in sorted(by_date.items())
+        ]
+
+    @staticmethod
+    def customer_due_status(session: Session, trade: Trade) -> dict:
+        """The next actionable due date for collections, computed the same
+        way the real per-delivery invoices are: FIFO-apply everything
+        collected so far (payments + customer-paid credits) against the
+        billing schedule above, oldest delivery first — the same
+        oldest-due-first rule MasterReceiptService already uses across a
+        customer's trades. Returns the earliest event still outstanding.
+
+        {"due": date|None, "overdue": bool, "outstanding": Decimal}
+        due is None when nothing's been delivered yet (nothing to be due
+        on) or everything billed so far has been settled.
+        """
+        events = TradeService.customer_billing_events(trade)
+        settled = Decimal(trade.paid_by_customer) + TradeService._customer_credits(session, trade)
+        today = date.today()
+        for ev in events:
+            if settled >= ev["amount"] - Decimal("0.01"):
+                settled -= ev["amount"]
+                continue
+            return {"due": ev["due_date"], "overdue": ev["due_date"] < today,
+                     "outstanding": (ev["amount"] - settled).quantize(Decimal("0.01"))}
+        return {"due": None, "overdue": False, "outstanding": ZERO}
+
+    @staticmethod
     def writeoff_residual(session: Session, user_id: int, trade_id: int,
                           threshold: Decimal = Decimal("100")):
         """Write off a tiny remaining customer balance to expense and mark paid.
@@ -1973,7 +2024,10 @@ class MasterReceiptService:
                 alloc = ZERO
             rows.append({
                 "trade_id": t.id, "reference": t.reference, "trade_date": t.trade_date,
-                "due": t.customer_due_date, "outstanding": out.quantize(Decimal("0.01")),
+                # Real due date from actual delivery events (matches the
+                # per-date invoices), not the manually-set trade.customer_due_date.
+                "due": TradeService.customer_due_status(session, t)["due"],
+                "outstanding": out.quantize(Decimal("0.01")),
                 "apply": alloc.quantize(Decimal("0.01")),
                 "fully_paid": (alloc >= out - Decimal("0.01")) and alloc > 0,
             })
@@ -1994,8 +2048,15 @@ class MasterReceiptService:
                 Trade.status != TradeStatus.CANCELLED,
             )
         ).all())
-        # oldest due first (fall back to trade date, then id)
-        trades.sort(key=lambda t: (t.customer_due_date or t.trade_date or date.max, t.trade_date or date.max, t.id))
+        # Oldest due first, by REAL per-delivery due date (matches the actual
+        # invoices). Trades with nothing delivered yet have no due date at
+        # all — nothing's been invoiced, so nothing is actually due — those
+        # sort after every trade that IS genuinely due, by trade date among
+        # themselves as a reasonable tiebreak.
+        due_by_id = {t.id: TradeService.customer_due_status(session, t)["due"] for t in trades}
+        trades.sort(key=lambda t: (
+            due_by_id[t.id] is None, due_by_id[t.id] or date.max, t.trade_date or date.max, t.id,
+        ))
         return [t for t in trades if TradeService.customer_outstanding(session, t) > Decimal("0.01")]
 
     @staticmethod
@@ -3167,7 +3228,7 @@ class TradeReportService:
                 "trade_date": t.trade_date,
                 "status": t.status.value if hasattr(t.status, "value") else t.status,
                 "vendor_name": vendor.name if vendor else "—",
-                "customer_due_date": t.customer_due_date,
+                "customer_due_date": TradeService.customer_due_status(session, t)["due"],
                 "days_open": days_open,
                 "lines": line_rows,
                 "pending_value": trade_pending_value.quantize(Decimal("0.01")),

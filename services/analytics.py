@@ -2029,9 +2029,9 @@ def cash_flow_management(session, user_id, horizon_days=120,
         g["collected"] += collected
         if outstanding > Decimal("1"):
             g["outstanding"] += outstanding
-            due = t.customer_due_date
-            if due is None and t.delivered_at is not None:
-                due = t.delivered_at + timedelta(days=int(t.customer_terms_days or 0))
+            # Real due date from actual delivery events (matches the per-date
+            # invoices), not the manually-set trade.customer_due_date/delivered_at.
+            due = TradeService.customer_due_status(session, t)["due"]
             g["items"].append({"ref": t.reference, "trade_id": t.id, "due": due,
                 "amount": outstanding.quantize(cent),
                 "delivered": t.delivered_at is not None,

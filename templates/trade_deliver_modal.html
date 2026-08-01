@@ -12,7 +12,7 @@
     <form hx-post="/trade/trades/{{ trade.id }}/deliver" class="space-y-4">
       <div>
         <label class="field-label">Delivered On</label>
-        <input type="date" name="delivered_on" value="{{ today }}" required class="">
+        <input type="date" name="delivered_on" value="{{ today }}" required>
       </div>
 
       <div class="border border-gray-200 rounded-lg overflow-hidden">
@@ -34,12 +34,12 @@
                 <div class="font-medium wt-ink">{{ ln.item_name }}</div>
                 {% if ln.specs %}<div class="text-xs wt-mute mt-1">{% for s in ln.specs %}{{ s.label }}: {{ s.value }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}
               </td>
-              <td class="num">{{ '{:g}'.format(ln.ordered_quantity or ln.quantity) }} {{ ln.unit }}</td>
+              <td class="num">{{ '{:g}'.format(ln.quantity) }} {{ ln.unit }}</td>
               <td class="text-right">
                 <input type="number" step="0.001" min="0"
                        name="final_qty_{{ ln.id }}"
                        value="{{ line_defaults.get(ln.id, ln.quantity) }}"
-                       data-ordered="{{ ln.ordered_quantity or ln.quantity }}"
+                       data-ordered="{{ ln.quantity }}"
                        data-unit-cost="{{ ln.unit_cost }}"
                        data-unit-price="{{ ln.unit_price }}"
                        class="qty-input w-24 text-right">
@@ -99,18 +99,18 @@
       } else if (delta > 0) {
         dcell.textContent = '+' + delta.toLocaleString();
         dcell.className = 'text-right tabular-nums delta-cell font-medium';
-        dcell.style.color = '#2c8c66';
+        dcell.style.color = '#2e7d32';
       } else {
         dcell.textContent = delta.toLocaleString();
         dcell.className = 'text-right tabular-nums delta-cell font-medium';
-        dcell.style.color = '#cd4239';
+        dcell.style.color = '#c0392b';
       }
     });
     newCost.textContent = fmt(totalCost);
     newSale.textContent = fmt(totalSale);
     const profit = totalSale - totalCost;
     newProfit.textContent = fmt(profit);
-    newProfit.style.color = profit >= 0 ? '#2c8c66' : '#cd4239';
+    newProfit.style.color = profit >= 0 ? '#2e7d32' : '#c0392b';
   }
   rows.forEach(r => r.querySelector('.qty-input').addEventListener('input', recalc));
   recalc();

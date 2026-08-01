@@ -259,6 +259,9 @@ async def trades_list(
             "net_profit": net.quantize(Decimal("0.01")),
             "roi": (roi.quantize(Decimal("0.01")) if roi is not None else None),
         }
+    # Real due date per trade — computed from actual delivery events (same
+    # basis as the per-date invoices), not the manually-set trade.customer_due_date.
+    due_status = {t.id: TradeService.customer_due_status(session, t) for t in trades}
     # Line-item summaries per trade — item + Size spec + qty, so a trade is
     # recognizable in the list without opening it.
     from models import TradeLine, TradeLineSpec
@@ -298,6 +301,7 @@ async def trades_list(
             parties=parties,
             party_map=party_map,
             trade_metrics=trade_metrics,
+            due_status=due_status,
             trade_items=trade_items,
             grouped_trades=grouped_trades,
             current_status=status,
@@ -589,6 +593,9 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
     # Use the shared helper so the button, the status badge and this number
     # always agree — it nets cash received, customer-paid costs AND write-offs.
     customer_outstanding = TradeService.customer_outstanding(session, trade)
+    # Real due date from actual delivery events (matches what the per-date
+    # invoices bill), not the manually-set trade.customer_due_date.
+    due_status = TradeService.customer_due_status(session, trade)
 
     from models import TradeAttachment, TradeAttachmentKind
     attachments = list(session.exec(
@@ -663,6 +670,7 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
             vend_terms_label=TradeService.terms_label(trade, "vendor"),
             today=date.today(),
             customer_outstanding=customer_outstanding,
+            due_status=due_status,
             trade_costs_total=trade_costs_total,
             net_profit=net_profit,
             vendor_outstanding=(Decimal(trade.total_cost) - Decimal(trade.paid_to_vendor)).quantize(Decimal("0.01")),

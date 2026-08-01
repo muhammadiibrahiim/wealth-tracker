@@ -3185,14 +3185,10 @@ async def reports_vendor_pending(
 
 
 @router.get("/reports/vendor-pending/{vendor_id}.pdf")
-async def reports_vendor_pending_pdf(
-    vendor_id: int, theme: Optional[str] = Query(None), layout: Optional[str] = Query(None),
-    tpl: Optional[str] = Query(None), session: Session = Depends(get_session),
-):
+async def reports_vendor_pending_pdf(vendor_id: int, session: Session = Depends(get_session)):
     from io import BytesIO
     from services.pdf_helper import (
         render_report_pdf, ReportSpec, KpiSpec, TableSpec, SectionTitle, ParagraphBlock, CalloutCard,
-        THEMES, DEFAULT_THEME, LAYOUTS, DEFAULT_LAYOUT,
     )
     user_id = DEFAULT_USER_ID
     vendor = PartyService.get(session, user_id, vendor_id)
@@ -3222,51 +3218,6 @@ async def reports_vendor_pending_pdf(
 
     def qty(x):
         return f"{float(x):,g}"
-
-    if tpl == "sparksuite":
-        from services.pdf_xhtml import html_to_pdf
-        rows_by_brand: dict[str, list] = {}
-        subtotal_qty: dict[str, str] = {}
-        subtotal_val: dict[str, str] = {}
-        for brand in sorted(by_brand):
-            b_qty = Decimal("0")
-            b_val = Decimal("0")
-            rows = []
-            for tr, ln, sm in by_brand[brand]:
-                specs_line = " · ".join(f"{k}: {val}" for k, val in sm.items() if k != "brand" and val)
-                rows.append({
-                    "item_name": ln["item_name"], "specs_line": specs_line,
-                    "order_date": tr["trade_date"].strftime("%d-%b-%Y") if tr["trade_date"] else "—",
-                    "ordered": qty(ln["ordered_qty"]), "received": qty(ln["received_qty"]),
-                    "pending": qty(ln["pending_qty"]), "rate": pkr(ln["unit_cost"]),
-                    "pending_value": pkr(ln["pending_value"]),
-                })
-                b_qty += Decimal(ln["pending_qty"])
-                b_val += Decimal(ln["pending_value"])
-            rows_by_brand[brand] = rows
-            subtotal_qty[brand] = qty(b_qty)
-            subtotal_val[brand] = pkr(b_val)
-        html = templates.get_template("pdf/sparksuite_invoice.html").render(
-            doc_title="Pending Goods Statement", brand="IBRAHIM TRADERS",
-            statement_no=f"PG-{vendor_id}", created=date.today().strftime("%d-%b-%Y"),
-            as_of=date.today().strftime("%d-%b-%Y"),
-            vendor_name=vendor.name, vendor_contact=vendor.contact_person,
-            vendor_phone=vendor.phone, vendor_city=vendor.city,
-            kpis=[
-                {"label": "Pending Value", "value": pkr(total_val)},
-                {"label": "Pending Qty", "value": f"{qty(total_qty)} pcs"},
-                {"label": "Open Trades", "value": str(len(v["trades"]) if v else 0)},
-            ],
-            headers=["Item", "Order Date", "Ordered", "Received", "Pending", "Rate", "Pending Value"],
-            n_cols=7, by_brand=rows_by_brand,
-            brand_subtotal_qty=subtotal_qty, brand_subtotal_val=subtotal_val,
-            total_val=pkr(total_val),
-        )
-        buf = BytesIO()
-        html_to_pdf(buf, html)
-        fname = f"Pending-Goods-{vendor.name.replace(' ','_')}-sparksuite.pdf"
-        return Response(content=buf.getvalue(), media_type="application/pdf",
-                        headers={"Content-Disposition": f'inline; filename="{fname}"'})
 
     sections = [
         SectionTitle("Statement To"),
@@ -3325,8 +3276,7 @@ async def reports_vendor_pending_pdf(
         footer_subtitle="Ibrahim Traders · pending goods",
         generated_label="As of",
         brand="IBRAHIM TRADERS",
-    ), theme=theme if theme in THEMES else DEFAULT_THEME,
-       layout=layout if layout in LAYOUTS else DEFAULT_LAYOUT)
+    ))
     fname = f"Pending-Goods-{vendor.name.replace(' ','_')}.pdf"
     return Response(content=buf.getvalue(), media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="{fname}"'})

@@ -243,7 +243,7 @@ async def trades_list(
     pending_trades = [t for t in trades if t.status not in _DONE]
     pending_count = len(pending_trades)
     tab = (tab or "all").lower()
-    if tab == "pending":
+    if tab in ("pending", "by_party"):
         trades = pending_trades
     parties = PartyService.list(session, user_id)
     party_map = {p.id: p for p in parties}
@@ -270,6 +270,26 @@ async def trades_list(
             label = ln.item_name + (f" {size}" if size else "")
             qty = f"{ln.quantity:,.0f}" if ln.quantity == ln.quantity.to_integral_value() else f"{ln.quantity:,.3f}"
             trade_items.setdefault(ln.trade_id, []).append(f"{label} · {qty} {ln.unit}")
+    # By Party: pending trades grouped under their purchasing customer, so
+    # everything owed by/to one party is visible together instead of
+    # interleaved by date.
+    grouped_trades = []
+    if tab == "by_party":
+        by_purchaser: dict[Optional[int], list] = {}
+        for t in trades:
+            by_purchaser.setdefault(t.purchaser_id, []).append(t)
+        for pid, ts in by_purchaser.items():
+            party = party_map.get(pid)
+            net_sum = sum((trade_metrics[t.id]["net_profit"] for t in ts), Decimal("0"))
+            grouped_trades.append({
+                "party": party,
+                "trades": ts,
+                "count": len(ts),
+                "cost_sum": sum((Decimal(t.total_cost) for t in ts), Decimal("0")),
+                "sale_sum": sum((Decimal(t.total_sale) for t in ts), Decimal("0")),
+                "net_sum": net_sum,
+            })
+        grouped_trades.sort(key=lambda g: g["party"].name.lower() if g["party"] else "￿")
     return templates.TemplateResponse(
         "trade_list.html",
         _ctx(
@@ -279,6 +299,7 @@ async def trades_list(
             party_map=party_map,
             trade_metrics=trade_metrics,
             trade_items=trade_items,
+            grouped_trades=grouped_trades,
             current_status=status,
             current_party=party_id,
             current_tab=tab,

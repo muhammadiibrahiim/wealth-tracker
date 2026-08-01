@@ -1,229 +1,382 @@
 {% extends "base.html" %}
-{% from "partials/_ui.html" import page_header, kpi_sm, money, num, pct, section_title, callout, table_open, table_close, empty_state, pill, drill %}
-{% block title %}Trade Dashboard{% endblock %}
-{% block content %}
+{#
+  Trade Dashboard — a structural copy of the Aitex ERP CEO Command Center
+  (accounting/src/accounts/templates/management/dashboard.html).
 
-{# Neighbouring months for the prev/next navigation. selected_month is 'YYYY-MM'. #}
+  Same sections in the same order, same grid spans, same card anatomy, same
+  macros (pkr / delta / kpi), same link treatment. Only the CONTENT differs:
+  every ERP slot is filled with the closest Trade equivalent, and the two
+  slots with no Trade analogue (Marketing, HR payroll) are replaced by the
+  metric that belongs in that position — Capital Efficiency and Owners.
+#}
+{% block title %}Trade Dashboard{% endblock %}
+
+{# ---- helpers: the same three the ERP defines ---- #}
+{% macro pkr(v) %}{{ currency }} {{ "{:,.0f}".format(v or 0) }}{% endmacro %}
+{% macro delta(v) %}
+  {% if v is not none %}
+    <span class="text-xs font-semibold {{ 'text-emerald-600' if v >= 0 else 'text-rose-600' }}">
+      {{ '▲' if v >= 0 else '▼' }} {{ "{:,.0f}%".format(v|abs) }} vs last month
+    </span>
+  {% endif %}
+{% endmacro %}
+
+{% macro kpi(label, value, sub='', tone='') %}
+  <div class="aitex-card">
+    <div class="text-[11px] uppercase tracking-wide text-gray-400">{{ label }}</div>
+    <div class="text-2xl font-bold mt-0.5 {{ tone }}">{{ value }}</div>
+    {% if sub %}<div class="text-xs text-gray-400 mt-0.5">{{ sub|safe }}</div>{% endif %}
+  </div>
+{% endmacro %}
+
+{% block content %}
 {% set _y = selected_month[:4] | int %}
 {% set _m = selected_month[5:7] | int %}
 {% set prev_month = '%04d-%02d' | format(_y - 1, 12) if _m == 1 else '%04d-%02d' | format(_y, _m - 1) %}
 {% set next_month = '%04d-%02d' | format(_y + 1, 1) if _m == 12 else '%04d-%02d' | format(_y, _m + 1) %}
 
-<div class="space-y-6">
-
-  {{ page_header(
-      'Trade Dashboard',
-      'Showing <b>' ~ month_label ~ '</b>' ~ (' <span class="wt-ash">(to date)</span>' if is_current_month else '') ~ ' — pick a month to scope the figures.',
-      [
-        {'label': 'Receipt',   'button': True, 'sm': True, 'attrs': 'hx-get="/trade/vouchers/new?preset=receipt" hx-target="#modal-container"'},
-        {'label': 'Payment',   'button': True, 'sm': True, 'attrs': 'hx-get="/trade/vouchers/new?preset=payment" hx-target="#modal-container"'},
-        {'label': 'Expense',   'button': True, 'sm': True, 'attrs': 'hx-get="/trade/vouchers/expense-quick" hx-target="#modal-container"'},
-        {'label': 'Owner In',  'button': True, 'sm': True, 'attrs': 'hx-get="/trade/vouchers/new?preset=owner_in" hx-target="#modal-container"'},
-        {'label': 'Owner Out', 'button': True, 'sm': True, 'attrs': 'hx-get="/trade/vouchers/new?preset=owner_out" hx-target="#modal-container"'},
-        {'label': 'Contra',    'button': True, 'sm': True, 'attrs': 'hx-get="/trade/vouchers/new?preset=contra" hx-target="#modal-container"'},
-        {'label': '+ New Trade', 'primary': True, 'button': True, 'attrs': 'hx-get="/trade/trades/new" hx-target="#modal-container"'}
-      ]) }}
-
-  {# ── Month navigation ─────────────────────────────────────────────── #}
-  <div class="wt-presets">
-    <a href="/trade?month={{ prev_month }}" class="wt-preset" title="Previous month">&lsaquo; {{ prev_month }}</a>
-    <form method="get" action="/trade" class="wt-presets">
-      <input type="month" name="month" value="{{ selected_month }}" max="{{ today.strftime('%Y-%m') }}"
-             onchange="this.form.submit()" aria-label="Month">
-    </form>
-    {% if not is_current_month %}
-    <a href="/trade?month={{ next_month }}" class="wt-preset" title="Next month">{{ next_month }} &rsaquo;</a>
-    {% endif %}
-    <a href="/trade" class="wt-preset {{ 'wt-preset--active' if is_current_month }}">This month</a>
-  </div>
-
-  {# ── Setup hints ──────────────────────────────────────────────────── #}
-  {% if party_count == 0 or account_count == 0 or item_count == 0 %}
-  {% set _hints %}
-    <ul class="mt-2 space-y-1">
-      {% if party_count == 0 %}<li>• <a href="/trade/parties">Add at least one vendor and customer</a></li>{% endif %}
-      {% if account_count == 0 %}<li>• <a href="/trade/accounts">Add a cash/bank account</a></li>{% endif %}
-      {% if item_count == 0 %}<li>• <a href="/trade/items">Define your items and spec fields</a></li>{% endif %}
-    </ul>
-  {% endset %}
-  {{ callout(_hints, 'warn', 'Quick setup') }}
-  {% endif %}
-
-  {# ── Operational ──────────────────────────────────────────────────── #}
-  <div>
-    {{ section_title('Operational') }}
-    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-      {{ kpi_sm('Open Trades', num(kpis.open_trades), href='/trade/trades') }}
-
-      {{ kpi_sm(month_short ~ ' Sales', money(kpis.month_sales, currency, digits=0),
-                href='/trade/reports/sales') }}
-
-      {{ kpi_sm(month_short ~ ' Profit',
-                money(kpis.month_profit, currency, digits=0, sign_color=True, abs_value=True),
-                href='/trade/reports/pnl') }}
-
-      {{ kpi_sm('Receivable', money(kpis.outstanding_receivable, currency, digits=0),
-                tone='neg', href='/trade/reports/aging') }}
-
-      {{ kpi_sm('Overdue', money(kpis.overdue_receivable, currency, digits=0),
-                tone='neg', href='/trade/reports/aging') }}
-
-      {{ kpi_sm('Owed to Vendors', money(kpis.outstanding_payable, currency, digits=0),
-                href='/trade/reports/ap-aging') }}
-
-      {{ kpi_sm('Capital A/C Balance',
-                money(kpis.capital_balance, currency, digits=0, sign_color=True, abs_value=True),
-                sub='closing balance', accent='brand',
-                href='/trade/reports/general-ledger?account_id=' ~ kpis.capital_account_id,
-                help='Open the Capital A/C ledger') }}
-
-      {{ kpi_sm('Capital Growth · ' ~ month_short,
-                money(cap.capital_growth, currency, digits=0, sign_color=True, abs_value=True),
-                sub='profit ' ~ currency ~ ' ' ~ '{:,.0f}'.format(cap.profit_booked) ~ (' · adj ' ~ currency ~ ' ' ~ '{:,.0f}'.format(cap.capital_other) if cap.capital_other != 0 else ''),
-                accent='pos',
-                href='/trade/reports/general-ledger?account_id=' ~ kpis.capital_account_id,
-                help='What your Capital A/C actually grew by in ' ~ month_label ~ ' = ' ~ currency ~ ' ' ~ '{:,.0f}'.format(cap.capital_growth) ~ '. Of this, ' ~ currency ~ ' ' ~ '{:,.0f}'.format(cap.profit_booked) ~ ' is PROFIT booked from delivered trades (net income, after bilty)' ~ (', and ' ~ currency ~ ' ' ~ '{:,.0f}'.format(cap.capital_other) ~ ' is NON-profit movement (owner draws, settlements or manual adjustments that hit Capital directly)' if cap.capital_other != 0 else '') ~ '. This differs from the ' ~ month_short ~ ' Profit tile above, which is pipeline profit on trades ORDERED this month (includes open orders, before bilty).') }}
+<div class="mb-6 flex items-end justify-between flex-wrap gap-2">
+    <div>
+        <h1 class="aitex-h1">Trade Command Center</h1>
+        <p class="mt-1 text-gray-600">One view across trades, cash, customers &amp; vendors — {{ month_label }}{% if is_current_month %} to date{% endif %}. Every figure is posted to the journals.</p>
     </div>
-  </div>
-
-  {# ── Business intelligence ────────────────────────────────────────── #}
-  <div>
-    {{ section_title('Business Intelligence') }}
-    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-      {{ kpi_sm('DSO · Collect Days',
-                (wc.dso ~ '<span class="wt-mute"> d</span>') if wc.dso is not none else None,
-                sub=('Need more sales history' if wc.limited_history else ''),
-                href='/trade/reports/working-capital',
-                help='Days Sales Outstanding — the amount-weighted AGE of your currently-unpaid customer receivables (how long that money has been sitting on the ledger, right now). Reflects real delays, not the nominal terms on the trade.') }}
-
-      {{ kpi_sm('DPO · Pay Days',
-                (wc.dpo ~ '<span class="wt-mute"> d</span>') if wc.dpo is not none else None,
-                sub=('Need more purchase history' if wc.limited_history else ''),
-                href='/trade/reports/working-capital',
-                help='Days Payable Outstanding — the amount-weighted AGE of what you currently owe vendors but have not paid. A low number means you pay vendors fast (advances pull this down); a high number means you are financing on their money.') }}
-
-      {{ kpi_sm('CCC · Cash Cycle',
-                (wc.ccc ~ '<span class="wt-mute"> d</span>') if wc.ccc is not none else None,
-                tone=('' if wc.ccc is none else ('pos' if wc.ccc <= 0 else 'neg')),
-                href='/trade/reports/working-capital',
-                help='Cash Conversion Cycle = DSO − DPO — the net days your own cash funds the gap between paying vendors and collecting from customers. Lower is better; negative means vendors finance you.') }}
-
-      {{ kpi_sm('Capital Deployed', money(cap.capital_deployed, currency, digits=0),
-                href='/trade/reports/working-capital') }}
-
-      {{ kpi_sm('ROCE · ' ~ month_short, (cap.roce_pct ~ '%'),
-                tone=('pos' if cap.roce_pct >= 0 else 'neg'),
-                href='/trade/reports/working-capital',
-                help='Return on Capital Employed in ' ~ month_label ~ ' — the month\'s net income ÷ capital deployed (cash + receivables − payables).') }}
-
-      {{ kpi_sm('Return on Equity · ' ~ month_short, (cap.roi_pct ~ '%'),
-                tone=('pos' if cap.roi_pct >= 0 else 'neg'),
-                sub=currency ~ ' ' ~ '%.2f'|format(cap.roi_pct) ~ ' / ' ~ currency ~ ' 100 · avg equity ' ~ currency ~ ' ' ~ '{:,.0f}'.format(cap.avg_invested_capital),
-                accent='brand',
-                href='/trade/reports/working-capital',
-                help='For every ' ~ currency ~ ' 100 of your OWN money actually working in the business, you earned ' ~ currency ~ ' ' ~ '%.2f'|format(cap.roi_pct) ~ ' in ' ~ month_label ~ '. Your money = CEO funding + Capital A/C. The base is the TIME-WEIGHTED AVERAGE of that equity across the month (' ~ currency ~ ' ' ~ '{:,.0f}'.format(cap.avg_invested_capital) ~ ') — the mean of every day\'s closing balance — NOT the month-end figure (' ~ currency ~ ' ' ~ '{:,.0f}'.format(cap.invested_capital) ~ '), so a late-month injection does not look like it funded the whole month. Earnings = ' ~ month_label ~ ' net income ' ~ currency ~ ' ' ~ '{:,.0f}'.format(cap.trailing_net_income) ~ ' (Sales − Cost of goods − Bilty). Vendor and customer balances are excluded.') }}
+    <div class="flex items-center gap-2 flex-wrap">
+        <button type="button" class="aitex-btn-secondary" hx-get="/trade/vouchers/new?preset=receipt" hx-target="#modal-container">Receipt</button>
+        <button type="button" class="aitex-btn-secondary" hx-get="/trade/vouchers/new?preset=payment" hx-target="#modal-container">Payment</button>
+        <button type="button" class="aitex-btn-secondary" hx-get="/trade/vouchers/expense-quick" hx-target="#modal-container">Expense</button>
+        <button type="button" class="aitex-btn-secondary" hx-get="/trade/vouchers/new?preset=owner_in" hx-target="#modal-container">Owner In</button>
+        <button type="button" class="aitex-btn-secondary" hx-get="/trade/vouchers/new?preset=owner_out" hx-target="#modal-container">Owner Out</button>
+        <button type="button" class="aitex-btn-secondary" hx-get="/trade/vouchers/new?preset=contra" hx-target="#modal-container">Contra</button>
+        <button type="button" class="btn-primary btn-sm" hx-get="/trade/trades/new" hx-target="#modal-container">+ New Trade</button>
     </div>
-  </div>
-
-  {# ── Return on equity by owner ────────────────────────────────────── #}
-  {% if owner_roe %}
-  <div>
-    {{ section_title('Return on Equity by Owner · ' ~ month_short) }}
-    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-      {% for o in owner_roe %}
-      {{ kpi_sm(o.name ~ (' (you)' if o.is_owner else ''),
-                (('%.2f'|format(o.roe)) ~ '%') if o.roe is not none else None,
-                sub='{:g}'.format(o.pct) ~ '% · ' ~ currency ~ ' ' ~ '{:,.0f}'.format(o.profit_share) ~ ' on ' ~ currency ~ ' ' ~ '{:,.0f}'.format(o.equity),
-                tone=('' if o.roe is none else ('pos' if o.roe >= 0 else 'neg')),
-                accent=('brand' if o.is_owner else ''),
-                help=o.name ~ ' owns ' ~ '{:g}'.format(o.pct) ~ '%. Their share of ' ~ month_label ~ ' profit (' ~ currency ~ ' ' ~ '{:,.0f}'.format(o.profit_share) ~ ') ÷ their own capital account (' ~ currency ~ ' ' ~ '{:,.0f}'.format(o.equity) ~ ') = return on THEIR equity.') }}
-      {% endfor %}
-    </div>
-    <p class="wt-meta mt-2">Each owner's share of this month's profit ÷ their own capital account. A small book capital earning most of the profit (the operator) shows a high return; an investor who paid a premium for a small stake shows a low one.</p>
-  </div>
-  {% endif %}
-
-  {# ── Profitability over time ──────────────────────────────────────── #}
-  <div>
-    {{ section_title('Profitability Over Time') }}
-    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-      {{ kpi_sm('This Month (MTD)',
-                money(perf.mtd_profit, currency, digits=0, sign_color=True, abs_value=True),
-                sub='on ' ~ currency ~ ' ' ~ '{:,.0f}'.format(perf.mtd_sales) ~ ' sales',
-                help='Profit booked so far this month') }}
-
-      {{ kpi_sm('Year to Date (YTD)',
-                money(perf.ytd_profit, currency, digits=0, sign_color=True, abs_value=True),
-                sub='on ' ~ currency ~ ' ' ~ '{:,.0f}'.format(perf.ytd_sales) ~ ' sales',
-                help='Profit booked since 1 January') }}
-
-      {{ kpi_sm('Avg / Month', money(perf.avg_monthly_profit, currency, digits=0),
-                sub='over ' ~ perf.months_active ~ ' month' ~ ('s' if perf.months_active != 1 else ''),
-                help='Total realised profit ÷ months in business') }}
-
-      {{ kpi_sm('Return / Rs / 30 days', (perf.return_pct_30d ~ '%'),
-                sub='Rs 1 earns ' ~ currency ~ ' ' ~ '%.3f'|format(perf.return_per_rs_30d) ~ ' /mo',
-                tone='pos', accent='pos',
-                help='Net profit per Rs of capital per 30 days, using each trade\'s real deploy→collect period. Late/unpaid collections stretch the period and lower this number.') }}
-
-      {{ kpi_sm('Avg Money Tied Up', perf.avg_holding_days ~ '<span class="wt-mute"> d</span>',
-                sub='per trade cycle',
-                help='Average days your capital stays tied up per trade (buy → collect). This is what drags the return down when customers pay late.') }}
-    </div>
-  </div>
-
-  {# ── Recent trades ────────────────────────────────────────────────── #}
-  <div class="wt-panel">
-    <div class="wt-panel__head">
-      <h2>Recent Trades</h2>
-      <a href="/trade/trades">View all &rarr;</a>
-    </div>
-    {% if recent %}
-    {{ table_open(dense=True) }}
-      <thead>
-        <tr>
-          <th>Ref</th>
-          <th>Date</th>
-          <th>Vendor &rarr; Purchaser</th>
-          <th class="num">Sale</th>
-          <th class="num">Profit</th>
-          <th>Status</th>
-          <th>Due</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for t in recent %}
-        <tr>
-          <td class="wt-mono">{{ drill('/trade/trades/' ~ t.id, t.reference) }}</td>
-          <td class="wt-mono wt-mute">{{ t.trade_date }}</td>
-          <td>
-            <span class="wt-ash">V:</span> {{ party_map[t.vendor_id].name if party_map.get(t.vendor_id) else '—' }}
-            <span class="wt-ash">&rarr;</span>
-            <span class="wt-ash">C:</span> {{ party_map[t.purchaser_id].name if party_map.get(t.purchaser_id) else '—' }}
-          </td>
-          <td class="num" data-sort-value="{{ t.total_sale }}">{{ money(t.total_sale, currency, digits=0) }}</td>
-          <td class="num" data-sort-value="{{ t.total_sale - t.total_cost }}">
-            {{ money(t.total_sale - t.total_cost, currency, digits=0, sign_color=True) }}
-          </td>
-          <td>{% include "partials/trade_status_badge.html" %}</td>
-          <td class="wt-mono">
-            {% if t.customer_due_date %}
-              {{ t.customer_due_date }}
-              {% if t.customer_due_date < today and (t.total_sale - t.paid_by_customer) > 0 %}
-                {{ pill('OVERDUE', 'neg') }}
-              {% endif %}
-            {% else %}<span class="wt-ash">—</span>{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    {{ table_close() }}
-    {% else %}
-    <div class="wt-panel__body">
-      {{ empty_state('No trades yet', 'Click "+ New Trade" to get started.') }}
-    </div>
-    {% endif %}
-  </div>
 </div>
 
+{# Month scope — the ERP is always MTD; Trade lets you pick the month. #}
+<div class="mb-6 flex items-center gap-2 flex-wrap">
+    <a href="/trade?month={{ prev_month }}" class="aitex-btn-secondary" title="Previous month">&lsaquo; {{ prev_month }}</a>
+    <form method="get" action="/trade" class="flex items-center gap-2">
+        <input type="month" name="month" value="{{ selected_month }}" onchange="this.form.submit()">
+    </form>
+    {% if not is_current_month %}<a href="/trade?month={{ next_month }}" class="aitex-btn-secondary" title="Next month">{{ next_month }} &rsaquo;</a>{% endif %}
+    <a href="/trade" class="aitex-btn-secondary">This month</a>
+</div>
+
+{% if party_count == 0 or account_count == 0 or item_count == 0 %}
+<div class="aitex-card mb-8" style="border-left:4px solid var(--accent-warn);">
+    <h2 class="aitex-h3">Quick setup</h2>
+    <ul class="mt-1 aitex-meta">
+        {% if party_count == 0 %}<li>• <a href="/trade/parties" class="text-blue-600 hover:underline">Add at least one vendor and customer</a></li>{% endif %}
+        {% if account_count == 0 %}<li>• <a href="/trade/accounts" class="text-blue-600 hover:underline">Add a cash/bank account</a></li>{% endif %}
+        {% if item_count == 0 %}<li>• <a href="/trade/items" class="text-blue-600 hover:underline">Define your items and spec fields</a></li>{% endif %}
+    </ul>
+</div>
+{% endif %}
+
+<!-- ===================== HERO: this month ===================== -->
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+    {{ kpi('Sales (MTD)', pkr(pnl.mtd.sales), delta(sales_delta)) }}
+    {{ kpi('Gross Profit', pkr(pnl.mtd.sales - pnl.mtd.cost),
+           ("%.0f%% margin"|format((pnl.mtd.sales - pnl.mtd.cost) / pnl.mtd.sales * 100)) if pnl.mtd.sales else 'no sales this month',
+           'text-emerald-600' if (pnl.mtd.sales - pnl.mtd.cost) >= 0 else 'text-rose-600') }}
+    {{ kpi('Net Profit (MTD)', pkr(pnl.mtd.net), delta(profit_delta),
+           'text-emerald-600' if pnl.mtd.net >= 0 else 'text-rose-600') }}
+    {{ kpi('Receivable', pkr(kpis.outstanding_receivable), 'owed by customers') }}
+    {{ kpi('Capital Growth · ' ~ month_short, pkr(cap.capital_growth),
+           'profit ' ~ currency ~ ' ' ~ '{:,.0f}'.format(cap.profit_booked)
+             ~ (' · adj ' ~ currency ~ ' ' ~ '{:,.0f}'.format(cap.capital_other) if cap.capital_other != 0 else ''),
+           'text-emerald-600' if cap.capital_growth >= 0 else 'text-rose-600') }}
+    {{ kpi('Owed to Vendors', pkr(kpis.outstanding_payable), 'accounts payable') }}
+</div>
+
+<!-- ===================== P&L + trend ===================== -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <div class="aitex-card lg:col-span-2">
+        <h2 class="aitex-h3 mb-3">Sales &amp; Net Profit — {{ _y }}</h2>
+        <canvas id="pnlTrend" height="90"></canvas>
+    </div>
+    <div class="aitex-card">
+        <h2 class="aitex-h3 mb-3">P&amp;L</h2>
+        <table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs border-b border-gray-100">
+                <th class="text-left py-1"></th><th class="text-right py-1">MTD</th><th class="text-right py-1">Last mo</th><th class="text-right py-1">YTD</th>
+            </tr></thead>
+            <tbody>
+                <tr class="border-b border-gray-50"><td class="py-1.5">Sales</td>
+                    <td class="text-right">{{ "{:,.0f}".format(pnl.mtd.sales) }}</td>
+                    <td class="text-right text-gray-400">{{ "{:,.0f}".format(pnl.last.sales) }}</td>
+                    <td class="text-right font-semibold">{{ "{:,.0f}".format(pnl.ytd.sales) }}</td></tr>
+                <tr class="border-b border-gray-50"><td class="py-1.5">Cost of goods</td>
+                    <td class="text-right text-amber-700">{{ "{:,.0f}".format(pnl.mtd.cost) }}</td>
+                    <td class="text-right text-gray-400">{{ "{:,.0f}".format(pnl.last.cost) }}</td>
+                    <td class="text-right text-amber-700">{{ "{:,.0f}".format(pnl.ytd.cost) }}</td></tr>
+                <tr class="border-b border-gray-50"><td class="py-1.5">Gross profit</td>
+                    <td class="text-right text-emerald-700">{{ "{:,.0f}".format(pnl.mtd.sales - pnl.mtd.cost) }}</td>
+                    <td class="text-right text-gray-400">{{ "{:,.0f}".format(pnl.last.sales - pnl.last.cost) }}</td>
+                    <td class="text-right text-emerald-700 font-semibold">{{ "{:,.0f}".format(pnl.ytd.sales - pnl.ytd.cost) }}</td></tr>
+                <tr class="border-b border-gray-50"><td class="py-1.5">Trade costs</td>
+                    <td class="text-right text-rose-700">{{ "{:,.0f}".format((pnl.mtd.sales - pnl.mtd.cost) - pnl.mtd.net) }}</td>
+                    <td class="text-right text-gray-400">{{ "{:,.0f}".format((pnl.last.sales - pnl.last.cost) - pnl.last.net) }}</td>
+                    <td class="text-right text-rose-700">{{ "{:,.0f}".format((pnl.ytd.sales - pnl.ytd.cost) - pnl.ytd.net) }}</td></tr>
+                <tr class="border-b border-gray-50"><td class="py-1.5">Trades dated</td>
+                    <td class="text-right">{{ pnl.mtd.trades }}</td>
+                    <td class="text-right text-gray-400">{{ pnl.last.trades }}</td>
+                    <td class="text-right">{{ pnl.ytd.trades }}</td></tr>
+                <tr class="font-bold"><td class="py-1.5">Net profit</td>
+                    <td class="text-right {{ 'text-emerald-700' if pnl.mtd.net >= 0 else 'text-rose-700' }}">{{ "{:,.0f}".format(pnl.mtd.net) }}</td>
+                    <td class="text-right text-gray-400">{{ "{:,.0f}".format(pnl.last.net) }}</td>
+                    <td class="text-right {{ 'text-emerald-700' if pnl.ytd.net >= 0 else 'text-rose-700' }}">{{ "{:,.0f}".format(pnl.ytd.net) }}</td></tr>
+            </tbody>
+        </table>
+        <div class="mt-2 flex gap-3">
+            <a href="/trade/reports/pnl" class="text-xs text-blue-600 hover:underline">Profit &amp; loss →</a>
+            <a href="/trade/reports/sales" class="text-xs text-blue-600 hover:underline">Sales report →</a>
+        </div>
+        <p class="mt-2 text-[11px] text-gray-400">Sales and cost are the trade totals; <strong>trade costs</strong> are the per-trade extras (freight, bilty, plates) sitting between gross and net. A trade counts in the month it is dated, so YTD is the sum of the months charted alongside.</p>
+    </div>
+</div>
+
+<!-- ===================== Recent trades ===================== -->
+<div class="aitex-card mb-8">
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="aitex-h3">Recent Trades</h2>
+        <div class="flex gap-3">
+            <a href="/trade/trades" class="text-xs text-blue-600 hover:underline">All trades →</a>
+            <a href="/trade/goods-received" class="text-xs text-blue-600 hover:underline">Goods received →</a>
+        </div>
+    </div>
+    <table class="w-full text-sm">
+        <thead><tr class="text-gray-400 text-xs border-b border-gray-100">
+            <th class="text-left py-1">Ref</th>
+            <th class="text-left py-1">Date</th>
+            <th class="text-left py-1">Vendor → Customer</th>
+            <th class="text-right py-1">Sale</th>
+            <th class="text-right py-1">Profit</th>
+            <th class="text-left py-1 pl-4">Status</th>
+        </tr></thead>
+        <tbody>
+            {% for t in recent %}
+            <tr class="border-b border-gray-50">
+                <td class="py-1.5"><a href="/trade/trades/{{ t.id }}" class="wt-mono text-blue-600 hover:underline">{{ t.reference }}</a></td>
+                <td class="py-1.5 text-gray-500">{{ t.trade_date }}</td>
+                <td class="py-1.5">{{ party_map[t.vendor_id].name if t.vendor_id in party_map else '—' }}
+                    <span class="text-gray-400">→</span>
+                    {{ party_map[t.purchaser_id].name if t.purchaser_id in party_map else '—' }}</td>
+                <td class="py-1.5 text-right text-gray-500">{{ "{:,.0f}".format(t.total_sale) }}</td>
+                {% set np = trade_metrics[t.id].net_profit if trade_metrics and t.id in trade_metrics else (t.total_sale - t.total_cost) %}
+                <td class="py-1.5 text-right font-semibold {{ 'text-emerald-700' if np >= 0 else 'text-rose-700' }}">{{ "{:,.0f}".format(np) }}</td>
+                <td class="py-1.5 pl-4"><span class="wt-pill {{ 'wt-pill-pos' if t.status == 'completed' else ('wt-pill-warn' if t.status == 'partially_paid' else 'wt-pill-neutral') }}">{{ t.status.replace('_',' ').title() }}</span></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="py-2 text-gray-400">No trades yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p class="mt-2 text-[11px] text-gray-400">Profit is after per-trade costs. <strong>Partially paid</strong> means goods moved but the customer still owes part of the invoice.</p>
+</div>
+
+<!-- ===================== Cash Position ===================== -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <div class="aitex-card">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="aitex-h3">Cash Position</h2>
+            <a href="/trade/reports/cashbook" class="text-xs text-blue-600 hover:underline">Cashbook →</a>
+        </div>
+        <div class="text-3xl font-bold {{ 'text-gray-900' if cash_total >= 0 else 'text-rose-600' }}">{{ pkr(cash_total) }}</div>
+        <div class="text-xs text-gray-400 mb-3">across {{ cash_accounts|length }} bank/cash account(s)</div>
+        <table class="w-full text-sm">
+            <tbody>
+                {% for c in cash_accounts %}
+                <tr class="border-b border-gray-50">
+                    <td class="py-1.5"><span class="wt-mono text-xs text-gray-400 mr-1">{{ c.code }}</span>{{ c.name }}</td>
+                    <td class="py-1.5 text-right font-semibold {{ 'text-rose-700' if c.balance < 0 else '' }}">{{ "{:,.0f}".format(c.balance) }}</td>
+                </tr>
+                {% else %}
+                <tr><td class="py-2 text-gray-400">No bank/cash accounts yet — <a href="/trade/accounts" class="text-blue-600 hover:underline">add one</a>.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="aitex-card lg:col-span-2">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="aitex-h3">Projected cash — next 30 days</h2>
+            <div class="text-xs text-gray-400">
+                30-day change <span class="font-semibold {{ 'text-emerald-600' if cash_change >= 0 else 'text-rose-600' }}">{{ "{:+,.0f}".format(cash_change) }}</span>
+                · low <span class="font-semibold {{ 'text-rose-600' if cash_low < 0 else '' }}">{{ "{:,.0f}".format(cash_low) }}</span>
+            </div>
+        </div>
+        <canvas id="cashTrend" height="70"></canvas>
+    </div>
+</div>
+
+<!-- ===================== Customers & Vendors ===================== -->
+<h2 class="aitex-h2 mb-3">Customers &amp; Vendors</h2>
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+    {{ kpi('Active Customers', customers|length, '%s vendor(s) supplying'|format(vendors|length)) }}
+    {{ kpi('Open Trades', kpis.open_trades, 'not yet completed') }}
+    {{ kpi('Overdue', pkr(kpis.overdue_receivable), 'past the due date',
+           'text-rose-600' if kpis.overdue_receivable else '') }}
+    {{ kpi('DSO · Collect Days', "%.1f d"|format(wc.dso), 'how long customers take') }}
+    {{ kpi('DPO · Pay Days', "%.1f d"|format(wc.dpo), 'how long you take to pay') }}
+    {{ kpi('Cash Cycle', "%.1f d"|format(wc.ccc), 'DSO − DPO, money tied up',
+           'text-rose-600' if wc.ccc > 30 else 'text-emerald-600') }}
+</div>
+
+<!-- ===================== Capital efficiency + Pipeline ===================== -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="aitex-card">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="aitex-h3">Capital Efficiency</h2>
+            <a href="/trade/reports/working-capital" class="text-xs text-blue-600 hover:underline">Working capital →</a>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+            {{ kpi('Capital Deployed', pkr(perf.capital_working), 'cost tied up in open trades') }}
+            {{ kpi('Return / Rs / 30 days', "%.2f%%"|format(perf.return_pct_30d),
+                   '%s 1 earns %s %.3f /mo'|format(currency, currency, perf.return_per_rs_30d),
+                   'text-emerald-600' if perf.return_pct_30d >= 0 else 'text-rose-600') }}
+            {{ kpi('Avg Money Tied Up', "%.1f d"|format(perf.avg_holding_days), 'per trade cycle') }}
+            {{ kpi('Avg / Month', pkr(perf.avg_monthly_profit),
+                   'over %s month%s'|format(perf.months_active, '' if perf.months_active == 1 else 's')) }}
+            {{ kpi('Realised Profit', pkr(perf.realised_profit), 'on completed trades',
+                   'text-emerald-600' if perf.realised_profit >= 0 else 'text-rose-600') }}
+            {{ kpi('Current Ratio', "%.2f"|format(wc.current_ratio) if wc.current_ratio else '—',
+                   'current assets ÷ liabilities',
+                   'text-emerald-600' if (wc.current_ratio and wc.current_ratio >= 1) else 'text-rose-600') }}
+        </div>
+        <p class="mt-2 text-[11px] text-gray-400">Return per rupee uses each trade's real deploy→collect period, so late collections stretch the period and lower the number.</p>
+    </div>
+    <div class="aitex-card">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="aitex-h3">Trade Pipeline (all-time)</h2>
+            <a href="/trade/quotations" class="text-xs text-blue-600 hover:underline">Quotations →</a>
+        </div>
+        {% set order = [('quoted','Quoted','bg-slate-400'),('sent','Sent','bg-blue-400'),('accepted','Accepted','bg-indigo-400'),('open','Open trades','bg-violet-500'),('completed','Completed','bg-emerald-500')] %}
+        {% set maxv = (funnel.values()|list|max) if funnel else 1 %}
+        <div class="space-y-2">
+            {% for key, lbl, color in order %}
+            {% set v = funnel.get(key, 0) %}
+            <div class="flex items-center gap-2">
+                <div class="w-24 text-xs text-gray-500 text-right">{{ lbl }}</div>
+                <div class="flex-1 bg-gray-100 rounded h-5 overflow-hidden">
+                    <div class="{{ color }} h-5" style="width: {{ (100 * v / maxv)|round(0, 'floor') if maxv else 0 }}%"></div>
+                </div>
+                <div class="w-10 text-xs font-semibold text-right">{{ v }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="mt-3 text-xs text-gray-400 flex gap-4 flex-wrap">
+            <span>{{ funnel.quoted }} quotation(s) raised</span>
+            <span>Quote→trade conversion <strong>{{ "%.1f%%"|format(funnel.accepted / funnel.quoted * 100) if funnel.quoted else '—' }}</strong></span>
+            <span>{{ funnel.open }} open · {{ funnel.completed }} completed</span>
+        </div>
+    </div>
+</div>
+
+<!-- ===================== Owners & Partners ===================== -->
+{% if owner_roe %}
+<div class="flex items-center justify-between mb-3">
+    <h2 class="aitex-h2">Owners &amp; Partners</h2>
+    <a href="/trade/partners" class="text-xs text-blue-600 hover:underline">Partners →</a>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+    {{ kpi('Owners', owner_roe|length, 'with capital on the books') }}
+    {{ kpi('Capital A/C Balance', pkr(kpis.capital_balance), 'closing balance') }}
+    {{ kpi('Total Equity', pkr(owner_roe|sum(attribute='equity')), 'across all owners') }}
+    {{ kpi('Profit Shared', pkr(owner_roe|sum(attribute='profit_share')), month_short ~ ' distribution') }}
+    <div class="aitex-card">
+        <div class="text-[11px] uppercase tracking-wide text-gray-400">Return on Equity ({{ month_short }})</div>
+        <div class="mt-1 space-y-0.5">
+            {% for o in owner_roe %}
+            <div class="flex justify-between text-sm"><span class="text-gray-700 truncate pr-2">{{ o.name }}</span><span class="font-semibold {{ 'text-gray-400' if o.roe is none else ('text-emerald-700' if o.roe >= 0 else 'text-rose-700') }}">{{ '—' if o.roe is none else ("%.2f%%"|format(o.roe)) }}</span></div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ===================== Trade quick links ===================== -->
+<h2 class="aitex-h2 mb-3">Trade</h2>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <a href="/trade/trades" class="aitex-card">
+        <div class="flex items-center">
+            <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            </div>
+            <div class="ml-4"><h3 class="aitex-h3">Trades</h3><p class="aitex-meta">Every trade, newest first</p></div>
+        </div>
+    </a>
+    <a href="/trade/quotations" class="aitex-card">
+        <div class="flex items-center">
+            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+            </div>
+            <div class="ml-4"><h3 class="aitex-h3">Quotations</h3><p class="aitex-meta">Price offers to customers, by status</p></div>
+        </div>
+    </a>
+    <a href="/trade/goods-received" class="aitex-card">
+        <div class="flex items-center">
+            <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+            </div>
+            <div class="ml-4"><h3 class="aitex-h3">Goods Received</h3><p class="aitex-meta">What vendors have delivered</p></div>
+        </div>
+    </a>
+    <a href="/trade/parties" class="aitex-card">
+        <div class="flex items-center">
+            <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            </div>
+            <div class="ml-4"><h3 class="aitex-h3">Parties</h3><p class="aitex-meta">Customers and vendors</p></div>
+        </div>
+    </a>
+    <a href="/trade/vouchers" class="aitex-card">
+        <div class="flex items-center">
+            <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <div class="ml-4"><h3 class="aitex-h3">Vouchers</h3><p class="aitex-meta">Receipts, payments, expenses, contra</p></div>
+        </div>
+    </a>
+    <a href="/trade/reports" class="aitex-card">
+        <div class="flex items-center">
+            <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            </div>
+            <div class="ml-4"><h3 class="aitex-h3">Reports</h3><p class="aitex-meta">Statements, BI, and operations</p></div>
+        </div>
+    </a>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (typeof Chart === 'undefined') return;
+    new Chart(document.getElementById('pnlTrend').getContext('2d'), {
+        data: {
+            labels: [{% for m in trend %}"{{ m.month }}"{% if not loop.last %},{% endif %}{% endfor %}],
+            datasets: [
+                { type: 'bar', label: 'Sales', data: [{% for m in trend %}{{ m.sales }}{% if not loop.last %},{% endif %}{% endfor %}], backgroundColor: 'rgba(37,99,235,0.55)', order: 2 },
+                { type: 'line', label: 'Net Profit', data: [{% for m in trend %}{{ m.net }}{% if not loop.last %},{% endif %}{% endfor %}], borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.1)', tension: 0.25, order: 1, fill: true },
+            ],
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'top' } },
+            scales: { y: { ticks: { callback: v => Number(v).toLocaleString() } } },
+        },
+    });
+
+    const cashEl = document.getElementById('cashTrend');
+    if (cashEl) {
+        new Chart(cashEl.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: [{% for c in cash_trend %}"{{ c.date.strftime('%d %b') }}"{% if not loop.last %},{% endif %}{% endfor %}],
+                datasets: [{ label: 'Running cash', data: [{% for c in cash_trend %}{{ c.running }}{% if not loop.last %},{% endif %}{% endfor %}],
+                    borderColor: '#b17816', backgroundColor: 'rgba(177,120,22,0.1)', tension: 0.25, fill: true, pointRadius: 0 }],
+            },
+            options: { responsive: true, plugins: { legend: { display: false } },
+                scales: { y: { ticks: { callback: v => Number(v).toLocaleString() } } } },
+        });
+    }
+});
+</script>
 {% endblock %}

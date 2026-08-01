@@ -65,14 +65,11 @@
   <div class="wt-panel overflow-x-auto">
     {% if trades %}
     {{ report_toolbar('tbl-trades') }}
-    {{ sortable_table_open('tbl-trades', dense=True) }}
+    {%- set dot_palette = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'] %}
+    {{ sortable_table_open('tbl-trades') }}
       <thead>
         <tr>
-          <th>Ref</th>
-          <th>Date</th>
-          <th>Vendor</th>
-          <th>Purchaser</th>
-          <th>Items</th>
+          <th>Trade</th>
           <th class="num">Cost</th>
           <th class="num">Sale</th>
           <th class="num">Net Profit</th>
@@ -84,29 +81,37 @@
       </thead>
       <tbody>
         {% for t in trades %}
+        {% set buyer = party_map.get(t.purchaser_id) %}
         <tr class="cursor-pointer hover:bg-indigo-50/40" onclick="window.location='/trade/trades/{{ t.id }}'">
-          <td><a class="wt-drill font-medium font-mono text-xs" href="/trade/trades/{{ t.id }}">{{ t.reference }}</a></td>
-          <td class="wt-body whitespace-nowrap">{{ t.trade_date }}</td>
-          <td class="wt-body">{{ party_map[t.vendor_id].name if party_map.get(t.vendor_id) else '—' }}</td>
-          <td class="wt-body">{{ party_map[t.purchaser_id].name if party_map.get(t.purchaser_id) else '—' }}</td>
-          <td class="wt-body">
+          <td data-sort-value="{{ t.trade_date.isoformat() }}">
+            <div class="flex items-center gap-2">
+              <span class="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                    style="background:{{ dot_palette[(t.purchaser_id or 0) % 8] }}"></span>
+              <a class="font-semibold wt-ink text-sm hover:underline" href="/trade/trades/{{ t.id }}">{{ buyer.name if buyer else '—' }}</a>
+            </div>
             {% set items = trade_items.get(t.id) if trade_items else None %}
             {% if items %}
-              {% for it in items[:3] %}<div class="text-xs {% if not loop.first %}mt-0.5{% endif %} whitespace-nowrap">{{ it }}</div>{% endfor %}
-              {% if items | length > 3 %}<div class="text-xs wt-mute mt-0.5">+ {{ items | length - 3 }} more item{{ 's' if items | length - 3 > 1 }}</div>{% endif %}
-            {% else %}<span class="wt-ash">—</span>{% endif %}
+            <div class="mt-1 pl-[18px] space-y-0.5">
+              {% for it in items[:3] %}<div class="text-xs wt-body whitespace-nowrap">{{ it }}</div>{% endfor %}
+              {% if items | length > 3 %}<div class="text-xs wt-mute">+ {{ items | length - 3 }} more item{{ 's' if items | length - 3 > 1 }}</div>{% endif %}
+            </div>
+            {% endif %}
+            <div class="mt-1 pl-[18px] text-[11px] wt-ash whitespace-nowrap">
+              {{ t.trade_date.strftime('%d %b %Y') }} · {{ t.reference }} · from {{ party_map[t.vendor_id].name if party_map.get(t.vendor_id) else '—' }}
+            </div>
           </td>
-          <td class="num">{{ currency }} {{ '{:,.0f}'.format(t.total_cost) }}</td>
-          <td class="num">{{ currency }} {{ '{:,.0f}'.format(t.total_sale) }}</td>
+          <td class="num wt-mute text-sm">{{ currency }} {{ '{:,.0f}'.format(t.total_cost) }}</td>
+          <td class="num wt-mute text-sm">{{ currency }} {{ '{:,.0f}'.format(t.total_sale) }}</td>
           {% set m = trade_metrics.get(t.id) if trade_metrics else None %}
-          <td class="num" class=\"{{ 'wt-pos' if m and m.net_profit >= 0 else 'wt-neg' }}\" title="Net of bilty &amp; trade costs">
-            {{ currency }} {{ '{:,.0f}'.format(m.net_profit if m else (t.total_sale - t.total_cost)) }}
+          {% set net = m.net_profit if m else (t.total_sale - t.total_cost) %}
+          <td class="num font-semibold {{ 'wt-pos' if net >= 0 else 'wt-neg' }}" title="Net of bilty &amp; trade costs">
+            {{ currency }} {{ '{:,.0f}'.format(net) }}
           </td>
-          <td class="num wt-info" title="Net profit ÷ money invested (cost + trade costs)">{% if m and m.roi is not none %}{{ '{:,.1f}'.format(m.roi) }}%{% else %}—{% endif %}</td>
+          <td class="num wt-info text-sm" title="Net profit ÷ money invested (cost + trade costs)">{% if m and m.roi is not none %}{{ '{:,.1f}'.format(m.roi) }}%{% else %}—{% endif %}</td>
           <td>{% include "partials/trade_status_badge.html" %}</td>
           <td class="wt-mute whitespace-nowrap">
             {% if t.customer_due_date %}
-              {{ t.customer_due_date }}
+              {{ t.customer_due_date.strftime('%d %b') }}
               {% if t.customer_due_date < today and (t.total_sale - t.paid_by_customer) > 0 %}<span class="pill-cr ml-1">OVERDUE</span>{% endif %}
             {% else %}<span class="wt-ash">—</span>{% endif %}
           </td>

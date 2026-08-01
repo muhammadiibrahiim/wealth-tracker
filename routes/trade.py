@@ -98,6 +98,87 @@ async def dashboard(request: Request, month: str = Query(None),
     cap = capital_utilization(session, user_id, as_of=as_of,
                               ni_from=sel_start, ni_to=as_of)
     perf = time_based_performance(session, user_id, as_of=as_of)
+    # Monthly series for the dashboard trend chart. Same service the Sales
+    # report uses, so the two can never disagree.
+    # Monthly series. sales_report's "profit" is GROSS (sales - cost); the
+    # dashboard needs NET, i.e. after each trade's own costs, so build it here
+    # from the same trades and carry both.
+    _all_for_trend = TradeService.list(session, user_id)
+    _by_month: dict[str, dict] = {}
+    for _t in _all_for_trend:
+        if str(_t.status) == "cancelled":
+            continue
+        _k = _t.trade_date.strftime("%Y-%m")
+        _r = _by_month.setdefault(_k, {"month": _k, "sales": Decimal("0"),
+                                       "cost": Decimal("0"), "net": Decimal("0"),
+                                       "trades": 0})
+        _tc = TradeService.trade_costs_total(session, user_id, _t)
+        _r["sales"] += Decimal(_t.total_sale)
+        _r["cost"] += Decimal(_t.total_cost)
+        _r["net"] += Decimal(_t.total_sale) - Decimal(_t.total_cost) - _tc
+        _r["trades"] += 1
+    trend = sorted(_by_month.values(), key=lambda r: r["month"])[-12:]
+    # Same buckets the AR Aging report renders, so the chart and that report
+    # can never disagree.
+    aging_buckets = TradeReportService.aging_report(session, user_id)["buckets"]
+
+    # ── Figures the ERP dashboard shows, computed for Trade ──────────────
+    # P&L columns: this month / last month / year to date, all from the one
+    # monthly series so the table and the chart cannot disagree.
+    _mk = sel_start.strftime("%Y-%m")
+    _prev = (sel_start - timedelta(days=1)).strftime("%Y-%m")
+    def _row(mk):
+        for r in trend:
+            if r["month"] == mk:
+                return r
+        return {"month": mk, "sales": Decimal("0"), "cost": Decimal("0"),
+                "net": Decimal("0"), "trades": 0}
+    pnl = {
+        "mtd":  _row(_mk),
+        "last": _row(_prev),
+        "ytd": {
+            "sales":  sum((r["sales"]  for r in trend if r["month"][:4] == str(sel_start.year)), Decimal("0")),
+            "cost":   sum((r["cost"]   for r in trend if r["month"][:4] == str(sel_start.year)), Decimal("0")),
+            "net":    sum((r["net"]    for r in trend if r["month"][:4] == str(sel_start.year)), Decimal("0")),
+            "trades": sum((r["trades"] for r in trend if r["month"][:4] == str(sel_start.year))),
+        },
+    }
+    # month-over-month deltas for the hero cards
+    def _delta(now, before):
+        if not before:
+            return None
+        return float((Decimal(now) - Decimal(before)) / Decimal(before) * 100)
+    sales_delta  = _delta(pnl["mtd"]["sales"],  pnl["last"]["sales"])
+    profit_delta = _delta(pnl["mtd"]["net"], pnl["last"]["net"])
+
+    # Cash: live balances per account, plus the running-cash projection.
+    cash_accounts = [
+        {"code": a.code, "name": a.name,
+         "balance": CashAccountService.balance(session, user_id, a.id)}
+        for a in accounts
+    ]
+    cash_total = sum((c["balance"] for c in cash_accounts), Decimal("0"))
+    from services.analytics import daily_cash_requirement
+    _dc = daily_cash_requirement(session, user_id, horizon_days=30)
+    cash_trend = _dc["rows"]
+    cash_low = min((r["running"] for r in cash_trend), default=Decimal("0"))
+    cash_change = (cash_trend[-1]["running"] - cash_trend[0]["running"]) if len(cash_trend) > 1 else Decimal("0")
+
+    # Counterparties
+    customers = [p for p in parties if p.is_customer and p.is_active]
+    vendors   = [p for p in parties if p.is_vendor and p.is_active]
+
+    # Pipeline funnel — the Trade analogue of the ERP's lead funnel.
+    _quotes = QuotationService.list(session, user_id)
+    _all_trades = TradeService.list(session, user_id)
+    funnel = {
+        "quoted":    len(_quotes),
+        "sent":      sum(1 for q in _quotes if str(q.status) == "sent"),
+        "accepted":  sum(1 for q in _quotes if str(q.status) == "accepted"),
+        "open":      sum(1 for t in _all_trades if str(t.status) != "completed"),
+        "completed": sum(1 for t in _all_trades if str(t.status) == "completed"),
+    }
+
     from services import partners as PS
     owner_roe = PS.owner_returns(session, user_id, sel_start, as_of) if PS._owner_partner(session, user_id) or PS._non_owner_partners(session, user_id) else []
     return templates.TemplateResponse(
@@ -114,6 +195,19 @@ async def dashboard(request: Request, month: str = Query(None),
             wc=wc,
             cap=cap,
             perf=perf,
+            trend=trend,
+            aging_buckets=aging_buckets,
+            pnl=pnl,
+            sales_delta=sales_delta,
+            profit_delta=profit_delta,
+            cash_accounts=cash_accounts,
+            cash_total=cash_total,
+            cash_trend=cash_trend,
+            cash_low=cash_low,
+            cash_change=cash_change,
+            customers=customers,
+            vendors=vendors,
+            funnel=funnel,
             owner_roe=owner_roe,
             selected_month=sel_start.strftime("%Y-%m"),
             month_label=sel_start.strftime("%B %Y"),
@@ -165,6 +259,17 @@ async def trades_list(
             "net_profit": net.quantize(Decimal("0.01")),
             "roi": (roi.quantize(Decimal("0.01")) if roi is not None else None),
         }
+    # Line-item summaries per trade — item + Size spec + qty, so a trade is
+    # recognizable in the list without opening it.
+    from models import TradeLine, TradeLineSpec
+    trade_items: dict[int, list[str]] = {}
+    trade_ids = [t.id for t in trades]
+    if trade_ids:
+        for ln in session.exec(select(TradeLine).where(TradeLine.trade_id.in_(trade_ids))).all():
+            size = next((s.value for s in ln.specs if (s.label or "").strip().lower() == "size"), None)
+            label = ln.item_name + (f" {size}" if size else "")
+            qty = f"{ln.quantity:,.0f}" if ln.quantity == ln.quantity.to_integral_value() else f"{ln.quantity:,.3f}"
+            trade_items.setdefault(ln.trade_id, []).append(f"{label} · {qty} {ln.unit}")
     return templates.TemplateResponse(
         "trade_list.html",
         _ctx(
@@ -173,6 +278,7 @@ async def trades_list(
             parties=parties,
             party_map=party_map,
             trade_metrics=trade_metrics,
+            trade_items=trade_items,
             current_status=status,
             current_party=party_id,
             current_tab=tab,

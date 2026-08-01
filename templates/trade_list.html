@@ -9,6 +9,22 @@
        {'label': '📦 Receive Goods', 'button': True, 'attrs': 'hx-get="/trade/trades/receive/new" hx-target="#modal-container"'},
        {'label': '+ New Trade', 'button': True, 'primary': True, 'attrs': 'hx-get="/trade/trades/new" hx-target="#modal-container"'}]) }}
 
+  {# Headline strip — summed from the same `trades` the table below lists. #}
+  {%- set sale_tot = trades | sum(attribute='total_sale') %}
+  {%- set cost_tot = trades | sum(attribute='total_cost') %}
+  {%- set net_tot  = trade_metrics.values() | sum(attribute='net_profit') %}
+  {%- set open_n   = trades | rejectattr('status', 'equalto', 'completed') | list | length %}
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+    {{ kpi_sm('Trades Shown', num(trades | length), sub='in the current filter') }}
+    {{ kpi_sm('Still Open',   num(open_n), sub='not yet completed',
+              tone=('neg' if open_n else '')) }}
+    {{ kpi_sm('Total Sale',   money(sale_tot, currency, digits=0), sub='invoiced value') }}
+    {{ kpi_sm('Total Cost',   money(cost_tot, currency, digits=0), sub='what the goods cost') }}
+    {{ kpi_sm('Net Profit',   money(net_tot, currency, digits=0, sign_color=True, abs_value=True),
+              sub='after trade costs',
+              tone=('pos' if net_tot >= 0 else 'neg'), accent=('pos' if net_tot >= 0 else 'neg')) }}
+  </div>
+
   <!-- Tabs -->
   {% set qs = ('&party_id=' ~ current_party) if current_party else '' %}
   {% set qs = qs ~ (('&status=' ~ current_status) if current_status else '') %}
@@ -56,6 +72,7 @@
           <th>Date</th>
           <th>Vendor</th>
           <th>Purchaser</th>
+          <th>Items</th>
           <th class="num">Cost</th>
           <th class="num">Sale</th>
           <th class="num">Net Profit</th>
@@ -67,11 +84,18 @@
       </thead>
       <tbody>
         {% for t in trades %}
-        <tr>
+        <tr class="cursor-pointer hover:bg-indigo-50/40" onclick="window.location='/trade/trades/{{ t.id }}'">
           <td><a class="wt-drill font-medium font-mono text-xs" href="/trade/trades/{{ t.id }}">{{ t.reference }}</a></td>
           <td class="wt-body whitespace-nowrap">{{ t.trade_date }}</td>
           <td class="wt-body">{{ party_map[t.vendor_id].name if party_map.get(t.vendor_id) else '—' }}</td>
           <td class="wt-body">{{ party_map[t.purchaser_id].name if party_map.get(t.purchaser_id) else '—' }}</td>
+          <td class="wt-body">
+            {% set items = trade_items.get(t.id) if trade_items else None %}
+            {% if items %}
+              {% for it in items[:3] %}<div class="text-xs {% if not loop.first %}mt-0.5{% endif %} whitespace-nowrap">{{ it }}</div>{% endfor %}
+              {% if items | length > 3 %}<div class="text-xs wt-mute mt-0.5">+ {{ items | length - 3 }} more item{{ 's' if items | length - 3 > 1 }}</div>{% endif %}
+            {% else %}<span class="wt-ash">—</span>{% endif %}
+          </td>
           <td class="num">{{ currency }} {{ '{:,.0f}'.format(t.total_cost) }}</td>
           <td class="num">{{ currency }} {{ '{:,.0f}'.format(t.total_sale) }}</td>
           {% set m = trade_metrics.get(t.id) if trade_metrics else None %}
@@ -86,7 +110,7 @@
               {% if t.customer_due_date < today and (t.total_sale - t.paid_by_customer) > 0 %}<span class="pill-cr ml-1">OVERDUE</span>{% endif %}
             {% else %}<span class="wt-ash">—</span>{% endif %}
           </td>
-          <td class="text-right whitespace-nowrap">
+          <td class="text-right whitespace-nowrap" onclick="event.stopPropagation()">
             <form class="inline" hx-post="/trade/trades/{{ t.id }}/delete" hx-confirm="Permanently delete {{ t.reference }}? Linked journals will be reversed.">
               <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
             </form>
@@ -96,7 +120,7 @@
       </tbody>
     {{ table_close() }}
     {% else %}
-    <div class=" text-center text-sm wt-mute">No trades match the current filter.</div>
+    <div class="text-center text-sm wt-mute">No trades match the current filter.</div>
     {% endif %}
   </div>
 </div>

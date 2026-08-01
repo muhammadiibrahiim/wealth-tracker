@@ -1,0 +1,133 @@
+<!--
+  Adapted from sparksuite/simple-html-invoice-template (MIT License).
+  https://github.com/sparksuite/simple-html-invoice-template
+  Full license text: templates/pdf/third_party_licenses/sparksuite-simple-html-invoice-template.LICENSE.txt
+
+  Kept: the .invoice-box card, the heading/item/last/total row rhythm and
+  class names, the grey heading bars, the bold top-ruled total.
+  Changed: the logo cell holds a text wordmark (no logo asset yet); the
+  original is ONE continuous 2-column table throughout (payment-method rows
+  and item rows are both 2 columns), but this report's item rows need 7
+  columns. xhtml2pdf (unlike a browser) lays out one column grid per <table>
+  and cannot reconcile a table whose rows disagree on column count — mixing
+  2-col and 7-col rows in one <table> renders as garbled, misaligned cells.
+  So each section here is its own sibling <table> with an internally
+  consistent column count, instead of one giant table like the original.
+-->
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ doc_title }}</title>
+    <style>
+      body { margin: 0; }
+      .invoice-box {
+        max-width: 800px;
+        margin: auto;
+        padding: 30px;
+        border: 1px solid #eee;
+        font-size: 13px;
+        line-height: 20px;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        color: #555;
+      }
+      .invoice-box table { width: 100%; line-height: inherit; text-align: left; border-collapse: collapse; }
+      .invoice-box table td { padding: 5px; vertical-align: top; }
+      .invoice-box table td.num { text-align: right; }
+      table.top-table td { padding-bottom: 20px; }
+      table.top-table td.title { font-size: 26px; line-height: 30px; color: #333; font-weight: bold; }
+      table.info-table td { padding-bottom: 10px; }
+      table.kpi-table td.label { background: #eee; border-bottom: 1px solid #ddd; font-weight: bold; }
+      table.kpi-table td.value { padding-bottom: 12px; }
+      table.items-table { margin-top: 10px; }
+      table.items-table td.h { background: #eee; border-bottom: 1px solid #ddd; font-weight: bold; }
+      table.items-table tr.item td { border-bottom: 1px solid #eee; }
+      table.items-table tr.item.last td { border-bottom: none; }
+      table.items-table tr.total td { border-top: 2px solid #eee; font-weight: bold; padding-top: 10px; }
+      table.items-table td.col-item { width: 32%; }
+      table.items-table td.col-date { width: 12%; }
+      table.items-table td.col-num { width: 11%; }
+      table.grand-total-table td { border-top: 3px double #999; font-weight: bold; padding-top: 12px; font-size: 15px; }
+      .specs { color: #8a8a8a; font-size: 10px; }
+      .brand-heading { padding-top: 18px; font-weight: bold; color: #333; border-bottom: 1px solid #ccc; }
+    </style>
+  </head>
+  <body>
+    <div class="invoice-box">
+      <table class="top-table" cellpadding="0" cellspacing="0">
+        <tr>
+          <td class="title">{{ brand }}</td>
+          <td class="num">
+            Statement #: {{ statement_no }}<br />
+            Created: {{ created }}<br />
+            As of: {{ as_of }}
+          </td>
+        </tr>
+      </table>
+
+      <table class="info-table" cellpadding="0" cellspacing="0">
+        <tr>
+          <td>{{ brand }}</td>
+          <td class="num">
+            {{ vendor_name }}<br />
+            {% if vendor_contact %}{{ vendor_contact }}<br />{% endif %}
+            {% if vendor_phone %}{{ vendor_phone }}<br />{% endif %}
+            {% if vendor_city %}{{ vendor_city }}{% endif %}
+          </td>
+        </tr>
+      </table>
+
+      <table class="kpi-table" cellpadding="0" cellspacing="0">
+        {% for k in kpis %}
+        <tr><td class="label">{{ k.label }}</td></tr>
+        <tr><td class="value">{{ k.value }}</td></tr>
+        {% endfor %}
+      </table>
+
+      {% for brand_name, rows in by_brand.items() %}
+      <p class="brand-heading">Brand: {{ brand_name }}</p>
+      <table class="items-table" cellpadding="0" cellspacing="0">
+        <tr>
+          <td class="h col-item">Item</td>
+          <td class="h col-date num">Order Date</td>
+          <td class="h col-num num">Ordered</td>
+          <td class="h col-num num">Received</td>
+          <td class="h col-num num">Pending</td>
+          <td class="h col-num num">Rate</td>
+          <td class="h col-num num">Pending Value</td>
+        </tr>
+        {% for r in rows %}
+        <tr class="item{% if loop.last %} last{% endif %}">
+          <td class="col-item">
+            <b>{{ r.item_name }}</b>
+            {% if r.specs_line %}<br /><span class="specs">{{ r.specs_line }}</span>{% endif %}
+          </td>
+          <td class="col-date num">{{ r.order_date }}</td>
+          <td class="col-num num">{{ r.ordered }}</td>
+          <td class="col-num num">{{ r.received }}</td>
+          <td class="col-num num">{{ r.pending }}</td>
+          <td class="col-num num">{{ r.rate }}</td>
+          <td class="col-num num">{{ r.pending_value }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="total">
+          <td class="col-item"></td>
+          <td class="col-date num"></td>
+          <td class="col-num num"></td>
+          <td class="col-num num"></td>
+          <td class="col-num num">{{ brand_subtotal_qty[brand_name] }}</td>
+          <td class="col-num num">Subtotal</td>
+          <td class="col-num num">{{ brand_subtotal_val[brand_name] }}</td>
+        </tr>
+      </table>
+      {% endfor %}
+
+      <table class="grand-total-table" cellpadding="0" cellspacing="0">
+        <tr>
+          <td>Total Pending Value</td>
+          <td class="num">{{ total_val }}</td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

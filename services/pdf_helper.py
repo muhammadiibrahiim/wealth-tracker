@@ -1,6 +1,6 @@
-"""Posthog-themed PDF report builder.
+"""Themeable PDF report builder.
 
-Build a ReportSpec, call render_report_pdf(buf, spec). Done.
+Build a ReportSpec, call render_report_pdf(buf, spec[, theme='classic']). Done.
 
 Sections you can stack inside spec.sections:
     SectionTitle("Bill To")        →  bold sub-heading
@@ -8,6 +8,12 @@ Sections you can stack inside spec.sections:
     TableSpec(headers, rows, …)    →  zebra-striped table w/ optional totals row
     CalloutCard(label, value, …)   →  big right-aligned number, orange left rail
     PageBreak()                    →  force a page break
+
+Themes: every visual constant (background, accent, header style) lives in a
+Theme, looked up from THEMES by name. 'classic' is the original look — every
+existing call site that doesn't pass `theme=` keeps rendering exactly as
+before. New themes can be added to THEMES without touching a single call
+site; flipping DEFAULT_THEME re-skins every report/invoice in the app at once.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -25,20 +31,74 @@ from reportlab.platypus import (
 from reportlab.lib.utils import ImageReader
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
 
+# Universal — green/red mean the same thing regardless of theme.
+POS = colors.HexColor('#2e7d32')
+NEG = colors.HexColor('#c0392b')
 
-# Posthog palette
-BG_PAGE      = colors.HexColor('#fdfdf8')
-BG_SURFACE   = colors.HexColor('#ffffff')
-BG_SURFACE_2 = colors.HexColor('#eeefe9')
-BG_SURFACE_3 = colors.HexColor('#e5e7e0')
-BORDER       = colors.HexColor('#bfc1b7')
-BORDER_SOFT  = colors.HexColor('#dadbd0')
-TEXT         = colors.HexColor('#4d4f46')
-TEXT_STRONG  = colors.HexColor('#23251d')
-TEXT_MUTED   = colors.HexColor('#65675e')
-ACCENT       = colors.HexColor('#F54E00')
-POS          = colors.HexColor('#2e7d32')
-NEG          = colors.HexColor('#c0392b')
+
+@dataclass
+class Theme:
+    key: str
+    label: str
+    bg_page: colors.Color
+    bg_surface: colors.Color
+    bg_surface_2: colors.Color
+    border: colors.Color
+    border_soft: colors.Color
+    text: colors.Color
+    text_strong: colors.Color
+    text_muted: colors.Color
+    accent: colors.Color
+    accent_text: colors.Color         # text/rule colour used ON the accent (header band mode)
+    zebra: colors.Color
+    header_mode: str = 'classic'      # 'classic' (stripe+soft band) | 'plain' (hairline) | 'band' (solid colour block)
+    header_divider: Optional[colors.Color] = None   # separator in the header row; None → border_soft
+
+
+def _c(hexstr: str) -> colors.Color:
+    return colors.HexColor(hexstr)
+
+
+THEMES = {
+    # Original look — preserved so any report can always be regenerated
+    # exactly as it always has been. Never remove entries from this dict.
+    'classic': Theme(
+        key='classic', label='Classic (parchment & orange)',
+        bg_page=_c('#fdfdf8'), bg_surface=_c('#ffffff'), bg_surface_2=_c('#eeefe9'),
+        border=_c('#bfc1b7'), border_soft=_c('#dadbd0'),
+        text=_c('#4d4f46'), text_strong=_c('#23251d'), text_muted=_c('#65675e'),
+        accent=_c('#F54E00'), accent_text=_c('#ffffff'),
+        zebra=_c('#f7f7f1'), header_mode='classic',
+    ),
+    # Candidate 1 — clean, white, indigo accent (matches the app's own UI).
+    'white-indigo': Theme(
+        key='white-indigo', label='Clean Indigo',
+        bg_page=_c('#ffffff'), bg_surface=_c('#ffffff'), bg_surface_2=_c('#eef2ff'),
+        border=_c('#e2e4ea'), border_soft=_c('#e5e7eb'),
+        text=_c('#374151'), text_strong=_c('#111827'), text_muted=_c('#6b7280'),
+        accent=_c('#4f46e5'), accent_text=_c('#ffffff'),
+        zebra=_c('#fafafa'), header_mode='plain',
+    ),
+    # Candidate 2 — austere black-and-white ledger/statement feel.
+    'white-mono': Theme(
+        key='white-mono', label='Monochrome Ledger',
+        bg_page=_c('#ffffff'), bg_surface=_c('#ffffff'), bg_surface_2=_c('#f3f4f6'),
+        border=_c('#d1d5db'), border_soft=_c('#e5e7eb'),
+        text=_c('#1f2937'), text_strong=_c('#000000'), text_muted=_c('#6b7280'),
+        accent=_c('#111827'), accent_text=_c('#ffffff'),
+        zebra=_c('#f9fafb'), header_mode='plain',
+    ),
+    # Candidate 3 — bold solid header band, white body (letterhead feel).
+    'white-band': Theme(
+        key='white-band', label='Bold Band',
+        bg_page=_c('#ffffff'), bg_surface=_c('#ffffff'), bg_surface_2=_c('#f8fafc'),
+        border=_c('#e2e8f0'), border_soft=_c('#eef1f5'),
+        text=_c('#334155'), text_strong=_c('#0f172a'), text_muted=_c('#64748b'),
+        accent=_c('#1e293b'), accent_text=_c('#ffffff'),
+        zebra=_c('#f8fafc'), header_mode='band', header_divider=_c('#475569'),
+    ),
+}
+DEFAULT_THEME = 'classic'
 
 
 @dataclass
@@ -105,45 +165,71 @@ class ReportSpec:
     brand: str = 'WEALTH TRACKER'
 
 
-def render_report_pdf(buffer: IO[bytes], spec: ReportSpec) -> None:
+def render_report_pdf(buffer: IO[bytes], spec: ReportSpec, theme: Union[str, Theme] = DEFAULT_THEME) -> None:
+    th = theme if isinstance(theme, Theme) else THEMES.get(theme, THEMES[DEFAULT_THEME])
     page_w, page_h = A4
     L, R, T, B = 14 * mm, 14 * mm, 22 * mm, 18 * mm
 
     def page_chrome(canvas, doc):
         canvas.saveState()
-        # Warm parchment canvas
-        canvas.setFillColor(BG_PAGE)
+        canvas.setFillColor(th.bg_page)
         canvas.rect(0, 0, page_w, page_h, fill=1, stroke=0)
-        # Orange accent stripe (4pt) at the very top
-        canvas.setFillColor(ACCENT)
-        canvas.rect(0, page_h - 4, page_w, 4, fill=1, stroke=0)
-        # Sage-cream header band
-        canvas.setFillColor(BG_SURFACE_2)
-        canvas.rect(0, page_h - T + 2, page_w, T - 6, fill=1, stroke=0)
+
+        if th.header_mode == 'classic':
+            # Orange accent stripe (4pt) at the very top
+            canvas.setFillColor(th.accent)
+            canvas.rect(0, page_h - 4, page_w, 4, fill=1, stroke=0)
+            # Soft header band
+            canvas.setFillColor(th.bg_surface_2)
+            canvas.rect(0, page_h - T + 2, page_w, T - 6, fill=1, stroke=0)
+            brand_color = th.text_strong
+            title_color = stamp_color = th.text_muted
+            divider = th.header_divider or th.border_soft
+        elif th.header_mode == 'band':
+            # Solid colour block across the whole header zone
+            canvas.setFillColor(th.accent)
+            canvas.rect(0, page_h - T, page_w, T, fill=1, stroke=0)
+            brand_color = title_color = stamp_color = th.accent_text
+            divider = th.header_divider or th.accent_text
+        else:  # 'plain' — white page, thin accent rule, no band
+            canvas.setFillColor(th.accent)
+            canvas.rect(0, page_h - 2, page_w, 2, fill=1, stroke=0)
+            brand_color = th.text_strong
+            title_color = stamp_color = th.text_muted
+            divider = th.header_divider or th.border_soft
+
         # Wordmark + title.  The brand width varies (AITEX is 5 chars, IBRAHIM
         # TRADERS is 15), so measure it and offset the title with a fixed gap —
         # otherwise long brands collide with the title text.
-        canvas.setFillColor(TEXT_STRONG)
+        canvas.setFillColor(brand_color)
         canvas.setFont('Helvetica-Bold', 11)
         canvas.drawString(L, page_h - 14, spec.brand)
         brand_w = canvas.stringWidth(spec.brand, 'Helvetica-Bold', 11)
-        canvas.setFillColor(TEXT_MUTED)
+        canvas.setFillColor(title_color)
         canvas.setFont('Helvetica', 8.5)
         # Vertical separator + 10pt gap on each side of it.
         sep_x = L + brand_w + 10
-        canvas.setStrokeColor(BORDER_SOFT)
+        canvas.setStrokeColor(divider)
         canvas.setLineWidth(0.5)
         canvas.line(sep_x, page_h - 20, sep_x, page_h - 9)
         canvas.drawString(sep_x + 10, page_h - 14, spec.title)
         # Generated timestamp (right)
         stamp = f"{spec.generated_label} {datetime.now().strftime('%b %d, %Y · %H:%M')}"
+        canvas.setFillColor(stamp_color)
         canvas.drawRightString(page_w - R, page_h - 14, stamp)
+
+        if th.header_mode == 'plain':
+            # No colour block to imply the boundary — draw one explicitly.
+            canvas.setStrokeColor(th.border_soft)
+            canvas.setLineWidth(0.5)
+            canvas.line(L, page_h - T + 2, page_w - R, page_h - T + 2)
+
         # Footer rule
-        canvas.setStrokeColor(BORDER_SOFT)
+        canvas.setStrokeColor(th.border_soft)
         canvas.setLineWidth(0.5)
         canvas.line(L, B - 4, page_w - R, B - 4)
         # Footer text
-        canvas.setFillColor(TEXT_MUTED)
+        canvas.setFillColor(th.text_muted)
         canvas.setFont('Helvetica', 8.5)
         canvas.drawRightString(page_w - R, B - 12, f"Page {doc.page}")
         if spec.footer_subtitle:
@@ -160,28 +246,29 @@ def render_report_pdf(buffer: IO[bytes], spec: ReportSpec) -> None:
     doc.addPageTemplates([
         PageTemplate(id='main', frames=[frame], onPage=page_chrome),
     ])
-    doc.build(_build_story(spec, content_w=page_w - L - R))
+    doc.build(_build_story(spec, content_w=page_w - L - R, theme=th))
 
 
-def _build_story(spec: ReportSpec, *, content_w):
+def _build_story(spec: ReportSpec, *, content_w, theme: Theme):
+    th = theme
     title_style = ParagraphStyle(
         'Title', fontName='Helvetica-Bold', fontSize=22, leading=26,
-        textColor=TEXT_STRONG, spaceAfter=2,
+        textColor=th.text_strong, spaceAfter=2,
     )
     subtitle_style = ParagraphStyle(
         'Subtitle', fontName='Helvetica', fontSize=10, leading=14,
-        textColor=TEXT_MUTED, spaceAfter=10,
+        textColor=th.text_muted, spaceAfter=10,
     )
     section_style = ParagraphStyle(
         'Section', fontName='Helvetica-Bold', fontSize=11, leading=13,
-        textColor=TEXT_STRONG, spaceBefore=10, spaceAfter=6,
+        textColor=th.text_strong, spaceBefore=10, spaceAfter=6,
     )
     section_style_keep = ParagraphStyle(
         'SectionKeep', parent=section_style, keepWithNext=1,
     )
     body_style = ParagraphStyle(
         'Body', fontName='Helvetica', fontSize=9.5, leading=13,
-        textColor=TEXT, spaceAfter=8,
+        textColor=th.text, spaceAfter=8,
     )
 
     story = [Paragraph(spec.title, title_style)]
@@ -190,7 +277,7 @@ def _build_story(spec: ReportSpec, *, content_w):
             ' &nbsp;·&nbsp; '.join(spec.subtitle_parts), subtitle_style,
         ))
     if spec.kpis:
-        story.append(_kpi_strip(spec.kpis, content_w))
+        story.append(_kpi_strip(spec.kpis, content_w, th))
         story.append(Spacer(1, 10))
 
     for entry in spec.sections:
@@ -202,10 +289,10 @@ def _build_story(spec: ReportSpec, *, content_w):
         elif isinstance(entry, ParagraphBlock):
             story.append(Paragraph(entry.html, body_style))
         elif isinstance(entry, TableSpec):
-            story.append(_data_table(entry, content_w))
+            story.append(_data_table(entry, content_w, th))
             story.append(Spacer(1, 8))
         elif isinstance(entry, CalloutCard):
-            story.append(_callout_card(entry, content_w))
+            story.append(_callout_card(entry, content_w, th))
             story.append(Spacer(1, 6))
         elif isinstance(entry, ImageBlock):
             img_flowable = _image_block(entry, content_w)
@@ -259,7 +346,7 @@ def _image_block(blk: 'ImageBlock', content_w):
     if blk.caption:
         cap_style = ParagraphStyle(
             'img-cap', fontName='Helvetica', fontSize=9, leading=12,
-            textColor=TEXT_MUTED, alignment=TA_CENTER,
+            textColor=colors.HexColor('#65675e'), alignment=TA_CENTER,
         )
         t = Table([[img], [Paragraph(blk.caption, cap_style)]], colWidths=[content_w])
     else:
@@ -268,14 +355,15 @@ def _image_block(blk: 'ImageBlock', content_w):
     return t
 
 
-def _kpi_strip(kpis, content_w):
+def _kpi_strip(kpis, content_w, theme: Theme):
+    th = theme
     label_s = ParagraphStyle('kl', fontName='Helvetica-Bold', fontSize=7.5,
-        leading=10, textColor=TEXT_MUTED, spaceAfter=2)
+        leading=10, textColor=th.text_muted, spaceAfter=2)
     val_s = ParagraphStyle('kv', fontName='Helvetica-Bold', fontSize=14,
-        leading=16, textColor=TEXT_STRONG)
+        leading=16, textColor=th.text_strong)
     val_neg = ParagraphStyle('kvn', parent=val_s, textColor=NEG)
     sub_s = ParagraphStyle('ks', fontName='Helvetica', fontSize=8,
-        leading=10, textColor=TEXT_MUTED, spaceBefore=2)
+        leading=10, textColor=th.text_muted, spaceBefore=2)
 
     def cell(k):
         return [
@@ -290,8 +378,8 @@ def _kpi_strip(kpis, content_w):
     col_w = (content_w - (n - 1) * 3) / n
     t = Table([cells], colWidths=[col_w] * n, rowHeights=[58])
     t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), BG_SURFACE),
-        *[('BOX', (i, 0), (i, 0), 0.5, BORDER) for i in range(n)],
+        ('BACKGROUND', (0, 0), (-1, -1), th.bg_surface),
+        *[('BOX', (i, 0), (i, 0), 0.5, th.border) for i in range(n)],
         ('LEFTPADDING',   (0, 0), (-1, -1), 10),
         ('RIGHTPADDING',  (0, 0), (-1, -1), 10),
         ('TOPPADDING',    (0, 0), (-1, -1), 9),
@@ -301,15 +389,16 @@ def _kpi_strip(kpis, content_w):
     return t
 
 
-def _data_table(spec, content_w):
+def _data_table(spec, content_w, theme: Theme):
+    th = theme
     header_s   = ParagraphStyle('th', fontName='Helvetica-Bold', fontSize=8,
-        leading=10, textColor=TEXT_MUTED)
+        leading=10, textColor=th.text_muted)
     header_s_r = ParagraphStyle('thr', parent=header_s, alignment=TA_RIGHT)
     cell_s     = ParagraphStyle('td', fontName='Helvetica', fontSize=8.5,
-        leading=11, textColor=TEXT, wordWrap='LTR')
+        leading=11, textColor=th.text, wordWrap='LTR')
     cell_s_r   = ParagraphStyle('tdr', parent=cell_s, alignment=TA_RIGHT)
     tot_s      = ParagraphStyle('tot', parent=cell_s, fontName='Helvetica-Bold',
-        textColor=TEXT_STRONG)
+        textColor=th.text_strong)
     tot_s_r    = ParagraphStyle('totr', parent=tot_s, alignment=TA_RIGHT)
 
     def hdr(text, i):
@@ -318,11 +407,12 @@ def _data_table(spec, content_w):
     def body(text, i):
         if i in spec.sign_color_cols and isinstance(text, str):
             color_hex = '#c0392b' if text.startswith('-') else (
-                        '#2e7d32' if text.startswith('+') else '#4d4f46')
-            return Paragraph(
-                f"<font color='{color_hex}'>{text}</font>",
-                cell_s_r if i in spec.num_cols else cell_s,
-            )
+                        '#2e7d32' if text.startswith('+') else None)
+            if color_hex:
+                return Paragraph(
+                    f"<font color='{color_hex}'>{text}</font>",
+                    cell_s_r if i in spec.num_cols else cell_s,
+                )
         return Paragraph(str(text) if text is not None else '',
                          cell_s_r if i in spec.num_cols else cell_s)
     def tot(text, i):
@@ -338,25 +428,24 @@ def _data_table(spec, content_w):
     body_last = len(data) - (2 if spec.totals_row else 1)
 
     style = [
-        ('BACKGROUND',    (0, 0), (-1, 0), BG_SURFACE_2),
-        ('LINEBELOW',     (0, 0), (-1, 0), 0.5, BORDER),
-        ('BACKGROUND',    (0, 1), (-1, body_last), BG_SURFACE),
+        ('BACKGROUND',    (0, 0), (-1, 0), th.bg_surface_2),
+        ('LINEBELOW',     (0, 0), (-1, 0), 0.5, th.border),
+        ('BACKGROUND',    (0, 1), (-1, body_last), th.bg_surface),
         ('LEFTPADDING',   (0, 0), (-1, -1), 7),
         ('RIGHTPADDING',  (0, 0), (-1, -1), 7),
         ('TOPPADDING',    (0, 0), (-1, -1), 5),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
         ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-        ('BOX',           (0, 0), (-1, -1), 0.5, BORDER),
-        ('LINEBELOW',     (0, 1), (-1, body_last), 0.25, BORDER_SOFT),
+        ('BOX',           (0, 0), (-1, -1), 0.5, th.border),
+        ('LINEBELOW',     (0, 1), (-1, body_last), 0.25, th.border_soft),
     ]
     # Zebra rows
     for r in range(2, body_last + 1, 2):
-        style.append(('BACKGROUND', (0, r), (-1, r),
-                      colors.HexColor('#f7f7f1')))
+        style.append(('BACKGROUND', (0, r), (-1, r), th.zebra))
     if spec.totals_row:
         style.extend([
-            ('BACKGROUND',    (0, -1), (-1, -1), BG_SURFACE_2),
-            ('LINEABOVE',     (0, -1), (-1, -1), 0.75, BORDER),
+            ('BACKGROUND',    (0, -1), (-1, -1), th.bg_surface_2),
+            ('LINEABOVE',     (0, -1), (-1, -1), 0.75, th.border),
             ('TOPPADDING',    (0, -1), (-1, -1), 8),
             ('BOTTOMPADDING', (0, -1), (-1, -1), 8),
         ])
@@ -365,12 +454,13 @@ def _data_table(spec, content_w):
     return t
 
 
-def _callout_card(c, content_w):
+def _callout_card(c, content_w, theme: Theme):
+    th = theme
     label_s = ParagraphStyle('cl-l', fontName='Helvetica-Bold', fontSize=8,
-        leading=10, textColor=TEXT_MUTED)
+        leading=10, textColor=th.text_muted)
     val_s = ParagraphStyle('cl-v', fontName='Helvetica-Bold', fontSize=18,
         leading=20,
-        textColor=NEG if c.negative else TEXT_STRONG,
+        textColor=NEG if c.negative else th.text_strong,
         alignment=TA_RIGHT)
     value_html = c.value + (f"  <font size='10'>{c.suffix}</font>" if c.suffix else '')
     t = Table([[
@@ -378,9 +468,9 @@ def _callout_card(c, content_w):
         Paragraph(value_html, val_s),
     ]], colWidths=[content_w * 0.5, content_w * 0.5])
     t.setStyle(TableStyle([
-        ('BACKGROUND',    (0, 0), (-1, -1), BG_SURFACE),
-        ('LINEBEFORE',    (0, 0), (0, 0),  3, ACCENT),
-        ('BOX',           (0, 0), (-1, -1), 0.5, BORDER),
+        ('BACKGROUND',    (0, 0), (-1, -1), th.bg_surface),
+        ('LINEBEFORE',    (0, 0), (0, 0),  3, th.accent),
+        ('BOX',           (0, 0), (-1, -1), 0.5, th.border),
         ('LEFTPADDING',   (0, 0), (-1, -1), 14),
         ('RIGHTPADDING',  (0, 0), (-1, -1), 14),
         ('TOPPADDING',    (0, 0), (-1, -1), 12),

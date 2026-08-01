@@ -10,7 +10,6 @@
 
   {{ filter_bar_open(method='get') }}
     <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
-class="flex items-end gap-4 flex-wrap">
       <div>
         <label class="field-label field-label-required">Vendor</label>
         <select name="vendor_id" class="min-w-[260px]" onchange="if(this.value) this.form.submit();">
@@ -24,6 +23,18 @@ class="flex items-end gap-4 flex-wrap">
       <a href="/trade/reports/vendor-pending/{{ selected.vendor_id }}.pdf" target="_blank" class="btn-secondary">Export PDF</a>
       {% endif %}
   {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/vendor-pending') }}
+
+  {% if selected %}
+  <div class="wt-panel p-4">
+    <div class="text-xs font-bold uppercase tracking-wide wt-mute mb-1">Trying a new document look</div>
+    <p class="text-sm wt-body mb-3">Three candidate redesigns, all white-background — open each, pick a favorite, and it becomes the look for every report/invoice in the app. The current design stays saved under "Open as Image" above, so nothing is lost either way.</p>
+    <div class="flex flex-wrap gap-2">
+      <a href="/trade/reports/vendor-pending/{{ selected.vendor_id }}.pdf?img=1&theme=white-indigo" target="_blank" class="btn-secondary">Open as Image 1 — Clean Indigo</a>
+      <a href="/trade/reports/vendor-pending/{{ selected.vendor_id }}.pdf?img=1&theme=white-mono" target="_blank" class="btn-secondary">Open as Image 2 — Monochrome Ledger</a>
+      <a href="/trade/reports/vendor-pending/{{ selected.vendor_id }}.pdf?img=1&theme=white-band" target="_blank" class="btn-secondary">Open as Image 3 — Bold Band</a>
+    </div>
+  </div>
+  {% endif %}
 
   {% if selected %}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -43,7 +54,7 @@ class="flex items-end gap-4 flex-wrap">
 
   {% for tr in selected.trades %}
   <div class="wt-panel">
-    <div class=" border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
       <div>
         <a href="/trade/trades/{{ tr.trade_id }}" class="font-mono text-sm font-semibold wt-info hover:text-indigo-900">{{ tr.trade_ref }}</a>
         <span class="text-sm wt-mute ml-2">ordered {{ tr.trade_date }} · {{ tr.days_open }} days open · → {{ tr.customer_name }}</span>

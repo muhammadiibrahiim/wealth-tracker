@@ -26,12 +26,12 @@
 
   {% if selected %}
   <div class="wt-panel p-4">
-    <div class="text-xs font-bold uppercase tracking-wide wt-mute mb-1">Trying a new document look</div>
-    <p class="text-sm wt-body mb-3">Three candidate redesigns, all white-background — open each, pick a favorite, and it becomes the look for every report/invoice in the app. The current design stays saved under "Open as Image" above, so nothing is lost either way.</p>
+    <div class="text-xs font-bold uppercase tracking-wide wt-mute mb-1">Trying a new document structure (not just color)</div>
+    <p class="text-sm wt-body mb-3">Three different document skeletons — where the title sits, how KPIs are shown, how the total is presented — all in the white/indigo color from last round so structure is the only thing changing. Pick a favorite and it becomes the structure for every report/invoice in the app. The current design stays saved under "Open as Image" above either way.</p>
     <div class="flex flex-wrap gap-2">
-      <a href="/trade/reports/vendor-pending/{{ selected.vendor_id }}.pdf?img=1&theme=white-indigo" target="_blank" class="btn-secondary">Open as Image 1 — Clean Indigo</a>
-      <a href="/trade/reports/vendor-pending/{{ selected.vendor_id }}.pdf?img=1&theme=white-mono" target="_blank" class="btn-secondary">Open as Image 2 — Monochrome Ledger</a>
-      <a href="/trade/reports/vendor-pending/{{ selected.vendor_id }}.pdf?img=1&theme=white-band" target="_blank" class="btn-secondary">Open as Image 3 — Bold Band</a>
+      <a href="/trade/reports/vendor-pending/{{ selected.vendor_id }}.pdf?img=1&theme=white-indigo&layout=invoice" target="_blank" class="btn-secondary">Open as Image 1 — Invoice Letterhead</a>
+      <a href="/trade/reports/vendor-pending/{{ selected.vendor_id }}.pdf?img=1&theme=white-indigo&layout=sidebar" target="_blank" class="btn-secondary">Open as Image 2 — Sidebar Statement</a>
+      <a href="/trade/reports/vendor-pending/{{ selected.vendor_id }}.pdf?img=1&theme=white-indigo&layout=memo" target="_blank" class="btn-secondary">Open as Image 3 — Minimal Memo</a>
     </div>
   </div>
   {% endif %}

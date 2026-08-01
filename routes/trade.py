@@ -3186,12 +3186,13 @@ async def reports_vendor_pending(
 
 @router.get("/reports/vendor-pending/{vendor_id}.pdf")
 async def reports_vendor_pending_pdf(
-    vendor_id: int, theme: Optional[str] = Query(None), session: Session = Depends(get_session),
+    vendor_id: int, theme: Optional[str] = Query(None), layout: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
 ):
     from io import BytesIO
     from services.pdf_helper import (
         render_report_pdf, ReportSpec, KpiSpec, TableSpec, SectionTitle, ParagraphBlock, CalloutCard,
-        THEMES, DEFAULT_THEME,
+        THEMES, DEFAULT_THEME, LAYOUTS, DEFAULT_LAYOUT,
     )
     user_id = DEFAULT_USER_ID
     vendor = PartyService.get(session, user_id, vendor_id)
@@ -3279,7 +3280,8 @@ async def reports_vendor_pending_pdf(
         footer_subtitle="Ibrahim Traders · pending goods",
         generated_label="As of",
         brand="IBRAHIM TRADERS",
-    ), theme=theme if theme in THEMES else DEFAULT_THEME)
+    ), theme=theme if theme in THEMES else DEFAULT_THEME,
+       layout=layout if layout in LAYOUTS else DEFAULT_LAYOUT)
     fname = f"Pending-Goods-{vendor.name.replace(' ','_')}.pdf"
     return Response(content=buf.getvalue(), media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="{fname}"'})

@@ -1,6 +1,6 @@
 /* ============================================================
    Wealth Tracker — Design System
-   PostHog-inspired. Loaded on every page from base.html.
+   Aitex ERP visual language. Loaded on every page from base.html.
 
    Sections:
      1. Tokens              8. Callouts & empty states
@@ -17,37 +17,44 @@
 /* ============================================================
    1. TOKENS
    ============================================================ */
+/* Tokens are measured from the Aitex ERP:
+     accounting/src/accounts/static/css/aitex-design.css
+     accounting/src/accounts/templates/_sidebar_styles.html
+   Wealth Tracker is the same product family and must read as the same product. */
 :root {
-  --canvas:       #eeefe9;
+  --canvas:       #fdfdf8;   /* ERP page bg — warm near-white, NOT cream */
   --surface-card: #ffffff;
-  --surface-soft: #e5e7e0;
-  --surface-dark: #23251d;
+  --surface-soft: #eeefe9;   /* table headers, inset rows */
+  --surface-dark: #1e1f23;   /* ERP sidebar / CTA */
   --ink:          #23251d;
   --body:         #4d4f46;
-  --mute:         #6c6e63;
+  --mute:         #65675e;
   --hairline:     #bfc1b7;
-  --hairline-soft:#dcdfd2;
-  --brand:        #f7a501;
-  --brand-pressed:#dd9001;
-  --brand-active: #b17816;
-  --link:         #1d4ed8;
-  --accent-green: #2c8c66;
-  --accent-red:   #cd4239;
-  --accent-blue:  #2c84e0;
+  --hairline-soft:#bfc1b7;   /* ERP uses ONE border weight */
+  --table-zebra:  #e6e7e0;   /* table row banding — dedicated, so it can move independently of --surface-soft (used everywhere else) */
+  --table-row-line:#9a9d92;  /* table row divider — dedicated, darker than the general hairline so dense ledgers stay easy to track row-by-row */
+  --brand:        #F54E00;   /* ERP accent — Posthog orange */
+  --brand-pressed:#d84400;
+  --brand-active: #F7A501;   /* ERP accent-2, amber gold */
+  --cta:          #1e1f23;   /* primary button: near-black, white text */
+  --cta-pressed:  #0f1013;
+  --link:         #2563eb;
+  --accent-green: #2e7d32;
+  --accent-red:   #c0392b;
+  --accent-blue:  #2563eb;
 
-  /* Added by the design-system extraction */
-  --surface-doc:  #fcfcfa;
-  --ash:          #9b9c92;
+  --surface-doc:  #ffffff;
+  --ash:          #9ea096;
   --stone:        #b6b7af;
   --accent-warn:  #b17816;
-  --accent-info:  #2c84e0;
+  --accent-info:  #2563eb;
   --radius-sm:    4px;
   --radius:       6px;
   --radius-lg:    10px;
-  --pos-bg:       #d9eddf;
-  --neg-bg:       #f7d6d3;
-  --warn-bg:      #fdebc7;
-  --info-bg:      #dceaf6;
+  --pos-bg:       #e8f3ec;
+  --neg-bg:       #fbe8e6;
+  --warn-bg:      #fbf0d6;
+  --info-bg:      #e3edff;
 }
 
 html, body {
@@ -72,14 +79,14 @@ html, body {
 }
 #ux-progress-bar.active { opacity: 1; }
 
-/* ─── Sidebar — PostHog dark surface, BRAND yellow accent on active ─── */
+/* ─── Sidebar — ERP dark surface, SOLID orange fill on active ─── */
 .sidebar {
   position: fixed; left: 0; top: 0; height: 100vh;
   width: 64px; z-index: 1000;
   background: var(--surface-dark);
   transition: width 0.2s ease;
   display: flex; flex-direction: column;
-  border-right: 1px solid #1a1c15;
+  border-right: 1px solid #2a2c30;
 }
 .sidebar.expanded { width: 260px; }
 .sidebar.expanded .side-text { display: inline; }
@@ -87,13 +94,13 @@ html, body {
 .side-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 18px 16px; min-height: 64px;
-  border-bottom: 1px solid #1a1c15;
+  border-bottom: 1px solid #2a2c30;
 }
 .side-logo { display: flex; align-items: center; gap: 10px; color: #fff; }
 .side-logo-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 32px; height: 32px; min-width: 32px; flex-shrink: 0;
-  color: var(--brand);
+  color: #818cf8;                        /* ERP .sidebar-logo-icon */
 }
 .side-logo-text {
   font-size: 17px; font-weight: 800; color: #fff;
@@ -106,13 +113,13 @@ html, body {
   color: #b6b7af; border-radius: 6px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
-.side-toggle:hover { background: #33342d; color: #fff; }
+.side-toggle:hover { background: #2a2c30; color: #fff; }
 .sidebar:not(.expanded) .side-toggle { transform: rotate(180deg); }
 
 .side-nav { flex: 1; overflow-y: auto; padding: 12px 8px;
-  scrollbar-width: thin; scrollbar-color: #33342d transparent; }
+  scrollbar-width: thin; scrollbar-color: #2a2c30 transparent; }
 .side-nav::-webkit-scrollbar { width: 6px; }
-.side-nav::-webkit-scrollbar-thumb { background: #33342d; border-radius: 3px; }
+.side-nav::-webkit-scrollbar-thumb { background: #2a2c30; border-radius: 3px; }
 
 .side-item, .side-parent {
   display: flex; align-items: center; gap: 12px;
@@ -122,36 +129,35 @@ html, body {
   transition: all 0.15s ease; border: none; background: transparent;
   width: 100%; text-align: left; cursor: pointer; position: relative;
 }
-.side-item:hover, .side-parent:hover { background: #33342d; color: #fff; }
-.side-item.active, .side-parent.active { color: #fff; background: rgba(247, 165, 1, 0.10); }
-.side-item.active::before, .side-parent.active::before {
-  content: ''; position: absolute; left: -8px; top: 8px; bottom: 8px;
-  width: 3px; background: var(--brand); border-radius: 0 3px 3px 0;
-}
+.side-item:hover, .side-parent:hover { background: #2a2c30; color: #fdfdf8; }
+/* ERP marks the active item with a SOLID accent fill, not a left rule. */
+.side-item.active { color: #fff; background: var(--brand); }
+.side-item.active:hover { background: var(--brand-pressed); color: #fff; }
+/* An expanded PARENT is not the current page — the ERP leaves it unfilled,
+   otherwise two orange blocks stack and neither reads as "you are here". */
+.side-parent.active { color: #fdfdf8; background: transparent; font-weight: 600; }
+.side-parent.active:hover { background: #2a2c30; }
 .side-icon { width: 20px; height: 20px; min-width: 20px; flex-shrink: 0; }
 .side-chev { width: 14px; height: 14px; margin-left: auto; transition: transform 0.2s; }
 .side-parent.expanded .side-chev { transform: rotate(180deg); }
 .side-children {
   display: none; padding-left: 8px; margin-left: 22px;
-  border-left: 1px solid #1a1c15; margin-top: 2px; margin-bottom: 6px;
+  border-left: 1px solid #2a2c30; margin-top: 2px; margin-bottom: 6px;
 }
 .side-parent.expanded + .side-children { display: block; }
 .side-child {
   display: flex; align-items: center; gap: 10px;
   padding: 7px 12px; margin: 1px 0;
-  color: #9b9c92; text-decoration: none;
+  color: #b6b7af; text-decoration: none;
   border-radius: 5px; font-size: 13px; font-weight: 500; position: relative;
 }
-.side-child:hover { background: #33342d; color: #fff; }
-.side-child.active { color: #fff; }
-.side-child.active::before {
-  content: ''; position: absolute; left: -9px; top: 6px; bottom: 6px;
-  width: 2px; background: var(--brand); border-radius: 0 2px 2px 0;
-}
+.side-child:hover { background: #2a2c30; color: #fdfdf8; }
+.side-child.active { color: #fff; background: var(--brand); }
+.side-child.active:hover { background: var(--brand-pressed); color: #fff; }
 .side-child-dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: 0.5; }
 .sidebar:not(.expanded) .side-children,
 .sidebar:not(.expanded) .side-chev { display: none; }
-.side-footer { padding: 12px 16px; border-top: 1px solid #1a1c15; font-size: 12px; color: #9b9c92; }
+.side-footer { padding: 12px 16px; border-top: 1px solid #2a2c30; font-size: 12px; color: #b6b7af; }
 
 /* ─── Main shell ─── */
 .main-shell { margin-left: 64px; transition: margin-left 0.2s ease; min-height: 100vh; }
@@ -168,8 +174,8 @@ html, body {
    ============================================================ */
 .page-title {
   font-family: 'IBM Plex Sans', sans-serif;
-  font-size: 2.25rem; font-weight: 800; color: var(--ink);
-  letter-spacing: -0.025em; line-height: 1.15;
+  font-size: 30px; font-weight: 800; color: var(--ink);
+  letter-spacing: -0.5px; line-height: 1.2;
 }
 .page-subtitle { font-size: 0.9375rem; color: var(--body); margin-top: 0.5rem; line-height: 1.5; }
 h2 {
@@ -181,10 +187,18 @@ h2 {
   font-size: 1.5rem; font-weight: 800; color: var(--ink);
   letter-spacing: -0.02em; line-height: 1.2;
 }
+.wt-section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;
+}
+.wt-section-head .wt-section-title { margin-bottom: 0; }
+.wt-section-actions { display: flex; align-items: center; gap: 0.875rem; flex-wrap: wrap; }
+/* ERP .aitex-h2 — a real heading, not a tiny uppercase eyebrow. */
 .wt-section-title {
   font-family: 'IBM Plex Sans', sans-serif;
-  font-size: 0.75rem; font-weight: 700; color: var(--body);
-  text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 0.75rem;
+  font-size: 20px; font-weight: 700; color: var(--ink);
+  line-height: 1.4; letter-spacing: -0.3px;
+  text-transform: none; margin-bottom: 0.75rem;
 }
 .wt-meta { font-size: 0.8125rem; color: var(--mute); line-height: 1.5; }
 .wt-mono { font-family: 'Source Code Pro', ui-monospace, Menlo, monospace; }
@@ -227,41 +241,52 @@ h2 {
   background: var(--surface-card);
   border: 1px solid var(--hairline-soft);
   border-radius: 6px;
-  padding: 1.25rem 1.25rem;
+  padding: 14px 16px;                    /* ERP .aitex-kpi */
+  min-height: 86px;
+  display: flex; flex-direction: column; gap: 6px;
   min-width: 0;             /* let grid children shrink */
   overflow-wrap: break-word;
 }
+/* ERP .aitex-kpi__label — 11px / 700 / 0.06em / muted */
 .stat-label {
   font-family: 'IBM Plex Sans', sans-serif;
-  font-size: 0.75rem; font-weight: 700; color: var(--body);
-  text-transform: uppercase; letter-spacing: 0; margin-bottom: 0.5rem;
+  font-size: 11px; font-weight: 700; color: var(--ash);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0;
   line-height: 1.33;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .stat-value {
-  font-size: 2.25rem; font-weight: 800; color: var(--ink);
+  /* A figure must never break mid-digit ("1,080,9 / 70"). nowrap forbids the
+     break; clamp() lets the figure scale down in a narrow tile instead of
+     overflowing the card. */
+  font-size: 26px;                       /* ERP .aitex-kpi__value */
+  font-weight: 700; color: var(--ink);
   line-height: 1.1; font-variant-numeric: tabular-nums;
-  letter-spacing: -0.025em;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 .stat-value.neg, .stat-value.cr { color: var(--accent-red); }
-.stat-value .currency { font-size: 1.4rem; font-weight: 700; color: var(--mute); margin-right: 0.25rem; }
-.stat-foot { font-size: 0.75rem; font-weight: 600; color: var(--mute); text-transform: uppercase; margin-top: 0.5rem; }
+.stat-value .currency { font-size: 17px; font-weight: 600; color: var(--mute); margin-right: 0.2rem; }
+.stat-foot { font-size: 12px; font-weight: 400; color: var(--mute); line-height: 1.4; }
 
 /* Compact KPI variant — for strips with 5-6 tiles where the full
    2.25rem stat-value would overflow the column. */
-.stat-card-sm { padding: 1rem 1rem; }
-.stat-card-sm .stat-value { font-size: 1.5rem; line-height: 1.15; }
-.stat-card-sm .stat-value .currency { font-size: 0.95rem; }
-.stat-card-sm .stat-label { font-size: 0.7rem; margin-bottom: 0.375rem; }
-.stat-card-sm .stat-foot { font-size: 0.65rem; margin-top: 0.375rem; }
+.stat-card-sm { padding: 12px 14px; min-height: 78px; }
+.stat-card-sm .stat-value { font-size: 20px; line-height: 1.15; }
+.stat-card-sm .stat-value .currency { font-size: 13px; }
+.stat-card-sm .stat-label { font-size: 11px; }
+.stat-card-sm .stat-foot { font-size: 11px; }
 
 /* Card border accents — replaces style="border-color:#…". §C2 */
-.wt-card-pos   { border-color: var(--accent-green) !important; }
-.wt-card-neg   { border-color: var(--accent-red)   !important; }
-.wt-card-warn  { border-color: var(--accent-warn)  !important; }
-.wt-card-info  { border-color: var(--accent-info)  !important; }
-.wt-card-brand { border-color: var(--brand)        !important; }
-.wt-card-em    { border-width: 2px !important; }
+/* The ERP never rings a card in colour — it marks it with a 4px left rule.
+   A grid of fully-outlined cards reads as noise; this reads as emphasis. */
+.wt-card-pos   { border-left: 4px solid var(--accent-green); }
+.wt-card-neg   { border-left: 4px solid var(--accent-red);   }
+.wt-card-warn  { border-left: 4px solid var(--accent-warn);  }
+.wt-card-info  { border-left: 4px solid var(--accent-info);  }
+.wt-card-brand { border-left: 4px solid var(--brand);        }
+.wt-card-em    { border-left: 4px solid var(--ink);          }
 
 /* Clickable KPI (many tiles drill through to a report) */
 a.stat-card { text-decoration: none; display: block;
@@ -280,13 +305,13 @@ a.stat-card:hover { border-color: var(--ink);
 .btn-primary {
   display: inline-flex; align-items: center; gap: 0.5rem;
   padding: 8px 16px; height: 40px;
-  background: var(--brand); color: var(--ink);
+  background: var(--cta); color: #ffffff;
   border: none; border-radius: 6px;
   font-size: 0.875rem; font-weight: 700; line-height: 1;
   transition: background 0.15s ease;
 }
-.btn-primary:hover { background: var(--brand-pressed); }
-.btn-primary:active { background: var(--brand-active); }
+.btn-primary:hover { background: var(--brand); }
+.btn-primary:active { background: var(--brand-pressed); }
 .btn-secondary {
   display: inline-flex; align-items: center; gap: 0.5rem;
   padding: 8px 16px; height: 40px;
@@ -325,7 +350,7 @@ a.stat-card:hover { border-color: var(--ink);
 a.btn-primary, a.btn-secondary, a.btn-danger, a.btn-ghost {
   text-decoration: none; color: inherit;
 }
-a.btn-primary { color: var(--ink); }
+a.btn-primary { color: #ffffff; }
 a.btn-danger  { color: #fff; }
 
 
@@ -337,18 +362,18 @@ a.btn-danger  { color: #fff; }
   border-radius: 999px; font-size: 0.7rem; font-weight: 700;
   letter-spacing: 0.04em;
 }
-.pill-dr { background: #d9eddf; color: #1f6b4e; }
-.pill-cr { background: #f7d6d3; color: #a52e26; }
+.pill-dr { background: var(--pos-bg); color: var(--accent-green); }
+.pill-cr { background: var(--neg-bg); color: var(--accent-red); }
 
 .wt-pill {
   display: inline-flex; align-items: center; padding: 2px 9px;
   border-radius: 999px; font-size: 0.7rem; font-weight: 700;
   letter-spacing: 0.04em; white-space: nowrap; line-height: 1.6;
 }
-.wt-pill-pos     { background: var(--pos-bg);  color: #1f6b4e; }
-.wt-pill-neg     { background: var(--neg-bg);  color: #a52e26; }
+.wt-pill-pos     { background: var(--pos-bg);  color: var(--accent-green); }
+.wt-pill-neg     { background: var(--neg-bg);  color: var(--accent-red); }
 .wt-pill-warn    { background: var(--warn-bg); color: #7a5210; }
-.wt-pill-info    { background: var(--info-bg); color: #0a3088; }
+.wt-pill-info    { background: var(--info-bg); color: #1e40af; }
 .wt-pill-neutral { background: var(--surface-soft); color: var(--body); }
 .wt-pill-strong  { background: var(--ink); color: #fff; }
 
@@ -407,6 +432,25 @@ a.btn-danger  { color: #fff; }
   display: flex; align-items: center; justify-content: space-between;
   gap: 0.75rem; flex-wrap: wrap;
 }
+/* Title + a paragraph of explanation belong stacked, not side-by-side —
+   the default flex head squeezes long copy into a thin right-hand column. */
+.wt-panel__head--stack {
+  display: block;
+}
+.wt-panel__head--stack > p { margin-top: 0.25rem; max-width: 90ch; }
+
+/* Row list inside a panel — one hairline between rows, none at the edges. */
+.wt-divide-rows > * + * { border-top: 1px solid var(--hairline-soft); }
+
+/* A quiet inset list for rows nested inside a row. Using .wt-panel here
+   puts a white card inside a white card, which reads as clutter. */
+.wt-subrows {
+  background: var(--surface-soft);
+  border-radius: var(--radius);
+  padding: 2px 12px;
+}
+.wt-subrows > * + * { border-top: 1px dashed var(--hairline); }
+
 .wt-panel__body { padding: 1.25rem; }
 .wt-panel__body--flush { padding: 0; }
 
@@ -436,10 +480,39 @@ a.btn-danger  { color: #fff; }
 .wt-nav-card:hover { border-color: var(--ink);
                box-shadow: 0 4px 8px -2px rgba(35,37,29,0.06); }
 .wt-nav-card h3 { font-size: 1rem; font-weight: 700; color: var(--ink); margin: 0; }
-.wt-nav-card p  { margin: .5rem 0 0; }
+.wt-nav-card p  { margin: .375rem 0 0; }
 .wt-nav-card__go { margin-top: .75rem; font-weight: 600; }
-.wt-nav-card:hover .wt-nav-card__go { color: var(--brand-active); }
+.wt-nav-card:hover .wt-nav-card__go { color: var(--brand); }
+.wt-nav-card__row  { display: flex; align-items: flex-start; gap: 1rem; }
+.wt-nav-card__text { min-width: 0; }
 
+/* ─── ERP hub icon — 40x40 pastel square, 20x20 -600 glyph ─── */
+.wt-hub-icon {
+  width: 40px; height: 40px; min-width: 40px; flex-shrink: 0;
+  border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.wt-hub-icon svg { width: 20px; height: 20px; }
+.wt-hub-icon--blue   { background: #dbeafe; color: #2563eb; }
+.wt-hub-icon--green  { background: #dcfce7; color: #2e7d32; }
+.wt-hub-icon--purple { background: #f3e8ff; color: #9333ea; }
+.wt-hub-icon--orange { background: #ffedd5; color: #F54E00; }
+.wt-hub-icon--indigo { background: #e0e7ff; color: #4f46e5; }
+.wt-hub-icon--red    { background: #fee2e2; color: #c0392b; }
+.wt-hub-icon--amber  { background: #fef3c7; color: #b17816; }
+
+/* ─── ERP section action link: text-xs, blue-600, underline on hover ─── */
+.wt-section-link {
+  font-size: 0.75rem; font-weight: 500; color: var(--link);
+  text-decoration: none; white-space: nowrap;
+}
+.wt-section-link:hover { text-decoration: underline; color: #1d4ed8; }
+
+
+.wt-line-hint {
+  font-size: 0.75rem; color: var(--ash); margin-top: 4px;
+  line-height: 1.35; min-height: 2.1em;   /* equal height so cells stay level */
+}
 
 /* ============================================================
    10. TABLES
@@ -469,17 +542,29 @@ a.btn-danger  { color: #fff; }
   position: sticky; top: 0; z-index: 1;
 }
 .wt-table tbody td {
-  padding: 1rem 1.25rem; font-size: 0.9375rem; color: var(--ink);
+  padding: 1.1rem 1.25rem; font-size: 0.9375rem; color: var(--ink);
   vertical-align: middle; line-height: 1.4;
-  border-top: 1px solid var(--hairline-soft);
+  /* A real, visible rule between every row — dedicated darker tone
+     (--table-row-line), not the general --hairline, since a thin
+     near-white-adjacent border still read as "no divider at all" on a
+     dense multi-column ledger. */
+  border-top: 1px solid var(--table-row-line);
 }
-.wt-table tbody tr:hover td { background: #faf9f5; }
+/* Zebra striping. The eye needs a continuous band to follow from the first
+   column to the last; without it a wide ledger row dissolves halfway across.
+   Dedicated --table-zebra tone (a step darker than --surface-soft, which is
+   used all over the rest of the UI and shouldn't move) so banding actually
+   reads at a glance instead of blending into the white rows next to it.
+   Must sit below the semantic row colours (group/total), hence the
+   tbody-scoped overrides further down. */
+.wt-table tbody tr:nth-child(even) td { background: var(--table-zebra); }
+.wt-table tbody tr:hover td { background: #dcdfd3; }
 .wt-table th.num, .wt-table td.num {
   text-align: right; white-space: nowrap;
   font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
 }
 .wt-table th.center, .wt-table td.center { text-align: center; }
-.wt-table tfoot td, .wt-table tr.wt-total td {
+.wt-table tfoot td, .wt-table tbody tr.wt-total td {
   background: var(--surface-soft);
   border-top: 2px solid var(--hairline);
   font-weight: 700; color: var(--ink);
@@ -489,9 +574,15 @@ a.btn-danger  { color: #fff; }
 .wt-table--dense thead th { padding: 0.625rem 0.875rem; }
 .wt-table--dense tbody td { padding: 0.625rem 0.875rem; font-size: 0.875rem; }
 /* Group header row inside a table */
-.wt-table tr.wt-group td {
-  background: var(--surface-doc); font-weight: 700; color: var(--ink);
+/* A group header must read STRONGER than the zebra tint, not weaker —
+   --surface-doc is white, which made it recede behind the striped rows. */
+/* A group header must out-weigh BOTH the white rows and the zebra tint, so
+   it needs its own darker step — using --surface-soft made it identical to
+   the stripe and it read as just another row. */
+.wt-table tbody tr.wt-group td {
+  background: #e5e7e0; font-weight: 700; color: var(--ink);
   font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.02em;
+  border-top: 2px solid var(--hairline);
 }
 
 
@@ -512,12 +603,23 @@ a.btn-danger  { color: #fff; }
   outline: none !important; border-color: var(--ink) !important;
   box-shadow: 0 0 0 3px rgba(35, 37, 29, 0.12) !important;
 }
+/* FIXED, not absolute. An absolutely-positioned dropdown is clipped by any
+   ancestor with overflow:hidden — .wt-panel, .wt-table-wrap — and by the
+   scroll box .wt-table-scroll. Fixed positioning escapes every one of them;
+   JS anchors it to the input's viewport rect. z-index clears modals (1100)
+   and the palette (1200) so it works inside those too. */
 .ss-dropdown {
-  position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
+  position: fixed; z-index: 1250;
   background: var(--surface-card); border: 1px solid var(--hairline);
   border-top: none; border-radius: 0 0 6px 6px;
   max-height: 280px; overflow-y: auto;
   box-shadow: 0 8px 16px rgba(35,37,29,0.10);
+}
+/* Flipped above the input when there is no room below. */
+.ss-dropdown--up {
+  border-top: 1px solid var(--hairline); border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  box-shadow: 0 -8px 16px rgba(35,37,29,0.10);
 }
 .ss-option {
   padding: 8px 12px; cursor: pointer; font-size: 14px;
@@ -525,7 +627,7 @@ a.btn-danger  { color: #fff; }
   color: var(--ink);
 }
 .ss-option:last-child { border-bottom: none; }
-.ss-option:hover, .ss-option.active { background: #fef7e6; }
+.ss-option:hover, .ss-option.active { background: #fff1ea; }
 .ss-empty { padding: 16px; text-align: center; color: var(--mute); font-size: 13px; }
 .ss-chip {
   display: flex; align-items: center; gap: 8px;
@@ -542,7 +644,7 @@ a.btn-danger  { color: #fff; }
   background: transparent; border: none; cursor: pointer;
   color: var(--mute); padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
 }
-.ss-chip-clear:hover { background: #f3f4f6; color: var(--accent-red); }
+.ss-chip-clear:hover { background: var(--surface-soft); color: var(--accent-red); }
 .ss-hidden { position: absolute; opacity: 0; pointer-events: none; height: 0; width: 0; }
 
 
@@ -551,9 +653,15 @@ a.btn-danger  { color: #fff; }
    ============================================================ */
 /* Avoid a fixed height — let padding + line-height size the field so text
    never clips. This handles inputs with various Tailwind py-* classes too. */
+/* `input:not([type])` matters: a bare <input> defaults to type=text but was
+   matched by NONE of the attribute selectors, so 58 fields across 19 templates
+   rendered with no border, no padding and no height. Enumerate by exclusion
+   instead, so any future input is styled by default. */
+input:not([type]),
 input[type="text"], input[type="number"], input[type="date"], input[type="email"],
 input[type="password"], input[type="search"], input[type="tel"], input[type="url"],
-input[type="month"], select, textarea {
+input[type="month"], input[type="time"], input[type="datetime-local"],
+input[type="week"], select, textarea {
   background-color: var(--surface-card);
   color: var(--ink);
   border: 1px solid var(--hairline);
@@ -618,7 +726,7 @@ input:focus, select:focus, textarea:focus {
 
 /* ─── Anchor colour — PostHog uses blue links ─── */
 a { color: var(--link); }
-a:hover { color: #0a3088; }
+a:hover { color: #1d4ed8; }
 
 /* Shadows: softer per PostHog (flat-ish) */
 .shadow-sm { box-shadow: 0 1px 2px rgba(35,37,29,0.04) !important; }
@@ -703,7 +811,7 @@ a:hover { color: #0a3088; }
   font-family: 'Source Code Pro', ui-monospace, monospace;
   font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
   color: var(--brand-active); background: var(--warn-bg);
-  border: 1px solid #f0d9a4; border-radius: 5px; padding: 2px 7px;
+  border: 1px solid var(--hairline); border-radius: 5px; padding: 2px 7px;
   white-space: nowrap;
 }
 .wt-palette-empty { padding: 28px; text-align: center;
@@ -737,7 +845,7 @@ a:hover { color: #0a3088; }
    ============================================================ */
 @media (max-width: 640px) {
   .page-title { font-size: 1.625rem; }
-  .stat-value { font-size: 1.625rem; }
+  .stat-value { font-size: 1.625rem; }   /* mobile: clamp floor is fine, pin it */
   .stat-card { padding: 1rem; }
   .stat-card-sm .stat-value { font-size: 1.25rem; }
   .wt-table thead th, .wt-table tbody td { padding: 0.75rem 0.875rem; }
@@ -772,6 +880,14 @@ html, body { overflow-x: hidden; }
 /* --- Report toolbar (search + count + export + print) --- */
 .wt-report-toolbar { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
                      margin-bottom: .75rem; }
+/* When the toolbar is the literal first thing inside a bare .wt-panel (the
+   report_toolbar() + table pattern used by ~16 list/report pages), it has no
+   ancestor padding of its own and the search box + CSV/Print buttons sit
+   flush against the panel border. Scoped to :first-child so it does NOT
+   double up on the one page (trade_report_pnl.html) that already wraps the
+   toolbar in a padded .wt-panel__body. The table that follows stays
+   edge-to-edge on purpose — its cells carry their own padding. */
+.wt-panel > .wt-report-toolbar:first-child { padding: 1.25rem 1.25rem 0; margin-bottom: 0.5rem; }
 .wt-report-search { position: relative; flex: 1 1 260px; max-width: 380px; }
 .wt-report-search input { width: 100%; padding-left: 34px !important; }
 .wt-report-search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
@@ -850,3 +966,52 @@ html, body { overflow-x: hidden; }
 .wt-bar { height: 8px; border-radius: 2px; width: var(--w, 0%); }
 .wt-bar-pos { background: var(--accent-green); }
 .wt-bar-neg { background: var(--accent-red); }
+
+
+/* ============================================================
+   15. AITEX ERP COMPONENT CLASSES  (verbatim port)
+   ------------------------------------------------------------
+   Copied 1:1 from accounting/src/accounts/static/css/aitex-design.css
+   so ERP markup can be pasted into this app and render identically.
+   Do not "improve" these — their whole purpose is to match.
+   ============================================================ */
+.aitex-card {
+  background: var(--surface-card);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 16px;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+a.aitex-card { text-decoration: none; color: inherit; display: block; }
+a.aitex-card:hover { border-color: var(--ink); }
+
+.aitex-h1 {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 30px; font-weight: 800;
+  line-height: 1.2; letter-spacing: -0.5px;
+  color: var(--ink); margin: 0;
+}
+.aitex-h2 {
+  font-size: 20px; font-weight: 700;
+  line-height: 1.4; letter-spacing: -0.3px;
+  color: var(--ink); margin: 0;
+}
+.aitex-h3 {
+  font-size: 15px; font-weight: 700;
+  color: var(--ink); margin: 0;
+}
+.aitex-meta { color: var(--mute); font-size: 13px; line-height: 1.5; }
+
+.aitex-btn-secondary {
+  background: var(--surface-soft);
+  color: var(--body);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 7px 12px;
+  font-weight: 500; font-size: 13px; line-height: 1;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+  display: inline-flex; align-items: center; gap: 6px;
+  text-decoration: none;
+}
+.aitex-btn-secondary:hover { border-color: var(--ink); color: var(--ink); }

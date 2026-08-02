@@ -210,7 +210,7 @@
     if (costEl) costEl.textContent = qty > 0 ? overhead.toFixed(2) : '—';
     if (netEl) {
       netEl.textContent = qty > 0 ? net.toFixed(2) : '—';
-      netEl.style.color = net >= 0 ? '#2c8c66' : '#cd4239';
+      netEl.style.color = net >= 0 ? '#2e7d32' : '#c0392b';
     }
   }
   // Render group sections in a stable order: known groups first, then any
@@ -234,6 +234,102 @@
     const el = tr.querySelector('[name^="pline_"][name$="_quantity"]');
     if (el) { const m = el.name.match(/pline_(\d+)_/); if (m) projCalc(m[1]); }
   });
+
+  // Instant KPI tiles — a client-side port of services/analytics.py's
+  // order_projection() day-walk, run straight from the live DOM on every
+  // keystroke/toggle. The HTMX POST (debounced 150-600ms) still fires to
+  // PERSIST the data and is the source of truth once it lands, but the top
+  // tiles no longer wait on that round trip to reflect what you just typed —
+  // same "instant" feel the per-row cost/net-per-piece fields already have.
+  function fmtMoney(n, decimals) {
+    const neg = n < 0; n = Math.abs(n);
+    const fixed = n.toFixed(decimals);
+    const dot = fixed.indexOf('.');
+    let intPart = dot === -1 ? fixed : fixed.slice(0, dot);
+    const decPart = dot === -1 ? '' : fixed.slice(dot);
+    let grouped = '';
+    while (intPart.length > 3) { grouped = ',' + intPart.slice(-3) + grouped; intPart = intPart.slice(0, -3); }
+    grouped = intPart + grouped;
+    return (neg ? '-' : '') + grouped + decPart;
+  }
+  function recomputeProjectionKPIs() {
+    const num = (v) => parseFloat(v) || 0;
+    const parseISO = (s) => {
+      const p = (s || TODAY_ISO).split('-').map(Number);
+      return new Date(p[0], (p[1] || 1) - 1, p[2] || 1);
+    };
+    const addDays = (dt, n) => { const r = new Date(dt.getTime()); r.setDate(r.getDate() + n); return r; };
+    const isoOf = (dt) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+    const perDate = {};
+    const addAmt = (iso, key, amt) => {
+      if (!amt || amt <= 0) return;
+      if (!perDate[iso]) perDate[iso] = { in: 0, out: 0 };
+      perDate[iso][key] += amt;
+    };
+
+    let totalPurchase = 0, totalDye = 0, totalBilty = 0, totalSale = 0, totalQty = 0;
+    document.querySelectorAll('#proj-rows > tr:not(.proj-group-header)').forEach(function (tr) {
+      const field = (suf) => tr.querySelector('[name$="' + suf + '"]');
+      const incEl = field('_include');
+      if (!incEl || !incEl.checked) return;
+      const qty = num((field('_quantity') || {}).value);
+      const buy = num((field('_purchase_rate') || {}).value);
+      const sale = num((field('_sale_rate') || {}).value);
+      const dyeActiveEl = field('_dye_active');
+      const dyeActive = dyeActiveEl ? dyeActiveEl.checked : true;
+      const dye = dyeActive ? num((field('_dye_block_cost') || {}).value) : 0;
+      const bilty = num((field('_bilty') || {}).value);
+      const lead = parseInt((field('_lead_days') || {}).value) || 0;
+      const collectLag = parseInt((field('_collection_lag_days') || {}).value) || 0;
+      const creditLag = parseInt((field('_credit_days') || {}).value) || 0;
+      const orderD = parseISO((field('_order_date') || {}).value);
+      const deliveryD = addDays(orderD, lead);
+
+      let adv = num((field('_pct_advance') || {}).value);
+      let dely = num((field('_pct_on_delivery') || {}).value);
+      let cred = num((field('_pct_credit') || {}).value);
+      let totPct = adv + dely + cred;
+      if (totPct <= 0) { adv = 0; dely = 100; cred = 0; totPct = 100; }
+
+      const purchase = qty * buy, saleAmt = qty * sale;
+      addAmt(isoOf(orderD), 'out', dye);
+      addAmt(isoOf(orderD), 'out', purchase * adv / totPct);
+      addAmt(isoOf(deliveryD), 'out', purchase * dely / totPct);
+      addAmt(isoOf(addDays(deliveryD, creditLag)), 'out', purchase * cred / totPct);
+      addAmt(isoOf(deliveryD), 'out', bilty);
+      addAmt(isoOf(addDays(deliveryD, collectLag)), 'in', saleAmt);
+
+      totalPurchase += purchase; totalDye += dye; totalBilty += bilty; totalSale += saleAmt; totalQty += qty;
+    });
+
+    const totalOut = totalPurchase + totalDye + totalBilty;
+    const netProfit = totalSale - totalOut;
+    const roiPct = totalOut > 0 ? (netProfit / totalOut * 100) : 0;
+    const ppu = totalQty > 0 ? (netProfit / totalQty) : 0;
+
+    const todayD = parseISO(TODAY_ISO);
+    let running = 0, peakShortfall = 0, peakDay = null, recoveryDay = null;
+    Object.keys(perDate).sort().forEach(function (iso) {
+      const slot = perDate[iso];
+      running += slot.in - slot.out;
+      const offset = Math.round((parseISO(iso) - todayD) / 86400000);
+      if (running < 0 && -running > peakShortfall) { peakShortfall = -running; peakDay = offset; }
+      if (recoveryDay === null && peakShortfall > 0 && running >= 0) { recoveryDay = offset; }
+    });
+
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    set('kpi-peak-value', fmtMoney(peakShortfall, 0));
+    set('kpi-peak-foot', peakDay !== null ? ('by day ' + peakDay) : '—');
+    set('kpi-invest-value', fmtMoney(totalOut, 0));
+    set('kpi-profit-value', fmtMoney(netProfit, 0));
+    set('kpi-roi-value', roiPct.toFixed(2));
+    set('kpi-ppu-value', fmtMoney(ppu, 2));
+    set('kpi-ppu-foot', fmtMoney(totalQty, 0));
+    set('kpi-recovery-value', recoveryDay !== null ? ('day ' + recoveryDay) : '—');
+  }
+  document.getElementById('proj-form').addEventListener('input', recomputeProjectionKPIs);
+  document.getElementById('proj-form').addEventListener('change', recomputeProjectionKPIs);
+  recomputeProjectionKPIs();
 
   // lightweight tooltip for the little "i" icons — appended to <body> so the
   // scrolling table never clips it. Works for header + tile icons via delegation.

@@ -1,29 +1,29 @@
     <div class="stat-card wt-card-neg">
       <div class="stat-label">Peak Cash Needed<span class="tip-i" data-tip="The most cash you'd need on hand at any single point, starting from zero. STANDALONE for this planned batch only — it does NOT include cash already tied up in your ongoing open trades, nor any funding you already have.">i</span></div>
-      <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.peak_funding) }}</div>
-      <div class="stat-foot wt-mute">{% if report.peak_day is not none %}by day {{ report.peak_day }}{% else %}—{% endif %}</div>
+      <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span><span id="kpi-peak-value">{{ '{:,.0f}'.format(report.peak_funding) }}</span></div>
+      <div class="stat-foot wt-mute"><span id="kpi-peak-foot">{% if report.peak_day is not none %}by day {{ report.peak_day }}{% else %}—{% endif %}</span></div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total To Invest<span class="tip-i" data-tip="Sum of buy + dye/block + bilty across all included products. The full money that flows out over the batch (before any collections come back).">i</span></div>
-      <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.total_investment) }}</div>
+      <div class="stat-value"><span class="currency">{{ currency }}</span><span id="kpi-invest-value">{{ '{:,.0f}'.format(report.total_investment) }}</span></div>
       <div class="stat-foot wt-mute">buy + dye + bilty</div>
     </div>
     <div class="stat-card wt-card-pos">
       <div class="stat-label">Net Profit<span class="tip-i" data-tip="Total sales minus total costs (buy + dye/block + bilty) across the whole batch.">i</span></div>
-      <div class="stat-value wt-pos"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(report.net_profit) }}</div>
+      <div class="stat-value wt-pos"><span class="currency">{{ currency }}</span><span id="kpi-profit-value">{{ '{:,.0f}'.format(report.net_profit) }}</span></div>
     </div>
     <div class="stat-card">
       <div class="stat-label">ROI<span class="tip-i" data-tip="Net profit ÷ total invested, for this batch. How much each rupee put in comes back as profit.">i</span></div>
-      <div class="stat-value wt-pos">{{ report.roi_pct }}%</div>
+      <div class="stat-value wt-pos"><span id="kpi-roi-value">{{ report.roi_pct }}</span>%</div>
       <div class="stat-foot wt-mute">on money invested</div>
     </div>
     <div class="stat-card wt-card-pos">
       <div class="stat-label">Profit / Unit<span class="tip-i" data-tip="Average net profit on each piece = total net profit ÷ total quantity across all included products. What you make, on average, per unit sold.">i</span></div>
-      <div class="stat-value wt-pos"><span class="currency">{{ currency }}</span>{{ '{:,.2f}'.format(report.profit_per_unit) }}</div>
-      <div class="stat-foot wt-mute">avg over {{ '{:,.0f}'.format(report.total_qty) }} pcs</div>
+      <div class="stat-value wt-pos"><span class="currency">{{ currency }}</span><span id="kpi-ppu-value">{{ '{:,.2f}'.format(report.profit_per_unit) }}</span></div>
+      <div class="stat-foot wt-mute">avg over <span id="kpi-ppu-foot">{{ '{:,.0f}'.format(report.total_qty) }}</span> pcs</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Cash Recovered By<span class="tip-i" data-tip="The day your running balance climbs back to zero as customer collections arrive — i.e. when the batch has paid for itself.">i</span></div>
-      <div class="stat-value">{% if report.recovery_day is not none %}day {{ report.recovery_day }}{% else %}—{% endif %}</div>
+      <div class="stat-value"><span id="kpi-recovery-value">{% if report.recovery_day is not none %}day {{ report.recovery_day }}{% else %}—{% endif %}</span></div>
       <div class="stat-foot wt-mute">back to positive</div>
     </div>

@@ -31,33 +31,32 @@
   {% set b = report.buckets %}
   {% set bc = report.bucket_count %}
   <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-    <button type="button" class="stat-card" data-bucket-filter="not_due">
+    <button type="button" class="stat-card text-left w-full" data-bucket-filter="not_due">
       <div class="stat-label">Not Yet Due</div>
       <div class="stat-value"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b.not_due) }}</div>
       <div class="stat-foot">{{ bc.not_due }} deliveries</div>
-    </div>
-    <button type="button" class="stat-card wt-card-warn" data-bucket-filter="1_30">
+    </button>
+    <button type="button" class="stat-card text-left w-full wt-card-warn" data-bucket-filter="1_30">
       <div class="stat-label">1–30 days overdue</div>
       <div class="stat-value wt-warn"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['1_30']) }}</div>
       <div class="stat-foot">{{ bc['1_30'] }} deliveries</div>
-    </div>
-    <button type="button" class="stat-card wt-card-warn" data-bucket-filter="31_60">
+    </button>
+    <button type="button" class="stat-card text-left w-full wt-card-warn" data-bucket-filter="31_60">
       <div class="stat-label">31–60 days</div>
-      <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['31_60']) }}</div>
+      <div class="stat-value wt-warn"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['31_60']) }}</div>
       <div class="stat-foot">{{ bc['31_60'] }} deliveries</div>
-    </div>
-    <button type="button" class="stat-card wt-card-neg" data-bucket-filter="61_90">
+    </button>
+    <button type="button" class="stat-card text-left w-full wt-card-neg" data-bucket-filter="61_90">
       <div class="stat-label">61–90 days</div>
       <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['61_90']) }}</div>
       <div class="stat-foot">{{ bc['61_90'] }} deliveries</div>
-    </div>
-    <button type="button" class="stat-card wt-card-neg wt-card-em" data-bucket-filter="90_plus">
+    </button>
+    <button type="button" class="stat-card text-left w-full wt-card-neg wt-card-em" data-bucket-filter="90_plus">
       <div class="stat-label">90+ days</div>
       <div class="stat-value wt-neg"><span class="currency">{{ currency }}</span>{{ '{:,.0f}'.format(b['90_plus']) }}</div>
       <div class="stat-foot">{{ bc['90_plus'] }} deliveries</div>
-    </div>
+    </button>
   </div>
-
   <div class="accent-card wt-card-info wt-info-bg flex items-center justify-between">
     <div>
       <div class="stat-label">Total Outstanding (collect-against deliveries)</div>
@@ -111,9 +110,9 @@
           <td class="wt-body text-sm">{{ r.customer_city or '—' }}</td>
           <td>{{ drill('/trade/trades/' ~ r.trade_id, r.trade_ref or '—', 'Open this trade') }}</td>
           <td class="wt-body whitespace-nowrap text-sm">
-            <a class="wt-info hover:underline" href="/trade/trades/{{ r.trade_id }}/invoice/by-date/{{ r.event_date }}.pdf" target="_blank">
-              {{ r.event_date }}
-            </a>
+            {{ r.event_date }}
+            <a class="wt-info hover:underline ml-1.5" href="/trade/trades/{{ r.trade_id }}/invoice/by-date/{{ r.event_date }}.pdf?img=1" target="_blank">Open</a>
+            <a class="text-xs hover:underline wt-mute ml-1" href="/trade/trades/{{ r.trade_id }}/invoice/by-date/{{ r.event_date }}.pdf" target="_blank">PDF</a>
           </td>
           <td class="num">{{ currency }} {{ '{:,.2f}'.format(r.gross) }}</td>
           <td class="num">
@@ -145,7 +144,7 @@
       </tfoot>
     {{ table_close() }}
     {% else %}
-    <div class=" text-center text-sm wt-mute">No outstanding deliveries — every invoice is paid. 🎉</div>
+    <div class="text-center text-sm wt-mute">No outstanding deliveries — every invoice is paid. 🎉</div>
     {% endif %}
   </div>
 

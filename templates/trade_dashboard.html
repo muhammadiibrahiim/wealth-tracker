@@ -208,6 +208,37 @@
     </div>
 </div>
 
+<!-- ===================== AR & AP Aging ===================== -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    {% macro aging_card(title, report, href, owed_label) %}
+    <div class="aitex-card">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="aitex-h3">{{ title }}</h2>
+            <a href="{{ href }}" class="text-xs text-blue-600 hover:underline">Full report →</a>
+        </div>
+        <div class="text-2xl font-bold {{ 'text-rose-600' if report.total_outstanding > 0 else 'text-gray-900' }}">{{ pkr(report.total_outstanding) }}</div>
+        <div class="text-xs text-gray-400 mb-3">{{ owed_label }} across {{ report.rows|length }} delivery/invoice event{{ 's' if report.rows|length != 1 }}</div>
+        <div class="grid grid-cols-5 gap-1.5">
+            {% for key, label, tone in [
+                ('not_due', 'Not Due', ''),
+                ('1_30', '1–30', 'text-amber-600'),
+                ('31_60', '31–60', 'text-amber-600'),
+                ('61_90', '61–90', 'text-rose-600'),
+                ('90_plus', '90+', 'text-rose-600'),
+            ] %}
+            <a href="{{ href }}" class="text-center rounded-md py-1.5 hover:bg-gray-50">
+                <div class="text-[10px] uppercase tracking-wide text-gray-400">{{ label }}</div>
+                <div class="text-sm font-semibold {{ tone }}">{{ "{:,.0f}".format(report.buckets[key]) }}</div>
+                <div class="text-[10px] text-gray-400">{{ report.bucket_count[key] }}</div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endmacro %}
+    {{ aging_card('Receivables Aging (AR)', ar_aging, '/trade/reports/aging', 'owed to you') }}
+    {{ aging_card('Payables Aging (AP)', ap_aging, '/trade/reports/ap-aging', 'you owe vendors') }}
+</div>
+
 <!-- ===================== Customers & Vendors ===================== -->
 <h2 class="aitex-h2 mb-3">Customers &amp; Vendors</h2>
 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">

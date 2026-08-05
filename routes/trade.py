@@ -118,9 +118,11 @@ async def dashboard(request: Request, month: str = Query(None),
         _r["net"] += Decimal(_t.total_sale) - Decimal(_t.total_cost) - _tc
         _r["trades"] += 1
     trend = sorted(_by_month.values(), key=lambda r: r["month"])[-12:]
-    # Same buckets the AR Aging report renders, so the chart and that report
-    # can never disagree.
-    aging_buckets = TradeReportService.aging_report(session, user_id)["buckets"]
+    # Same report the AR Aging page renders, so the dashboard snapshot and
+    # that report can never disagree.
+    ar_aging = TradeReportService.aging_report(session, user_id)
+    ap_aging = TradeReportService.ap_aging_report(session, user_id)
+    aging_buckets = ar_aging["buckets"]
 
     # ── Figures the ERP dashboard shows, computed for Trade ──────────────
     # P&L columns: this month / last month / year to date, all from the one
@@ -197,6 +199,8 @@ async def dashboard(request: Request, month: str = Query(None),
             perf=perf,
             trend=trend,
             aging_buckets=aging_buckets,
+            ar_aging=ar_aging,
+            ap_aging=ap_aging,
             pnl=pnl,
             sales_delta=sales_delta,
             profit_delta=profit_delta,

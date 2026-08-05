@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% from "partials/_ui.html" import page_header %}
+{% block title %}Documents{% endblock %}
+{% block content %}
+
+<style>
+  #doc-drop-zone.drag-over { border-color: var(--brand); background: #fbf0d6; }
+  .doc-card { transition: box-shadow .12s, transform .12s; }
+  .doc-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+</style>
+
+<div class="space-y-6">
+  {{ page_header('Documents',
+      'A simple document library — paste (&#8984;V), drop, or click to add a file. Name it, press Enter, done.') }}
+
+  <div id="doc-drop-zone" tabindex="0"
+       class="wt-panel border-2 border-dashed border-gray-300 hover:border-gray-400 cursor-pointer p-10 text-center transition">
+    <div class="text-3xl mb-2">📎</div>
+    <div class="font-medium wt-ink">Click, drop a file, or paste (⌘V / Ctrl+V) anywhere on this page</div>
+    <div class="text-xs wt-mute mt-1">You'll be asked to name it — press Enter and it's saved.</div>
+    <input type="file" id="doc-file-input" hidden>
+  </div>
+
+  <div class="flex items-center justify-between gap-3">
+    <input type="search" id="doc-search" placeholder="Search documents by name…" class="w-full max-w-md">
+    <div class="text-sm wt-mute whitespace-nowrap" id="doc-count">{{ docs|length }} document{{ 's' if docs|length != 1 }}</div>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4" id="doc-grid">
+    {% for d in docs %}
+    <div class="wt-panel doc-card p-3" data-doc-name="{{ d.name|lower }}">
+      <a href="{{ d.path }}" target="_blank" class="block">
+        {% if d.content_type and d.content_type.startswith('image/') %}
+        <div class="w-full rounded overflow-hidden bg-gray-50 mb-2" style="aspect-ratio: 1;">
+          <img src="{{ d.path }}" alt="{{ d.name }}" class="w-full h-full" style="object-fit: cover;">
+        </div>
+        {% else %}
+        <div class="w-full rounded bg-gray-50 mb-2 flex items-center justify-center text-4xl" style="aspect-ratio: 1;">
+          {% if d.content_type == 'application/pdf' %}📄{% else %}📎{% endif %}
+        </div>
+        {% endif %}
+      </a>
+      <div class="text-sm font-medium wt-ink truncate" title="{{ d.name }}">{{ d.name }}</div>
+      <div class="text-xs wt-mute mt-0.5">{{ d.uploaded_at.strftime('%d %b %Y') }}</div>
+      <form hx-post="/trade/documents/{{ d.id }}/delete" hx-confirm="Delete &quot;{{ d.name }}&quot;?" class="mt-1">
+        <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="col-span-full text-center wt-mute py-16" id="doc-empty">No documents yet — paste (⌘V), drop, or click above to add one.</div>
+    {% endfor %}
+  </div>
+  <div class="col-span-full text-center wt-mute py-16" id="doc-no-match" style="display:none;">No documents match your search.</div>
+</div>
+
+<script>
+(function () {
+  function fmtSize(n) {
+    n = n || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(2) + ' MB';
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function openNameModal(file) {
+    if (document.getElementById('doc-name-modal')) return; // one at a time
+    var overlay = document.createElement('div');
+    overlay.id = 'doc-name-modal';
+    overlay.className = 'modal-backdrop fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8';
+    overlay.innerHTML =
+      '<div class="bg-white p-7 w-full max-w-md mx-4">' +
+        '<div class="flex items-start justify-between mb-5">' +
+          '<div>' +
+            '<h2 class="modal-title">Name this document</h2>' +
+            '<p class="modal-subtitle">' + escapeHtml(file.name || 'pasted file') + ' · ' + fmtSize(file.size) + '</p>' +
+          '</div>' +
+          '<button type="button" class="modal-close" id="doc-name-x">✕</button>' +
+        '</div>' +
+        '<div>' +
+          '<label class="field-label field-label-required">Name</label>' +
+          '<input type="text" id="doc-name-input" class="w-full" autocomplete="off" placeholder="e.g. Fleure Stickers Price List">' +
+        '</div>' +
+        '<div class="flex justify-end gap-2 pt-4 border-t border-gray-200 mt-4">' +
+          '<button type="button" class="btn-secondary" id="doc-name-cancel">Cancel</button>' +
+          '<button type="button" class="btn-primary" id="doc-name-save">Save</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    var input = overlay.querySelector('#doc-name-input');
+    var base = (file.name || '').replace(/\.[^.]+$/, '');
+    input.value = base;
+    input.focus();
+    input.select();
+
+    function close() { overlay.remove(); }
+    function save() {
+      var name = input.value.trim();
+      if (!name) { input.focus(); return; }
+      uploadDoc(file, name);
+      close();
+    }
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+    });
+    overlay.querySelector('#doc-name-save').addEventListener('click', save);
+    overlay.querySelector('#doc-name-cancel').addEventListener('click', close);
+    overlay.querySelector('#doc-name-x').addEventListener('click', close);
+    overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) close(); });
+  }
+
+  function uploadDoc(file, name) {
+    var fd = new FormData();
+    fd.append('name', name);
+    fd.append('file', file);
+    fetch('/trade/documents', { method: 'POST', body: fd })
+      .then(function (r) { if (r.ok) location.reload(); else alert('Upload failed — please try again.'); })
+      .catch(function () { alert('Upload failed — please try again.'); });
+  }
+
+  // Paste anywhere on this page.
+  document.addEventListener('paste', function (e) {
+    var items = (e.clipboardData || window.clipboardData).items;
+    if (!items) return;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].kind === 'file') {
+        var file = items[i].getAsFile();
+        if (file) {
+          if (!file.name || file.name === 'image.png') {
+            var ext = (file.type.split('/')[1] || 'png');
+            file = new File([file], 'pasted-' + Date.now() + '.' + ext, { type: file.type });
+          }
+          openNameModal(file);
+          e.preventDefault();
+          return;
+        }
+      }
+    }
+  });
+
+  // Click to browse / drag-drop.
+  var zone = document.getElementById('doc-drop-zone');
+  var fileInput = document.getElementById('doc-file-input');
+  if (zone && fileInput) {
+    zone.addEventListener('click', function () { fileInput.click(); });
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files && fileInput.files[0]) { openNameModal(fileInput.files[0]); fileInput.value = ''; }
+    });
+    zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function () { zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', function (e) {
+      e.preventDefault(); zone.classList.remove('drag-over');
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) openNameModal(f);
+    });
+  }
+
+  // Client-side search filter over the card grid.
+  var search = document.getElementById('doc-search');
+  var countEl = document.getElementById('doc-count');
+  var noMatch = document.getElementById('doc-no-match');
+  var totalCount = document.querySelectorAll('#doc-grid [data-doc-name]').length;
+  if (search) {
+    search.addEventListener('input', function () {
+      var q = search.value.trim().toLowerCase();
+      var shown = 0;
+      document.querySelectorAll('#doc-grid [data-doc-name]').forEach(function (card) {
+        var match = !q || card.getAttribute('data-doc-name').indexOf(q) !== -1;
+        card.style.display = match ? '' : 'none';
+        if (match) shown++;
+      });
+      if (countEl) countEl.textContent = shown + ' of ' + totalCount + ' documents';
+      if (noMatch) noMatch.style.display = (shown === 0 && totalCount > 0) ? '' : 'none';
+    });
+  }
+})();
+</script>
+
+{% endblock %}

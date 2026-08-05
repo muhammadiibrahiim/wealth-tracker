@@ -573,6 +573,28 @@ class TradeAttachment(SQLModel, table=True):
     )
 
 
+class TradeDocument(SQLModel, table=True):
+    """A standalone document in the Trade module's document library — NOT
+    tied to any specific trade (unlike TradeAttachment). Paste/drop a file,
+    name it, find it later via search. File bytes live on disk under
+    static/uploads/trade_documents/; the row holds the URL path and metadata.
+    """
+    __tablename__ = "trade_documents"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    name: str = Field(max_length=200)
+    filename: str = Field(max_length=255)
+    content_type: Optional[str] = Field(default=None, max_length=120)
+    size_bytes: int = Field(default=0)
+    path: str = Field(max_length=500)
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_trade_document_user", "user_id"),
+    )
+
+
 class TradeTerminal(SQLModel, table=True):
     """A bilty terminal — e.g. 'Lahore Thokar / Faysal Movers'.
 

@@ -2247,6 +2247,76 @@ async def item_delete(item_id: int, session: Session = Depends(get_session)):
     return _close_modal()
 
 
+# ───────── documents (standalone library — not tied to a trade) ───
+
+
+@router.get("/documents", response_class=HTMLResponse)
+async def documents_list(request: Request, session: Session = Depends(get_session)):
+    from models import TradeDocument
+    user_id = DEFAULT_USER_ID
+    docs = list(session.exec(
+        select(TradeDocument).where(TradeDocument.user_id == user_id)
+        .order_by(TradeDocument.uploaded_at.desc())
+    ).all())
+    return templates.TemplateResponse("trade_documents.html", _ctx(request, docs=docs))
+
+
+@router.post("/documents")
+async def document_create(request: Request, session: Session = Depends(get_session)):
+    from models import TradeDocument
+    import os, uuid
+    user_id = DEFAULT_USER_ID
+    form = await request.form()
+    name = (form.get("name") or "").strip()
+    file = form.get("file")
+    if not name:
+        raise HTTPException(400, "Name is required")
+    if not file or not hasattr(file, "filename") or not file.filename:
+        raise HTTPException(400, "No file uploaded")
+
+    upload_dir = "static/uploads/trade_documents"
+    os.makedirs(upload_dir, exist_ok=True)
+    ext = os.path.splitext(file.filename)[1].lower() or ".bin"
+    safe_name = f"{uuid.uuid4().hex}{ext}"
+    full_path = os.path.join(upload_dir, safe_name)
+    size = 0
+    with open(full_path, "wb") as out:
+        while True:
+            chunk = await file.read(64 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            out.write(chunk)
+
+    doc = TradeDocument(
+        user_id=user_id, name=name, filename=file.filename,
+        content_type=getattr(file, "content_type", None),
+        size_bytes=size, path=f"/{full_path}",
+    )
+    session.add(doc)
+    session.commit()
+    return Response(status_code=204)
+
+
+@router.post("/documents/{doc_id}/delete")
+async def document_delete(doc_id: int, session: Session = Depends(get_session)):
+    from models import TradeDocument
+    import os
+    user_id = DEFAULT_USER_ID
+    doc = session.get(TradeDocument, doc_id)
+    if not doc or doc.user_id != user_id:
+        raise HTTPException(404, "Document not found")
+    try:
+        fs_path = doc.path.lstrip("/")
+        if os.path.isfile(fs_path):
+            os.remove(fs_path)
+    except OSError:
+        pass
+    session.delete(doc)
+    session.commit()
+    return Response(status_code=204, headers={"HX-Refresh": "true"})
+
+
 # ───────── vouchers (cashbook journal vouchers) ────────────────────
 
 

@@ -44,6 +44,7 @@
                 <svg class="side-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
             </button>
             <div class="side-children">
+                {{ child('/accounts/dashboard', 'Dashboard', false) }}
                 {{ child('/accounts', 'Net Worth', true) }}
                 {{ child('/accounts/reports', 'Reports', false) }}
                 {{ child('/accounts/import', 'Import', false) }}
@@ -64,6 +65,7 @@
                 {{ child('/trade/parties', 'Parties', false) }}
                 {{ child('/trade/partners', 'Partners', false) }}
                 {{ child('/trade/items', 'Items', false) }}
+                {{ child('/trade/documents', 'Documents', false) }}
                 {{ child('/trade/accounts', 'Cash Accounts', false) }}
                 {{ child('/trade/coa', 'Chart of A/Cs', false) }}
                 {{ child('/trade/vouchers', 'Vouchers', false) }}

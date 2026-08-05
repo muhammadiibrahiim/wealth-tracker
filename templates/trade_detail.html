@@ -290,8 +290,11 @@
   <!-- Receipts (partial deliveries) -->
   {% set all_receipts = [] %}
   {% for ln in trade.lines %}
-    {% for r in ln.receipts %}{% set _ = all_receipts.append((ln, r)) %}{% endfor %}
+    {% for r in ln.receipts %}{% set _ = all_receipts.append({'ln': ln, 'r': r}) %}{% endfor %}
   {% endfor %}
+  {# Sorted by date (not by line) so every item received on the same day sits
+     together — needed to show ONE bilty control per delivery, not per line. #}
+  {% set all_receipts = all_receipts | sort(attribute='r.received_on') %}
   {% if all_receipts %}
   <div class="wt-panel">
     <div class="wt-panel__head">
@@ -310,8 +313,13 @@
         </tr>
       </thead>
       <tbody>
-        {% for ln, r in all_receipts %}
+        {% set ns = namespace(last_date=none) %}
+        {% for row in all_receipts %}
+        {% set ln = row.ln %}
+        {% set r = row.r %}
         {% set _bilty = bilties_by_date.get(r.received_on) %}
+        {% set is_first_for_date = (r.received_on != ns.last_date) %}
+        {% set ns.last_date = r.received_on %}
         <tr>
           <td class="font-medium wt-ink">{{ ln.item_name }}</td>
           <td class="wt-body whitespace-nowrap">{{ r.received_on }}</td>
@@ -322,16 +330,19 @@
             {% else %}<span class="wt-ash text-xs">—</span>{% endif %}
           </td>
           <td>
-            {% if _bilty %}
+            {# One bilty covers the WHOLE delivery date, across every item
+               received that day — show the actual control once, on the
+               first row of the date; later rows just point back to it so
+               it's never mistaken for 4 separate freight charges. #}
+            {% if not is_first_for_date %}
+              <span class="text-xs wt-ash" title="One bilty covers everything received on {{ r.received_on }} — see the first row for that date">↑ same delivery</span>
+            {% elif _bilty %}
               <button class="text-xs font-medium hover:underline wt-warn" hx-get="/trade/trades/{{ trade.id }}/bilty/by-date/{{ r.received_on }}/new"
-                      hx-target="#modal-container"
-                     
-                     >
+                      hx-target="#modal-container">
                 🚛 {{ currency }} {{ '{:,.2f}'.format(_bilty.amount) }} · Edit
               </button>
               {% if _bilty.by_customer %}
               <span class="inline-block ml-1 px-2 py-0.5 rounded text-xs font-medium wt-pill wt-pill-warn"
-                   
                     title="Customer paid this bilty on our behalf — reduces their receivable">paid by customer</span>
               {% endif %}
               {% if _bilty.weight_kgs or _bilty.terminal %}

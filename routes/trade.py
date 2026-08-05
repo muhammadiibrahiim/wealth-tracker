@@ -2345,9 +2345,27 @@ async def voucher_create(request: Request, session: Session = Depends(get_sessio
 
     if not lines:
         raise HTTPException(400, "Voucher needs at least one line")
+
+    proof_path = None
+    proof = form.get("proof")
+    if proof is not None and getattr(proof, "filename", None):
+        import os, uuid
+        upload_dir = "static/uploads/payments"
+        os.makedirs(upload_dir, exist_ok=True)
+        ext = os.path.splitext(proof.filename)[1].lower() or ".png"
+        full_path = os.path.join(upload_dir, f"{uuid.uuid4().hex}{ext}")
+        with open(full_path, "wb") as out:
+            while True:
+                chunk = await proof.read(64 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+        proof_path = f"/{full_path}"
+
     try:
         VoucherService.post_voucher(session, user_id, entry_date=entry_date,
-                                     entry_type=entry_type, description=description, lines=lines)
+                                     entry_type=entry_type, description=description, lines=lines,
+                                     proof_path=proof_path)
     except PostingError as e:
         raise HTTPException(400, str(e))
     return _close_modal()

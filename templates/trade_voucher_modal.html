@@ -24,7 +24,7 @@
         'owner_out': {'from_label': 'From (cash / bank)',                'to_label':"To (Owner's Capital)"},
       }[preset] %}
 
-      <form hx-post="/trade/vouchers" hx-target="#modal-container" class="space-y-4">
+      <form hx-post="/trade/vouchers" hx-target="#modal-container" class="space-y-4" enctype="multipart/form-data">
         <input type="hidden" name="entry_type" value="{{ preset_type }}">
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -79,6 +79,19 @@
           </p>
         </div>
 
+        <div>
+          <label class="field-label">Payment Screenshot / Proof</label>
+          <div id="voucher-proof-drop" tabindex="0"
+               style="border:2px dashed #bfc1b7; border-radius:8px; padding:14px; text-align:center; cursor:pointer; background:#ffffff; outline:none;">
+            <div id="voucher-proof-empty" class="text-sm wt-mute select-none">
+              📎 Click to choose, drag in, or <b>paste a screenshot</b> (⌘V / Ctrl-V)
+            </div>
+            <img id="voucher-proof-preview" alt="proof preview" style="display:none; max-height:170px; margin:4px auto 0; border-radius:6px; border:1px solid #bfc1b7;">
+            <div id="voucher-proof-name" class="text-xs wt-ash mt-1"></div>
+          </div>
+          <input type="file" name="proof" id="voucher-proof-input" accept="image/*" hidden>
+        </div>
+
         <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
           <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Cancel</button>
           <button type="submit" class="btn-primary">Post Voucher</button>
@@ -87,6 +100,43 @@
 
       <script>
       (function(){
+        var drop=document.getElementById('voucher-proof-drop');
+        var input=document.getElementById('voucher-proof-input');
+        if(drop && input){
+          var empty=document.getElementById('voucher-proof-empty');
+          var preview=document.getElementById('voucher-proof-preview');
+          var nameEl=document.getElementById('voucher-proof-name');
+          var render=function(file){
+            if(!file) return;
+            try{ preview.src=URL.createObjectURL(file); }catch(e){}
+            preview.style.display='block'; empty.style.display='none';
+            nameEl.textContent=(file.name||'screenshot')+' · '+Math.max(1,Math.round((file.size||0)/1024))+' KB — click to replace';
+          };
+          var setFile=function(file){
+            try{ var dt=new DataTransfer(); dt.items.add(file); input.files=dt.files; }catch(e){}
+            render(file);
+          };
+          drop.addEventListener('click', function(){ input.click(); });
+          input.addEventListener('change', function(){ if(input.files&&input.files[0]) render(input.files[0]); });
+          drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.style.background='#e3edff'; });
+          drop.addEventListener('dragleave', function(){ drop.style.background='#ffffff'; });
+          drop.addEventListener('drop', function(e){ e.preventDefault(); drop.style.background='#ffffff';
+            if(e.dataTransfer.files&&e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+          var onPaste=function(e){
+            if(!document.body.contains(drop)){ document.removeEventListener('paste', onPaste); return; }
+            var items=(e.clipboardData&&e.clipboardData.items)||[];
+            for(var i=0;i<items.length;i++){
+              if(items[i].type && items[i].type.indexOf('image')===0){
+                var blob=items[i].getAsFile();
+                var ext=((blob.type.split('/')[1])||'png').replace('jpeg','jpg');
+                var file=new File([blob], 'payment-'+Date.now()+'.'+ext, {type:blob.type});
+                setFile(file); e.preventDefault(); break;
+              }
+            }
+          };
+          document.addEventListener('paste', onPaste);
+        }
+
         var amount  = document.getElementById('amount-input');
         var hidDr   = document.getElementById('line-1-debit');
         var hidCr   = document.getElementById('line-0-credit');
@@ -169,7 +219,7 @@
 
         <div class="flex items-center justify-between">
           <button type="button" class="wt-info hover:text-indigo-900 text-sm font-medium" onclick="addLine()">+ Add line</button>
-          <p id="warn" class="text-sm font-medium" style="display:none; color: #cd4239;">Debit and credit must match before submit.</p>
+          <p id="warn" class="text-sm font-medium" style="display:none; color: #c0392b;">Debit and credit must match before submit.</p>
         </div>
 
         <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
@@ -216,7 +266,7 @@
           const diff = tdr - tcr;
           const dc = document.getElementById('diff-cell');
           dc.textContent = fmt(diff);
-          dc.style.color = Math.abs(diff) < 0.005 ? '#2c8c66' : '#cd4239';
+          dc.style.color = Math.abs(diff) < 0.005 ? '#2e7d32' : '#c0392b';
           document.getElementById('warn').style.display = Math.abs(diff) < 0.005 ? 'none' : 'block';
           document.getElementById('submit-btn').disabled = Math.abs(diff) >= 0.005 || (tdr === 0 && tcr === 0);
         }

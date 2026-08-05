@@ -936,6 +936,10 @@ class JournalEntry(SQLModel, table=True):
     )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     created_by: Optional[str] = Field(default=None, max_length=80)
+    # Uploaded payment screenshot / receipt for standalone vouchers (Payment,
+    # Receipt, Expense, Contra, Owner In/Out) — these aren't a TradePayment
+    # (that has its own proof_path) so there's nowhere else to hang this.
+    proof_path: Optional[str] = Field(default=None, max_length=300)
 
     lines: List["JournalLine"] = Relationship(
         back_populates="entry",
@@ -1106,6 +1110,18 @@ class MoneyAccount(SQLModel, table=True):
     __table_args__ = (
         Index("idx_money_account_user", "user_id"),
     )
+
+    @property
+    def type_label(self) -> str:
+        """The account type as text, safe to render.
+
+        `type` is annotated as MoneyAccountType but backed by a plain
+        String(20) column, so the enum is only applied when the object is
+        BUILT in Python. Loaded from the database it comes back as a bare str,
+        where `.value` is undefined — which is why templates using
+        `acct.type.value` silently rendered nothing. This reads right either way.
+        """
+        return getattr(self.type, "value", self.type) or ""
 
 
 class MoneyTxn(SQLModel, table=True):

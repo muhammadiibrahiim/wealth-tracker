@@ -36,8 +36,18 @@ class VoucherService:
         return {"entry": e, "lines": lines}
 
     @staticmethod
-    def post_voucher(session, user_id, entry_date, entry_type, description, lines, reference=None):
-        return PostingEngine.post(
+    def post_voucher(session, user_id, entry_date, entry_type, description, lines,
+                      reference=None, proof_path=None):
+        entry = PostingEngine.post(
             session, user_id, entry_date=entry_date, entry_type=entry_type,
             description=description, lines=lines, reference=reference, created_by="user",
         )
+        # Standalone vouchers aren't a TradePayment (which has its own
+        # proof_path) — set it directly here rather than growing the shared
+        # PostingEngine.post() signature that every other caller uses too.
+        if proof_path:
+            entry.proof_path = proof_path
+            session.add(entry)
+            session.commit()
+            session.refresh(entry)
+        return entry

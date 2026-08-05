@@ -8,7 +8,8 @@
       <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
     </div>
 
-    <form hx-post="/trade/trades/{{ trade.id }}/receive" hx-encoding="multipart/form-data" class="space-y-4">
+    <form hx-post="/trade/trades/{{ trade.id }}/receive" hx-encoding="multipart/form-data"
+          hx-disabled-elt="find button[type=submit]" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label class="field-label">Received On</label>
@@ -109,8 +110,8 @@
     transition: border-color .15s, background .15s;
     outline: none;
   }
-  .paste-zone:hover, .paste-zone:focus { border-color: var(--ink); background: #fcfcfa; }
-  .paste-zone.drag-over { border-color: var(--brand); background: #fdebc7; }
+  .paste-zone:hover, .paste-zone:focus { border-color: var(--ink); background: #ffffff; }
+  .paste-zone.drag-over { border-color: var(--brand); background: #fbf0d6; }
   .paste-placeholder {
     display: flex; align-items: center; gap: 10px;
     color: var(--mute); font-size: 13px;
@@ -128,7 +129,7 @@
     background: transparent; border: none; cursor: pointer;
     color: var(--mute); font-size: 14px; padding: 2px 6px; border-radius: 4px;
   }
-  .paste-clear:hover { background: #e5e7e0; color: var(--accent-red); }
+  .paste-clear:hover { background: #eeefe9; color: var(--accent-red); }
 </style>
 
 <script>

@@ -181,11 +181,11 @@ def build_doc_pdf(ctx: DocContext) -> bytes:
         sections.append(ParagraphBlock(f"<font color='#65675e'><b>For delivery on:</b> {ctx.event_label}</font>"))
 
     if kind == "delivery_pack":
-        # Two compact tables back-to-back: priced delivery + warehouse packing.
+        # One priced table with a Packed checkbox column — a separate
+        # no-price "Packing Checklist" used to just repeat the same
+        # description/qty a second time with nothing new to add.
         sections.append(SectionTitle("Items Delivered"))
-        sections.append(_lines_table(_with_kind(ctx, "delivery_note")))
-        sections.append(SectionTitle("Packing Checklist"))
-        sections.append(_lines_table(_with_kind(ctx, "packing_slip")))
+        sections.append(_lines_table(_with_kind(ctx, "delivery_pack_items")))
     elif kind != "payment_receipt":
         sections.append(SectionTitle("Items"))
         sections.append(_lines_table(ctx))
@@ -367,6 +367,9 @@ def _lines_table(ctx: DocContext) -> TableSpec:
         elif ctx.kind == "vendor_po":
             line_amt = (qty * Decimal(ln.unit_cost)).quantize(Decimal("0.01"))
             rows.append([name_html, qty_text, _pkr(ln.unit_cost), _pkr(line_amt)])
+        elif ctx.kind == "delivery_pack_items":
+            line_amt = (qty * Decimal(ln.unit_price)).quantize(Decimal("0.01"))
+            rows.append([name_html, qty_text, _pkr(ln.unit_price), _pkr(line_amt), "☐"])
         else:
             line_amt = (qty * Decimal(ln.unit_price)).quantize(Decimal("0.01"))
             rows.append([name_html, qty_text, _pkr(ln.unit_price), _pkr(line_amt)])
@@ -378,6 +381,14 @@ def _lines_table(ctx: DocContext) -> TableSpec:
             num_cols={1, 2},
         )
     subtotal = _subtotal_for(ctx)
+    if ctx.kind == "delivery_pack_items":
+        return TableSpec(
+            headers=["Description", "Qty", "Rate", "Amount", "Packed"],
+            rows=rows,
+            col_widths=[250, 55, 75, 85, 55],
+            num_cols={1, 2, 3},
+            totals_row=["", "", "Total", _pkr(subtotal), ""],
+        )
     return TableSpec(
         headers=["Description", "Qty", "Rate", "Amount"],
         rows=rows,

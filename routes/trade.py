@@ -2840,10 +2840,19 @@ async def reports_general_ledger_pdf(
 
     rows = [["", "", "Opening balance", "", "", pkr(led["opening_balance"])]]
     for r in led["lines"]:
+        # Multi-item Sale/Purchase descriptions are comma-joined ("Item A 100
+        # pcs @ 10.00, Item B 50 pcs @ 20.00, ...") — fine inline, unreadable
+        # as one run-on line in a narrow PDF cell. One item per line here;
+        # scoped to sale/purchase only so an unrelated comma in some other
+        # entry's description (e.g. a cost note) isn't split up too. The
+        # stored description and the HTML ledger view are untouched either way.
+        desc = r["description"] or ""
+        if r["entry_type"] in ("sale", "purchase"):
+            desc = desc.replace(", ", "<br/>")
         rows.append([
             r["date"].strftime("%d-%b-%Y"),
             r["reference"],
-            r["description"] or "",
+            desc,
             pkr(r["debit"]) if r["debit"] > 0 else "—",
             pkr(r["credit"]) if r["credit"] > 0 else "—",
             bal(r["balance"]),

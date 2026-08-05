@@ -2814,6 +2814,76 @@ async def reports_general_ledger(
     )
 
 
+@router.get("/reports/general-ledger/{account_id}.pdf")
+async def reports_general_ledger_pdf(
+    account_id: int,
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
+):
+    from io import BytesIO
+    from services.ledger import account_ledger
+    from services.pdf_helper import render_report_pdf, ReportSpec, KpiSpec, TableSpec
+    user_id = DEFAULT_USER_ID
+    led = account_ledger(session, account_id, from_date=_parse_date(date_from), to_date=_parse_date(date_to))
+    acct = led.get("account")
+    if not acct or acct.user_id != user_id:
+        raise HTTPException(404, "Account not found")
+
+    def pkr(x):
+        try: return f"Rs. {Decimal(str(x)):,.2f}"
+        except Exception: return f"Rs. {x}"
+
+    def bal(x):
+        x = Decimal(str(x))
+        return f"{pkr(abs(x))} {'CR' if x < 0 else 'DR'}"
+
+    rows = [["", "", "Opening balance", "", "", pkr(led["opening_balance"])]]
+    for r in led["lines"]:
+        rows.append([
+            r["date"].strftime("%d-%b-%Y"),
+            r["reference"],
+            r["description"] or "",
+            pkr(r["debit"]) if r["debit"] > 0 else "—",
+            pkr(r["credit"]) if r["credit"] > 0 else "—",
+            bal(r["balance"]),
+        ])
+
+    period_bits = []
+    if date_from:
+        period_bits.append(f"From {date_from}")
+    if date_to:
+        period_bits.append(f"To {date_to}")
+    if not period_bits:
+        period_bits.append("All time")
+
+    buf = BytesIO()
+    render_report_pdf(buf, ReportSpec(
+        title="General Ledger",
+        subtitle_parts=[f"{acct.code} — {acct.name}"] + period_bits,
+        kpis=[
+            KpiSpec("Opening Balance", pkr(led["opening_balance"])),
+            KpiSpec("Total Debits", pkr(led["total_debit"])),
+            KpiSpec("Total Credits", pkr(led["total_credit"])),
+            KpiSpec("Closing Balance", bal(led["closing_balance"])),
+        ],
+        sections=[
+            TableSpec(
+                headers=["Date", "Ref", "Description", "Debit", "Credit", "Balance"],
+                rows=rows,
+                col_widths=[64, 50, 175, 62, 62, 85],
+                num_cols={3, 4, 5},
+            ),
+        ],
+        footer_subtitle="Ibrahim Traders · general ledger",
+        generated_label="As of",
+        brand="IBRAHIM TRADERS",
+    ))
+    fname = f"General-Ledger-{acct.code}-{acct.name.replace(' ','_')}.pdf"
+    return Response(content=buf.getvalue(), media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{fname}"'})
+
+
 @router.get("/reports/pnl", response_class=HTMLResponse)
 async def reports_pnl(
     request: Request,

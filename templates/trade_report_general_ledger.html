@@ -21,6 +21,10 @@
       <input type="date" name="date_from" id="date_from" value="{{ date_from }}"></div>
     <div><label class="field-label" for="date_to">To</label>
       <input type="date" name="date_to" id="date_to" value="{{ date_to }}"></div>
+    {% if ledger and ledger.account %}
+    <a href="/trade/reports/general-ledger/{{ ledger.account.id }}.pdf?date_from={{ date_from }}&date_to={{ date_to }}&img=1" target="_blank" class="btn-secondary">Open as Image</a>
+    <a href="/trade/reports/general-ledger/{{ ledger.account.id }}.pdf?date_from={{ date_from }}&date_to={{ date_to }}" target="_blank" class="btn-secondary">Export PDF</a>
+    {% endif %}
   {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/general-ledger') }}
 
   {% if ledger and ledger.account %}

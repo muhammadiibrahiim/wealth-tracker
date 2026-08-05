@@ -239,6 +239,64 @@
     {{ aging_card('Payables Aging (AP)', ap_aging, '/trade/reports/ap-aging', 'you owe vendors') }}
 </div>
 
+<!-- ===================== Next 5 to collect / pay ===================== -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="aitex-card">
+        <h2 class="aitex-h3 mb-3">Next 5 to Collect</h2>
+        <table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs border-b border-gray-100">
+                <th class="text-left py-1">Customer</th>
+                <th class="text-left py-1">Trade</th>
+                <th class="text-left py-1">Due</th>
+                <th class="text-right py-1">Amount</th>
+            </tr></thead>
+            <tbody>
+                {% for r in ar_aging.rows[:5] %}
+                <tr class="border-b border-gray-50">
+                    <td class="py-1.5">{{ r.customer }}</td>
+                    <td class="py-1.5"><a href="/trade/trades/{{ r.trade_id }}" class="wt-mono text-blue-600 hover:underline">{{ r.trade_ref }}</a></td>
+                    <td class="py-1.5 text-gray-500">
+                        {{ r.due_date }}
+                        {% if r.days_over > 0 %}<span class="text-rose-600 font-semibold">+{{ r.days_over }}d</span>
+                        {% else %}<span class="text-gray-400">in {{ (r.due_date - today).days }}d</span>{% endif %}
+                    </td>
+                    <td class="py-1.5 text-right font-semibold {{ 'text-rose-700' if r.days_over > 0 else '' }}">{{ "{:,.0f}".format(r.outstanding) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="py-2 text-gray-400">Nothing outstanding. 🎉</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="aitex-card">
+        <h2 class="aitex-h3 mb-3">Next 5 to Pay</h2>
+        <table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs border-b border-gray-100">
+                <th class="text-left py-1">Vendor</th>
+                <th class="text-left py-1">Trade</th>
+                <th class="text-left py-1">Due</th>
+                <th class="text-right py-1">Amount</th>
+            </tr></thead>
+            <tbody>
+                {% for r in ap_aging.rows[:5] %}
+                <tr class="border-b border-gray-50">
+                    <td class="py-1.5">{{ r.vendor }}</td>
+                    <td class="py-1.5">{% if r.trade_id %}<a href="/trade/trades/{{ r.trade_id }}" class="wt-mono text-blue-600 hover:underline">{{ r.trade_ref }}</a>{% else %}—{% endif %}</td>
+                    <td class="py-1.5 text-gray-500">
+                        {{ r.due_date }}
+                        {% if r.days_over > 0 %}<span class="text-rose-600 font-semibold">+{{ r.days_over }}d</span>
+                        {% else %}<span class="text-gray-400">in {{ (r.due_date - today).days }}d</span>{% endif %}
+                    </td>
+                    <td class="py-1.5 text-right font-semibold {{ 'text-rose-700' if r.days_over > 0 else '' }}">{{ "{:,.0f}".format(r.outstanding) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="py-2 text-gray-400">Nothing owed. 🎉</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
 <!-- ===================== Customers & Vendors ===================== -->
 <h2 class="aitex-h2 mb-3">Customers &amp; Vendors</h2>
 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">

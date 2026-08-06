@@ -518,13 +518,23 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
     # P&L A/C (EXPENSE, Dr 3903 / Cr payee) + a close-to-Capital; customer-paid
     # ones stay as a JOURNAL that reduces the customer's receivable. Both share
     # the "{ref} cost:" prefix; the "{ref} cost close:" JVs are excluded by it.
+    # Bilty is structurally the same shape (Dr P&L or Capital / Cr payee, closed
+    # to Capital the same way) but posted under a free-text description the
+    # user types in (e.g. "TRD-0016 rickshaw kiraya for 9515 dabbi") — no fixed
+    # prefix to match. The reliable marker is the [bilty-for:...] tag every
+    # bilty EXPENSE entry carries (see _bilty_tag); its "close" JV uses a
+    # DIFFERENT tag, [bilty-close-for:...], so this can't also match that.
+    from sqlalchemy import or_
     cost_prefix = f"{trade.reference} cost:"
     cost_entries = session.exec(
         select(JournalEntry).where(
             JournalEntry.user_id == user_id,
             JournalEntry.trade_id == trade.id,
             JournalEntry.entry_type.in_([JournalEntryType.JOURNAL, JournalEntryType.EXPENSE]),
-            JournalEntry.description.like(f"{cost_prefix}%"),
+            or_(
+                JournalEntry.description.like(f"{cost_prefix}%"),
+                JournalEntry.description.like("%[bilty-for:%"),
+            ),
             JournalEntry.is_reversed == False,  # noqa: E712
         ).order_by(JournalEntry.entry_date, JournalEntry.id)
     ).all()

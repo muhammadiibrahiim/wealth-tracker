@@ -2469,6 +2469,22 @@ class TradeReportService:
             _Account.user_id == user_id, _Account.name == "Capital A/C")).first()
         capital_balance = (-_balance_asof(session, capital_acct.id, today)) if capital_acct else ZERO
 
+        # ── Pending pipeline — every trade still in play (same "not done yet"
+        # definition the Trades page's Pending tab uses: anything except
+        # Completed/Cancelled/Closed), not just the narrower open/delivered/
+        # partially-paid set open_count above uses. Sale/cost are the trade
+        # totals; profit is net of per-trade costs (bilty, dye/block, etc.),
+        # matching the Trades list's own Net Profit column so the two agree.
+        _NOT_DONE = (TradeStatus.COMPLETED, TradeStatus.CANCELLED, TradeStatus.CLOSED)
+        pending_trades = [t for t in trades if t.status not in _NOT_DONE]
+        pending_sale_value = sum((Decimal(t.total_sale) for t in pending_trades), ZERO)
+        pending_cost_value = sum((Decimal(t.total_cost) for t in pending_trades), ZERO)
+        pending_profit_value = sum(
+            (Decimal(t.total_sale) - Decimal(t.total_cost) - TradeService.trade_costs_total(session, user_id, t)
+             for t in pending_trades),
+            ZERO,
+        )
+
         return {
             "open_trades": open_count,
             "overdue_receivable": overdue_receivable.quantize(Decimal("0.01")),
@@ -2478,6 +2494,10 @@ class TradeReportService:
             "month_profit": month_profit.quantize(Decimal("0.01")),
             "capital_balance": capital_balance.quantize(Decimal("0.01")),
             "capital_account_id": capital_acct.id if capital_acct else None,
+            "pending_count": len(pending_trades),
+            "pending_sale_value": pending_sale_value.quantize(Decimal("0.01")),
+            "pending_cost_value": pending_cost_value.quantize(Decimal("0.01")),
+            "pending_profit_value": pending_profit_value.quantize(Decimal("0.01")),
         }
 
     @staticmethod

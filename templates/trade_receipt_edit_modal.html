@@ -1,0 +1,38 @@
+<div class="modal-backdrop fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+  <div class="bg-white p-7 w-full max-w-md mx-4">
+    <div class="flex items-start justify-between mb-5">
+      <div>
+        <h2 class="modal-title">Edit Receipt</h2>
+        <p class="modal-subtitle">{{ trade.reference }} · {{ line.item_name }}</p>
+      </div>
+      <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
+    </div>
+
+    <form hx-post="/trade/receipts/{{ receipt.id }}/edit" class="space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="field-label field-label-required">Qty Received</label>
+          <input type="number" step="0.001" min="0.001" name="received_qty" value="{{ '{:g}'.format(receipt.received_qty) }}" required class="w-full">
+          <p class="text-xs mt-1 wt-mute">{{ line.unit }}</p>
+        </div>
+        <div>
+          <label class="field-label field-label-required">Received On</label>
+          <input type="date" name="received_on" value="{{ receipt.received_on }}" required class="w-full">
+        </div>
+      </div>
+      <div>
+        <label class="field-label">Notes</label>
+        <input type="text" name="notes" value="{{ receipt.notes or '' }}" placeholder="Optional" class="w-full">
+      </div>
+
+      <div class="accent-card wt-card-info wt-info-bg">
+        <p class="text-sm wt-ink">💡 Saving re-derives this trade's delivery-event journals from the corrected quantity/date — the posted Sale &amp; Purchase amounts update to match.</p>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Cancel</button>
+        <button type="submit" class="btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>

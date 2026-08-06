@@ -880,6 +880,39 @@ async def purchase_delete(purchase_id: int, session: Session = Depends(get_sessi
     return _close_modal()
 
 
+@router.get("/purchases/{purchase_id}/edit", response_class=HTMLResponse)
+async def purchase_edit_modal(request: Request, purchase_id: int, session: Session = Depends(get_session)):
+    from models import TradePurchase, TradeLine
+    user_id = DEFAULT_USER_ID
+    p = session.get(TradePurchase, purchase_id)
+    if not p:
+        raise HTTPException(404, "Purchase batch not found")
+    trade = TradeService.get(session, user_id, p.trade_id)
+    if not trade:
+        raise HTTPException(404, "Trade not found")
+    line = session.get(TradeLine, p.line_id)
+    return templates.TemplateResponse(
+        "trade_purchase_edit_modal.html",
+        _ctx(request, purchase=p, trade=trade, line=line),
+    )
+
+
+@router.post("/purchases/{purchase_id}/edit")
+async def purchase_edit_post(purchase_id: int, request: Request, session: Session = Depends(get_session)):
+    from services.trade import PurchaseService
+    form = await request.form()
+    ok = PurchaseService.update(
+        session, DEFAULT_USER_ID, purchase_id,
+        quantity=(_parse_decimal(form.get("quantity")) if form.get("quantity") else None),
+        unit_cost=(_parse_decimal(form.get("unit_cost")) if form.get("unit_cost") else None),
+        purchased_on=_parse_date(form.get("purchased_on")),
+        notes=(form.get("notes") or "").strip() or None,
+    )
+    if not ok:
+        raise HTTPException(400, "Could not update this purchase batch")
+    return _close_modal()
+
+
 # ───────── partial receipts (vendor delivery + invoice upload) ─────
 
 
@@ -975,6 +1008,40 @@ async def receipt_delete(receipt_id: int, session: Session = Depends(get_session
     return _close_modal()
 
 
+@router.get("/receipts/{receipt_id}/edit", response_class=HTMLResponse)
+async def receipt_edit_modal(request: Request, receipt_id: int, session: Session = Depends(get_session)):
+    from models import TradeLineReceipt, TradeLine
+    user_id = DEFAULT_USER_ID
+    r = session.get(TradeLineReceipt, receipt_id)
+    if not r:
+        raise HTTPException(404, "Receipt not found")
+    line = session.get(TradeLine, r.line_id)
+    if not line:
+        raise HTTPException(404, "Line not found")
+    trade = TradeService.get(session, user_id, line.trade_id)
+    if not trade:
+        raise HTTPException(404, "Trade not found")
+    return templates.TemplateResponse(
+        "trade_receipt_edit_modal.html",
+        _ctx(request, receipt=r, trade=trade, line=line),
+    )
+
+
+@router.post("/receipts/{receipt_id}/edit")
+async def receipt_edit_post(receipt_id: int, request: Request, session: Session = Depends(get_session)):
+    from services.trade import ReceiptService
+    form = await request.form()
+    ok = ReceiptService.update(
+        session, DEFAULT_USER_ID, receipt_id,
+        received_qty=(_parse_decimal(form.get("received_qty")) if form.get("received_qty") else None),
+        received_on=_parse_date(form.get("received_on")),
+        notes=(form.get("notes") or "").strip() or None,
+    )
+    if not ok:
+        raise HTTPException(400, "Could not update this receipt")
+    return _close_modal()
+
+
 @router.get("/goods-received", response_class=HTMLResponse)
 async def goods_received(request: Request, session: Session = Depends(get_session)):
     """Log of every goods-receipt, grouped into deliveries (one vendor, one date)
@@ -1005,7 +1072,7 @@ async def goods_received(request: Request, session: Session = Depends(get_sessio
         g["lines"].append({
             "trade_id": trade.id, "trade_ref": trade.reference, "customer": vname.get(trade.purchaser_id, "?"),
             "item": line.item_name, "unit": line.unit, "qty": Decimal(r.received_qty),
-            "batches": [{"qty": Decimal(b.quantity), "rate": Decimal(b.unit_cost)} for b in batches],
+            "batches": [{"id": b.id, "qty": Decimal(b.quantity), "rate": Decimal(b.unit_cost)} for b in batches],
             "receipt_id": r.id,
         })
         g["trade_ids"].add(trade.id)

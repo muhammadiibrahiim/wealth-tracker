@@ -846,11 +846,16 @@ class TradeService:
 
         event_tag = f" · {event_date.isoformat()}"
 
-        # Idempotency: this exact event already posted?
+        # Idempotency: this exact event already posted? Must be scoped to
+        # SALE/PURCHASE — a bilty's "cost close" JOURNAL entry for the same
+        # date ALSO contains this event_tag (see _purge_event_journals's
+        # docstring), and without this filter it falsely satisfies "already
+        # posted", silently skipping the post entirely after a purge.
         already = session.exec(
             select(JournalEntry).where(
                 JournalEntry.user_id == trade.user_id,
                 JournalEntry.trade_id == trade.id,
+                JournalEntry.entry_type.in_([JournalEntryType.SALE, JournalEntryType.PURCHASE]),
                 JournalEntry.is_reversed == False,  # noqa: E712
                 JournalEntry.description.contains(event_tag),
             )
@@ -1564,6 +1569,38 @@ class PurchaseService:
             TradeService._repost_cost(session, trade)
         return True
 
+    @staticmethod
+    def update(session: Session, user_id: int, purchase_id: int,
+               quantity: Optional[Decimal] = None, unit_cost: Optional[Decimal] = None,
+               purchased_on: Optional[date] = None, notes: Optional[str] = None) -> bool:
+        """Edit an existing purchase batch in place (qty / rate / date bought).
+        Recomputes the line's weighted-average cost and re-derives every
+        delivery-event journal from scratch — same as record()/delete() — so a
+        corrected rate or quantity actually moves the posted COGS."""
+        p = session.get(TradePurchase, purchase_id)
+        if not p:
+            return False
+        trade = TradeService.get(session, user_id, p.trade_id)
+        if not trade:
+            return False
+        if quantity is not None and Decimal(str(quantity)) > 0:
+            p.quantity = Decimal(str(quantity))
+        if unit_cost is not None:
+            p.unit_cost = Decimal(str(unit_cost))
+        if purchased_on is not None:
+            p.purchased_on = purchased_on
+        if notes is not None:
+            p.notes = notes
+        session.add(p)
+        session.commit()
+        line = session.get(TradeLine, p.line_id)
+        if line:
+            session.refresh(line)
+            PurchaseService.recompute_line_cost(session, line)
+            session.commit()
+        TradeService._repost_cost(session, trade)
+        return True
+
 
 # ─────────────────────────── Receipts ───────────────────────────
 
@@ -1686,6 +1723,34 @@ class ReceiptService:
                 TradeService._post_event_journals(
                     session, trade, trade.delivered_at, residual,
                 )
+        return True
+
+    @staticmethod
+    def update(session: Session, user_id: int, receipt_id: int,
+               received_qty: Optional[Decimal] = None, received_on: Optional[date] = None,
+               notes: Optional[str] = None) -> bool:
+        """Edit an existing receipt in place (qty / date received). Re-derives
+        every delivery-event journal from scratch via _repost_cost — the same
+        robust re-posting record()/delete() use elsewhere — so a corrected
+        quantity or date actually moves the posted Sale/Purchase amounts."""
+        r = session.get(TradeLineReceipt, receipt_id)
+        if not r:
+            return False
+        line = session.get(TradeLine, r.line_id)
+        if not line:
+            return False
+        trade = TradeService.get(session, user_id, line.trade_id)
+        if not trade:
+            return False
+        if received_qty is not None and Decimal(str(received_qty)) > 0:
+            r.received_qty = Decimal(str(received_qty))
+        if received_on is not None:
+            r.received_on = received_on
+        if notes is not None:
+            r.notes = notes
+        session.add(r)
+        session.commit()
+        TradeService._repost_cost(session, trade)
         return True
 
 

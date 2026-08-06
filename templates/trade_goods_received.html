@@ -25,8 +25,7 @@
         {% if d.invoice %}<a href="{{ d.invoice }}" target="_blank" class="wt-info hover:underline text-xs">📄 invoice</a>{% endif %}
       </div>
     </div>
-    <div class="wt-table-scroll">
-    <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
+    {{ table_open(dense=True) }}
       <thead>
         <tr class="wt-group">
           <th class="px-5 py-2">Trade → Customer</th>
@@ -40,9 +39,15 @@
         <tr class="border-t border-gray-100">
           <td class="px-5 py-2"><a class="wt-info hover:underline" href="/trade/trades/{{ ln.trade_id }}">{{ ln.trade_ref }}</a> <span class="wt-ash">→ {{ ln.customer }}</span></td>
           <td class="px-5 py-2 font-medium wt-body">{{ ln.item }}</td>
-          <td class="px-5 py-2 text-right tabular-nums">{{ '{:,.0f}'.format(ln.qty) }} <span class="wt-ash text-xs">{{ ln.unit }}</span></td>
+          <td class="px-5 py-2 text-right tabular-nums">
+            <button type="button" class="hover:underline hover:wt-info" title="Edit this receipt"
+                    hx-get="/trade/receipts/{{ ln.receipt_id }}/edit" hx-target="#modal-container">
+              {{ '{:,.0f}'.format(ln.qty) }} <span class="wt-ash text-xs">{{ ln.unit }}</span>
+            </button>
+          </td>
           <td class="px-5 py-2 wt-mute">
-            {% if ln.batches %}{% for b in ln.batches %}{{ '{:,.0f}'.format(b.qty) }} @ {{ cur }} {{ '{:g}'.format(b.rate) }}{% if not loop.last %} · {% endif %}{% endfor %}{% else %}<span class="wt-ash">—</span>{% endif %}
+            {% if ln.batches %}{% for b in ln.batches %}<button type="button" class="hover:underline hover:wt-info" title="Edit this purchase batch"
+                    hx-get="/trade/purchases/{{ b.id }}/edit" hx-target="#modal-container">{{ '{:,.0f}'.format(b.qty) }} @ {{ cur }} {{ '{:g}'.format(b.rate) }}</button>{% if not loop.last %} · {% endif %}{% endfor %}{% else %}<span class="wt-ash">—</span>{% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -55,7 +60,6 @@
         </tr>
       </tfoot>
     {{ table_close() }}
-    </div>
   </div>
   {% else %}
   <div class="wt-panel p-12 text-center wt-ash">

@@ -1,0 +1,64 @@
+{% from "partials/_ui.html" import table_open, table_close, empty_state %}
+{% macro pkr(v) %}{{ currency }} {{ "{:,.0f}".format(v or 0) }}{% endmacro %}
+<div class="modal-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8">
+  <div class="bg-white p-7 w-full max-w-5xl mx-4">
+    <div class="flex items-start justify-between mb-5">
+      <div>
+        <h2 class="modal-title">Pending Delivery — what's left on the table</h2>
+        <p class="modal-subtitle">
+          Goods already sold but not yet <strong>received</strong> from the vendor
+          ({{ detail.line_count }} line{{ 's' if detail.line_count != 1 }} across {{ detail.trade_count }} trade{{ 's' if detail.trade_count != 1 }}).
+          Capital only books sale/cost/profit once a delivery is actually received — this is what's still open.
+        </p>
+      </div>
+      <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
+    </div>
+
+    {% if not detail.rows %}
+      {{ empty_state('Nothing pending', 'Every active trade has been fully received.') }}
+    {% else %}
+    {{ table_open(dense=True) }}
+      <thead>
+        <tr class="wt-group">
+          <th class="px-3 py-2">Trade</th>
+          <th class="px-3 py-2">Vendor → Customer</th>
+          <th class="px-3 py-2">Item</th>
+          <th class="px-3 py-2 text-right">Ordered</th>
+          <th class="px-3 py-2 text-right">Received</th>
+          <th class="px-3 py-2 text-right">Pending</th>
+          <th class="px-3 py-2 text-right{{ ' font-bold' if focus == 'sale' }}">Pending Sale</th>
+          <th class="px-3 py-2 text-right{{ ' font-bold' if focus == 'cost' }}">Pending Cost</th>
+          <th class="px-3 py-2 text-right{{ ' font-bold' if focus == 'profit' }}">Pending Profit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in detail.rows %}
+        <tr class="border-t border-gray-100">
+          <td class="px-3 py-2"><a class="wt-info hover:underline" href="/trade/trades/{{ r.trade_id }}">{{ r.trade_ref }}</a></td>
+          <td class="px-3 py-2 wt-mute">{{ r.vendor_name }} <span class="wt-ash">→</span> {{ r.customer_name }}</td>
+          <td class="px-3 py-2 font-medium wt-body">{{ r.item_name }}</td>
+          <td class="px-3 py-2 text-right tabular-nums wt-mute">{{ '{:,.0f}'.format(r.ordered_qty) }} <span class="wt-ash text-xs">{{ r.unit }}</span></td>
+          <td class="px-3 py-2 text-right tabular-nums wt-mute">{{ '{:,.0f}'.format(r.received_qty) }}</td>
+          <td class="px-3 py-2 text-right tabular-nums font-semibold">{{ '{:,.0f}'.format(r.pending_qty) }}</td>
+          <td class="px-3 py-2 text-right tabular-nums{{ ' font-bold' if focus == 'sale' }}" title="{{ '{:,.0f}'.format(r.pending_qty) }} × {{ pkr(r.unit_price) }} sale rate">{{ pkr(r.sale_value) }}</td>
+          <td class="px-3 py-2 text-right tabular-nums{{ ' font-bold' if focus == 'cost' }}" title="{{ '{:,.0f}'.format(r.pending_qty) }} × {{ pkr(r.unit_cost) }} cost rate">{{ pkr(r.cost_value) }}</td>
+          <td class="px-3 py-2 text-right tabular-nums {{ 'text-emerald-600' if r.profit_value >= 0 else 'text-rose-600' }}{{ ' font-bold' if focus == 'profit' }}">{{ pkr(r.profit_value) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="border-t border-gray-200 font-bold">
+          <td class="px-3 py-2" colspan="6">Total</td>
+          <td class="px-3 py-2 text-right tabular-nums">{{ pkr(detail.total_sale_value) }}</td>
+          <td class="px-3 py-2 text-right tabular-nums">{{ pkr(detail.total_cost_value) }}</td>
+          <td class="px-3 py-2 text-right tabular-nums {{ 'text-emerald-600' if detail.total_profit_value >= 0 else 'text-rose-600' }}">{{ pkr(detail.total_profit_value) }}</td>
+        </tr>
+      </tfoot>
+    {{ table_close() }}
+    {% endif %}
+
+    <div class="flex justify-end pt-4 border-t border-gray-200 mt-4">
+      <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Close</button>
+    </div>
+  </div>
+</div>

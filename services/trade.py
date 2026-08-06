@@ -2469,21 +2469,12 @@ class TradeReportService:
             _Account.user_id == user_id, _Account.name == "Capital A/C")).first()
         capital_balance = (-_balance_asof(session, capital_acct.id, today)) if capital_acct else ZERO
 
-        # ── Pending pipeline — every trade still in play (same "not done yet"
-        # definition the Trades page's Pending tab uses: anything except
-        # Completed/Cancelled/Closed), not just the narrower open/delivered/
-        # partially-paid set open_count above uses. Sale/cost are the trade
-        # totals; profit is net of per-trade costs (bilty, dye/block, etc.),
-        # matching the Trades list's own Net Profit column so the two agree.
-        _NOT_DONE = (TradeStatus.COMPLETED, TradeStatus.CANCELLED, TradeStatus.CLOSED)
-        pending_trades = [t for t in trades if t.status not in _NOT_DONE]
-        pending_sale_value = sum((Decimal(t.total_sale) for t in pending_trades), ZERO)
-        pending_cost_value = sum((Decimal(t.total_cost) for t in pending_trades), ZERO)
-        pending_profit_value = sum(
-            (Decimal(t.total_sale) - Decimal(t.total_cost) - TradeService.trade_costs_total(session, user_id, t)
-             for t in pending_trades),
-            ZERO,
-        )
+        # ── Pending delivery — goods sold but not yet RECEIVED from the
+        # vendor (ordered − received per line). Capital only books sale/cost/
+        # profit per delivery event (see TradeService._post_event_journals),
+        # so this is the value still sitting on the table for goods that
+        # haven't arrived yet — same basis as pending_delivery_lines() below.
+        _pending = TradeReportService.pending_delivery_lines(session, user_id)
 
         return {
             "open_trades": open_count,
@@ -2494,10 +2485,84 @@ class TradeReportService:
             "month_profit": month_profit.quantize(Decimal("0.01")),
             "capital_balance": capital_balance.quantize(Decimal("0.01")),
             "capital_account_id": capital_acct.id if capital_acct else None,
-            "pending_count": len(pending_trades),
-            "pending_sale_value": pending_sale_value.quantize(Decimal("0.01")),
-            "pending_cost_value": pending_cost_value.quantize(Decimal("0.01")),
-            "pending_profit_value": pending_profit_value.quantize(Decimal("0.01")),
+            "pending_count": _pending["trade_count"],
+            "pending_sale_value": _pending["total_sale_value"],
+            "pending_cost_value": _pending["total_cost_value"],
+            "pending_profit_value": _pending["total_profit_value"],
+        }
+
+    @staticmethod
+    def pending_delivery_lines(session: Session, user_id: int) -> dict:
+        """Line-level breakdown of goods sold but not yet received from the
+        vendor — "ordered minus received" per line, across every active trade
+        (not Cancelled/Closed, not yet Mark-Complete'd). Capital only books a
+        line's sale/cost/profit once it's actually received (each delivery
+        posts its own SALE+PURCHASE journal — see
+        TradeService._post_event_journals), so this is what's still on the
+        table: value sold/committed but not yet locked in. Same definition
+        as pending_receivables() / customer_pending_goods() above, merged
+        into one flat list valued both ways (sale rate AND cost rate) for the
+        dashboard's Pending Trades Pipeline drill-down.
+        """
+        today = date.today()
+        trades = session.exec(
+            select(Trade).where(Trade.user_id == user_id).order_by(Trade.trade_date)
+        ).all()
+
+        rows = []
+        total_sale_value = ZERO
+        total_cost_value = ZERO
+        trade_ids = set()
+
+        for t in trades:
+            if t.status in (TradeStatus.CANCELLED, TradeStatus.CLOSED):
+                continue
+            if t.delivered_at is not None:
+                continue  # Mark Complete posted the residual → nothing pending
+            vendor = session.get(Party, t.vendor_id) if t.vendor_id else None
+            customer = session.get(Party, t.purchaser_id) if t.purchaser_id else None
+            for ln in t.lines:
+                received = sum(
+                    (Decimal(r.received_qty) for r in (ln.receipts or [])), ZERO
+                )
+                ordered = Decimal(ln.quantity)
+                pending = ordered - received
+                if pending <= 0:
+                    continue
+                sale_value = (pending * Decimal(ln.unit_price)).quantize(Decimal("0.01"))
+                cost_value = (pending * Decimal(ln.unit_cost)).quantize(Decimal("0.01"))
+                rows.append({
+                    "trade_id": t.id,
+                    "trade_ref": t.reference,
+                    "trade_date": t.trade_date,
+                    "vendor_name": vendor.name if vendor else "—",
+                    "customer_name": customer.name if customer else "—",
+                    "item_name": ln.item_name,
+                    "unit": ln.unit or "pcs",
+                    "ordered_qty": ordered.quantize(Decimal("0.001")),
+                    "received_qty": received.quantize(Decimal("0.001")),
+                    "pending_qty": pending.quantize(Decimal("0.001")),
+                    "unit_price": Decimal(ln.unit_price).quantize(Decimal("0.01")),
+                    "unit_cost": Decimal(ln.unit_cost).quantize(Decimal("0.01")),
+                    "sale_value": sale_value,
+                    "cost_value": cost_value,
+                    "profit_value": (sale_value - cost_value).quantize(Decimal("0.01")),
+                })
+                total_sale_value += sale_value
+                total_cost_value += cost_value
+                trade_ids.add(t.id)
+
+        rows.sort(key=lambda r: -r["sale_value"])
+        total_profit_value = total_sale_value - total_cost_value
+
+        return {
+            "today": today,
+            "rows": rows,
+            "trade_count": len(trade_ids),
+            "line_count": len(rows),
+            "total_sale_value": total_sale_value.quantize(Decimal("0.01")),
+            "total_cost_value": total_cost_value.quantize(Decimal("0.01")),
+            "total_profit_value": total_profit_value.quantize(Decimal("0.01")),
         }
 
     @staticmethod

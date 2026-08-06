@@ -221,6 +221,17 @@ async def dashboard(request: Request, month: str = Query(None),
     )
 
 
+@router.get("/dashboard/pending-detail", response_class=HTMLResponse)
+async def dashboard_pending_detail(
+    request: Request, focus: str = Query(""), session: Session = Depends(get_session)
+):
+    user_id = DEFAULT_USER_ID
+    detail = TradeReportService.pending_delivery_lines(session, user_id)
+    return templates.TemplateResponse(
+        "trade_pending_detail_modal.html", _ctx(request, detail=detail, focus=focus)
+    )
+
+
 # ───────── trades list & detail ─────────────────────────────────
 
 

@@ -21,8 +21,8 @@
   {% endif %}
 {% endmacro %}
 
-{% macro kpi(label, value, sub='', tone='') %}
-  <div class="aitex-card">
+{% macro kpi(label, value, sub='', tone='', attrs='') %}
+  <div class="aitex-card{{ ' cursor-pointer hover:shadow-md transition-shadow' if attrs }}" {{ attrs|safe }}>
     <div class="text-[11px] uppercase tracking-wide text-gray-400">{{ label }}</div>
     <div class="text-2xl font-bold mt-0.5 {{ tone }}">{{ value }}</div>
     {% if sub %}<div class="text-xs text-gray-400 mt-0.5">{{ sub|safe }}</div>{% endif %}
@@ -210,12 +210,15 @@
 
 <!-- ===================== Pending Trades Pipeline ===================== -->
 <div class="mb-8">
-    <h2 class="aitex-h2 mb-3">Pending Trades Pipeline <span class="aitex-meta font-normal">— {{ kpis.pending_count }} trade{{ 's' if kpis.pending_count != 1 }} not yet completed</span></h2>
+    <h2 class="aitex-h2 mb-3">Pending Trades Pipeline <span class="aitex-meta font-normal">— {{ kpis.pending_count }} trade{{ 's' if kpis.pending_count != 1 }} with goods still to arrive · click a tile for the breakdown</span></h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {{ kpi('Pending Receivables', pkr(kpis.pending_sale_value), 'invoiced value of open trades') }}
-        {{ kpi('Pending Cost', pkr(kpis.pending_cost_value), 'what those goods cost') }}
-        {{ kpi('Pending Profit', pkr(kpis.pending_profit_value), 'locked in once these close',
-               'text-emerald-600' if kpis.pending_profit_value >= 0 else 'text-rose-600') }}
+        {{ kpi('Pending Receivables', pkr(kpis.pending_sale_value), 'sale value of undelivered goods',
+               attrs='hx-get="/trade/dashboard/pending-detail?focus=sale" hx-target="#modal-container"') }}
+        {{ kpi('Pending Cost', pkr(kpis.pending_cost_value), 'what those goods will cost',
+               attrs='hx-get="/trade/dashboard/pending-detail?focus=cost" hx-target="#modal-container"') }}
+        {{ kpi('Pending Profit', pkr(kpis.pending_profit_value), 'locked in once received',
+               'text-emerald-600' if kpis.pending_profit_value >= 0 else 'text-rose-600',
+               attrs='hx-get="/trade/dashboard/pending-detail?focus=profit" hx-target="#modal-container"') }}
     </div>
 </div>
 

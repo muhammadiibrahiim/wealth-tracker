@@ -45,7 +45,7 @@
     {% else %}<span class="wt-ash">—</span>{% endif %}
   </td>
   <td class="text-right whitespace-nowrap" onclick="event.stopPropagation()">
-    <form class="inline" hx-post="/trade/trades/{{ t.id }}/delete" hx-confirm="Permanently delete {{ t.reference }}? Linked journals will be reversed.">
+    <form class="inline" hx-post="/trade/trades/{{ t.id }}/delete" hx-disabled-elt="find button" hx-confirm="Permanently delete {{ t.reference }}? Linked journals will be reversed.">
       <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
     </form>
   </td>

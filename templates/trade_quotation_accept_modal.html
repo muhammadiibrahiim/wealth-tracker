@@ -14,7 +14,7 @@
       <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
     </div>
 
-    <form hx-post="/trade/quotations/{{ quotation.id }}/accept" class="space-y-5">
+    <form hx-post="/trade/quotations/{{ quotation.id }}/accept" hx-disabled-elt="find button[type=submit]" class="space-y-5">
 
       <div class="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
         {{ table_open(dense=True) }}

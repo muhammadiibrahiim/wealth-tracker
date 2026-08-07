@@ -55,7 +55,7 @@
           </td>
           <td class="text-right whitespace-nowrap">
             <button class="wt-info text-xs hover:underline font-medium" hx-get="/trade/parties/{{ p.id }}/edit" hx-target="#modal-container">Edit</button>
-            <form class="inline" hx-post="/trade/parties/{{ p.id }}/delete" hx-confirm="Disable this party?">
+            <form class="inline" hx-post="/trade/parties/{{ p.id }}/delete" hx-disabled-elt="find button" hx-confirm="Disable this party?">
               <button class="wt-neg text-xs hover:underline ml-3 font-medium">Disable</button>
             </form>
           </td>

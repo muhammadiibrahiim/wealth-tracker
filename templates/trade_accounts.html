@@ -46,7 +46,7 @@
             <td>{% if a.is_active %}<span class="pill-dr">Active</span>{% else %}<span class="pill-cr">Disabled</span>{% endif %}</td>
             <td class="text-right whitespace-nowrap">
               <button class="wt-info text-xs hover:underline font-medium" hx-get="/trade/accounts/{{ a.id }}/edit" hx-target="#modal-container">Edit</button>
-              <form class="inline" hx-post="/trade/accounts/{{ a.id }}/delete" hx-confirm="Disable this account?">
+              <form class="inline" hx-post="/trade/accounts/{{ a.id }}/delete" hx-disabled-elt="find button" hx-confirm="Disable this account?">
                 <button class="wt-neg text-xs hover:underline ml-3 font-medium">Disable</button>
               </form>
             </td>

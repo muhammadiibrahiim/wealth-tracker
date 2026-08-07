@@ -42,7 +42,7 @@
       </a>
       <div class="text-sm font-medium wt-ink truncate" title="{{ d.name }}">{{ d.name }}</div>
       <div class="text-xs wt-mute mt-0.5">{{ d.uploaded_at.strftime('%d %b %Y') }}</div>
-      <form hx-post="/trade/documents/{{ d.id }}/delete" hx-confirm="Delete &quot;{{ d.name }}&quot;?" class="mt-1">
+      <form hx-post="/trade/documents/{{ d.id }}/delete" hx-disabled-elt="find button" hx-confirm="Delete &quot;{{ d.name }}&quot;?" class="mt-1">
         <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
       </form>
     </div>

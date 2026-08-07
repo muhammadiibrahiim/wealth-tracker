@@ -13,7 +13,7 @@
       <p class="text-sm text-yellow-900">No customers yet. <a href="/trade/parties" class="underline font-medium">Add a party →</a></p>
     </div>
     {% else %}
-    <form hx-post="/trade/payments/receive" class="space-y-4" enctype="multipart/form-data">
+    <form hx-post="/trade/payments/receive" hx-disabled-elt="find button[type=submit]" class="space-y-4" enctype="multipart/form-data">
       <div>
         <label class="field-label field-label-required">Customer</label>
         <select name="customer_id" id="mrp-customer" required class="w-full"

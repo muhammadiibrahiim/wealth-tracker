@@ -8,7 +8,7 @@
       <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
     </div>
 
-    <form hx-post="/trade/purchases/{{ purchase.id }}/edit" class="space-y-4">
+    <form hx-post="/trade/purchases/{{ purchase.id }}/edit" hx-disabled-elt="find button[type=submit]" class="space-y-4">
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="field-label field-label-required">Quantity</label>

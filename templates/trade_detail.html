@@ -41,20 +41,20 @@
         <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/payments/new?direction=inbound" hx-target="#modal-container">Record Customer Payment</button>
         {% endif %}
         {% if 0 < customer_outstanding <= 100 %}
-        <form hx-post="/trade/trades/{{ trade.id }}/writeoff-residual" hx-confirm="Write off the remaining {{ currency }} {{ '{:,.2f}'.format(customer_outstanding) }} to expenses and mark this trade fully paid?">
+        <form hx-post="/trade/trades/{{ trade.id }}/writeoff-residual" hx-disabled-elt="find button" hx-confirm="Write off the remaining {{ currency }} {{ '{:,.2f}'.format(customer_outstanding) }} to expenses and mark this trade fully paid?">
           <button class="btn-secondary wt-warn">Complete &amp; Adjust ({{ currency }} {{ '{:,.2f}'.format(customer_outstanding) }})</button>
         </form>
         {% endif %}
         {% if _status == 'paid' %}
-        <form hx-post="/trade/trades/{{ trade.id }}/close" hx-confirm="Close this trade?">
+        <form hx-post="/trade/trades/{{ trade.id }}/close" hx-disabled-elt="find button" hx-confirm="Close this trade?">
           <button class="btn-secondary">Close Trade</button>
         </form>
         {% endif %}
-        <form hx-post="/trade/trades/{{ trade.id }}/cancel" hx-confirm="Cancel this trade? Status flips to Cancelled and journals reverse.">
+        <form hx-post="/trade/trades/{{ trade.id }}/cancel" hx-disabled-elt="find button" hx-confirm="Cancel this trade? Status flips to Cancelled and journals reverse.">
           <button class="btn-secondary wt-neg">Cancel</button>
         </form>
       {% endif %}
-      <form hx-post="/trade/trades/{{ trade.id }}/delete" hx-confirm="PERMANENTLY DELETE this trade? All payments and journal entries linked to it will be reversed and the trade row removed. This cannot be undone.">
+      <form hx-post="/trade/trades/{{ trade.id }}/delete" hx-disabled-elt="find button" hx-confirm="PERMANENTLY DELETE this trade? All payments and journal entries linked to it will be reversed and the trade row removed. This cannot be undone.">
         <button class="btn-danger">Delete</button>
       </form>
     </div>
@@ -362,7 +362,7 @@
           </td>
           <td class="wt-body text-xs">{{ r.notes or '' }}</td>
           <td class="text-right">
-            <form hx-post="/trade/receipts/{{ r.id }}/delete" hx-confirm="Delete this receipt?">
+            <form hx-post="/trade/receipts/{{ r.id }}/delete" hx-disabled-elt="find button" hx-confirm="Delete this receipt?">
               <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
             </form>
           </td>
@@ -408,7 +408,7 @@
           </td>
           <td class="wt-body text-sm whitespace-nowrap">{{ a.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
           <td class="text-right">
-            <form hx-post="/trade/trades/{{ trade.id }}/attachments/{{ a.id }}/delete" hx-confirm="Delete this attachment?">
+            <form hx-post="/trade/trades/{{ trade.id }}/attachments/{{ a.id }}/delete" hx-disabled-elt="find button" hx-confirm="Delete this attachment?">
               <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
             </form>
           </td>
@@ -423,7 +423,7 @@
     <div class="p-6 border-t border-gray-200">
       <form hx-post="/trade/trades/{{ trade.id }}/attachments"
             hx-encoding="multipart/form-data"
-            class="space-y-3">
+            hx-disabled-elt="find button[type=submit]" class="space-y-3">
         <input type="hidden" name="kind" value="customer_po">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
           <div class="md:col-span-2">
@@ -498,7 +498,7 @@
           </td>
           <td class="wt-body text-sm whitespace-nowrap">{{ a.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
           <td class="text-right">
-            <form hx-post="/trade/trades/{{ trade.id }}/attachments/{{ a.id }}/delete" hx-confirm="Delete this design?">
+            <form hx-post="/trade/trades/{{ trade.id }}/attachments/{{ a.id }}/delete" hx-disabled-elt="find button" hx-confirm="Delete this design?">
               <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
             </form>
           </td>
@@ -513,7 +513,7 @@
     <div class="p-6 border-t border-gray-200">
       <form hx-post="/trade/trades/{{ trade.id }}/attachments"
             hx-encoding="multipart/form-data"
-            class="space-y-3">
+            hx-disabled-elt="find button[type=submit]" class="space-y-3">
         <input type="hidden" name="kind" value="design">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
           <div class="md:col-span-2">
@@ -591,7 +591,7 @@
           </td>
           <td class="num" class=\"{{ 'wt-pos' if c.by_customer else 'wt-neg' }}\">{{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
           <td class="text-right">
-            <form hx-post="/trade/trades/{{ trade.id }}/costs/{{ c.entry_id }}/delete" hx-confirm="Reverse this cost entry?">
+            <form hx-post="/trade/trades/{{ trade.id }}/costs/{{ c.entry_id }}/delete" hx-disabled-elt="find button" hx-confirm="Reverse this cost entry?">
               <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
             </form>
           </td>
@@ -638,7 +638,7 @@
             </a>{% endif %}
           </td>
           <td class="num wt-pos">+ {{ currency }} {{ '{:,.2f}'.format(p.amount) }}</td>
-          <td class="text-right"><form hx-post="/trade/payments/{{ p.id }}/delete" hx-confirm="Delete payment?"><button class="wt-neg text-xs hover:underline">Del</button></form></td>
+          <td class="text-right"><form hx-post="/trade/payments/{{ p.id }}/delete" hx-disabled-elt="find button" hx-confirm="Delete payment?"><button class="wt-neg text-xs hover:underline">Del</button></form></td>
         </tr>
         {% endfor %}
         {% for c in costs if c.by_customer %}
@@ -650,7 +650,7 @@
           </td>
           <td class="wt-body text-sm">{{ c.description }}</td>
           <td class="num wt-pos">+ {{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
-          <td class="text-right"><form hx-post="/trade/trades/{{ trade.id }}/costs/{{ c.entry_id }}/delete" hx-confirm="Reverse this customer-paid cost?"><button class="wt-neg text-xs hover:underline">Del</button></form></td>
+          <td class="text-right"><form hx-post="/trade/trades/{{ trade.id }}/costs/{{ c.entry_id }}/delete" hx-disabled-elt="find button" hx-confirm="Reverse this customer-paid cost?"><button class="wt-neg text-xs hover:underline">Del</button></form></td>
         </tr>
         {% endfor %}
       </tbody>

@@ -8,7 +8,7 @@
       <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
     </div>
 
-    <form hx-post="{{ action }}" class="space-y-4">
+    <form hx-post="{{ action }}" hx-disabled-elt="find button[type=submit]" class="space-y-4">
       <div>
         <label class="field-label field-label-required">Name</label>
         <input name="name" required value="{{ party.name if party else '' }}" class="w-full">

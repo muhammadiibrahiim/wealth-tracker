@@ -6,7 +6,7 @@
     </div>
     <p class="modal-subtitle mb-5">Just what it was for, how much, and where it was paid from. The rest is automatic — it lands in your profit &amp; ROE and reduces your Capital. No account picking.</p>
 
-    <form hx-post="/trade/vouchers/expense-quick" class="space-y-4">
+    <form hx-post="/trade/vouchers/expense-quick" hx-disabled-elt="find button[type=submit]" class="space-y-4">
       <div>
         <label class="field-label">What was it for?</label>
         <input name="description" required placeholder="e.g. sample parcel freight, printing plates, tea for staff"

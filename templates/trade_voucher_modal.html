@@ -24,7 +24,7 @@
         'owner_out': {'from_label': 'From (cash / bank)',                'to_label':"To (Owner's Capital)"},
       }[preset] %}
 
-      <form hx-post="/trade/vouchers" hx-target="#modal-container" class="space-y-4" enctype="multipart/form-data">
+      <form hx-post="/trade/vouchers" hx-target="#modal-container" hx-disabled-elt="find button[type=submit]" class="space-y-4" enctype="multipart/form-data">
         <input type="hidden" name="entry_type" value="{{ preset_type }}">
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -166,7 +166,7 @@
     {# ── Multi-line debit/credit table for Journal vouchers ──────────────── #}
     {% else %}
       {% set _action = ('/trade/vouchers/' ~ entry.id) if editing else '/trade/vouchers' %}
-      <form hx-post="{{ _action }}" hx-target="#modal-container" class="space-y-4">
+      <form hx-post="{{ _action }}" hx-target="#modal-container" hx-disabled-elt="find button[type=submit]" class="space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="field-label">Entry Date</label>

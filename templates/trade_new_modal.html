@@ -20,7 +20,7 @@
     </div>
     {% endif %}
 
-    <form hx-post="/trade/trades" hx-target="#modal-container" class="space-y-4" id="trade-form">
+    <form hx-post="/trade/trades" hx-target="#modal-container" hx-disabled-elt="find button[type=submit]" class="space-y-4" id="trade-form">
       <!-- resolved party references (filled by JS) -->
       <input type="hidden" name="vendor_id" id="f_vendor_id">
       <input type="hidden" name="vendor_new_name" id="f_vendor_new_name">

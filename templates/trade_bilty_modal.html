@@ -20,7 +20,8 @@
     </div>
     {% else %}
 
-    <form hx-post="/trade/trades/{{ trade.id }}/bilty/by-date/{{ event_date }}" class="space-y-4">
+    <form hx-post="/trade/trades/{{ trade.id }}/bilty/by-date/{{ event_date }}"
+          hx-disabled-elt="find button[type=submit]" class="space-y-4">
 
       <div>
         <label class="field-label">Description</label>

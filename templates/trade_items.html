@@ -39,7 +39,7 @@
           </td>
           <td class="text-right whitespace-nowrap">
             <button class="wt-info text-xs hover:underline font-medium" hx-get="/trade/items/{{ i.id }}/edit" hx-target="#modal-container">Edit</button>
-            <form class="inline" hx-post="/trade/items/{{ i.id }}/delete" hx-confirm="Disable this item?">
+            <form class="inline" hx-post="/trade/items/{{ i.id }}/delete" hx-disabled-elt="find button" hx-confirm="Disable this item?">
               <button class="wt-neg text-xs hover:underline ml-3 font-medium">Disable</button>
             </form>
           </td>

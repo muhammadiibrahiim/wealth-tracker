@@ -23,7 +23,7 @@
       <button class="btn-primary" hx-get="/trade/vouchers/{{ entry.id }}/edit" hx-target="#modal-container">Edit</button>
       {% endif %}
       {% if not entry.is_reversed and not entry.reversal_of_id %}
-      <form hx-post="/trade/vouchers/{{ entry.id }}/reverse" hx-confirm="Reverse this voucher?">
+      <form hx-post="/trade/vouchers/{{ entry.id }}/reverse" hx-disabled-elt="find button" hx-confirm="Reverse this voucher?">
         <input type="hidden" name="reason" value="Reversed by user">
         <button class="btn-secondary wt-neg">Reverse</button>
       </form>

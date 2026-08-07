@@ -24,7 +24,7 @@
     <div class="flex gap-2 flex-wrap">
       <a href="/trade/quotations/{{ quotation.id }}/pdf" target="_blank" class="btn-secondary" style="text-decoration: none;">Open PDF</a>
       {% if _st == 'draft' %}
-      <form hx-post="/trade/quotations/{{ quotation.id }}/mark-sent">
+      <form hx-post="/trade/quotations/{{ quotation.id }}/mark-sent" hx-disabled-elt="find button">
         <button class="btn-secondary">Mark Sent</button>
       </form>
       {% endif %}
@@ -34,7 +34,7 @@
               hx-target="#modal-container">
         ✓ Accept → Create Trade
       </button>
-      <form hx-post="/trade/quotations/{{ quotation.id }}/reject" hx-confirm="Mark this quotation as rejected?">
+      <form hx-post="/trade/quotations/{{ quotation.id }}/reject" hx-disabled-elt="find button" hx-confirm="Mark this quotation as rejected?">
         <button class="btn-secondary wt-neg">Reject</button>
       </form>
       {% endif %}
@@ -42,7 +42,7 @@
       <a href="/trade/trades/{{ quotation.trade_id }}" class="btn-primary" style="text-decoration: none;">View Trade →</a>
       {% endif %}
       {% if not quotation.trade_id %}
-      <form hx-post="/trade/quotations/{{ quotation.id }}/delete" hx-confirm="Permanently delete this quotation?">
+      <form hx-post="/trade/quotations/{{ quotation.id }}/delete" hx-disabled-elt="find button" hx-confirm="Permanently delete this quotation?">
         <button class="btn-danger">Delete</button>
       </form>
       {% endif %}

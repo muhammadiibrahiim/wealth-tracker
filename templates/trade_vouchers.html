@@ -60,7 +60,7 @@
             {% if e.trade_id %}
               <span class="text-xs wt-ash" title="Linked to a trade — manage via the trade page">Trade-linked</span>
             {% else %}
-              <form hx-post="/trade/vouchers/{{ e.id }}/delete" hx-confirm="Permanently delete voucher {{ e.reference }}? Its journal lines (and any reversal entry) will be removed." class="inline">
+              <form hx-post="/trade/vouchers/{{ e.id }}/delete" hx-disabled-elt="find button" hx-confirm="Permanently delete voucher {{ e.reference }}? Its journal lines (and any reversal entry) will be removed." class="inline">
                 <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
               </form>
             {% endif %}

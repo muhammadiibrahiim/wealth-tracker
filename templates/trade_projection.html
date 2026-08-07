@@ -29,7 +29,7 @@
     <div class="flex items-center gap-2">
       <button type="button" class="btn-primary" hx-get="/trade/trades/new?from=projection" hx-target="#modal-container"
               title="Open a New Trade with these products pre-filled">+ Create Trade</button>
-      <button type="button" class="btn-secondary" hx-post="/trade/projection/import-sheet" hx-swap="none"
+      <button type="button" class="btn-secondary" hx-post="/trade/projection/import-sheet" hx-swap="none" hx-disabled-elt="this"
               title="Re-import the products from the 'fleure boxes' Numbers sheet">⟳ Sync from sheet</button>
       <a href="/trade/reports" class="btn-secondary">← Reports</a>
     </div>

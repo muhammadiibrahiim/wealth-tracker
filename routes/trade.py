@@ -1727,16 +1727,19 @@ async def trade_line_update(trade_id: int, line_id: int, request: Request,
     line.unit_cost = _parse_decimal(form.get("unit_cost"), str(line.unit_cost))
     line.unit_price = _parse_decimal(form.get("unit_price"), str(line.unit_price))
     line.line_notes = (form.get("line_notes") or "").strip() or None
-    # replace specs with submitted label/value pairs
-    for sp in list(line.specs):
-        session.delete(sp)
-    session.flush()
+    # replace specs with submitted label/value pairs. Manipulate the
+    # relationship collection itself (not raw session.delete/add) so the
+    # cascade="all, delete-orphan" on TradeLine.specs stays consistent —
+    # deleting via session.delete() while line.specs still held stale
+    # references made the later session.add(line) re-cascade an add() onto
+    # an already-deleted spec and blow up with a 500.
     labels = form.getlist("spec_label")
     values = form.getlist("spec_value")
+    line.specs.clear()
     for i, (lab, val) in enumerate(zip(labels, values)):
         lab, val = (lab or "").strip(), (val or "").strip()
         if lab or val:
-            session.add(TradeLineSpec(line_id=line.id, label=lab, value=val, sort_order=i))
+            line.specs.append(TradeLineSpec(label=lab, value=val, sort_order=i))
     session.add(line)
     session.commit()
     # recompute totals + re-post the ledger so COGS/sale reflect the edit

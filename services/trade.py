@@ -2929,6 +2929,27 @@ class TradeReportService:
                 )
                 unallocated_credit += cr_to_purchaser
 
+            # Small residual balances written off via "Complete & Adjust"
+            # (TradeService.writeoff_residual) also settle the invoice like
+            # cash — same credit source customer_outstanding() counts via
+            # _customer_credits(). Without this, a written-off trade still
+            # shows a phantom few-rupee balance here.
+            if purchaser_acct_id is not None:
+                writeoff_entries = session.exec(
+                    select(JournalEntry).where(
+                        JournalEntry.user_id == user_id,
+                        JournalEntry.trade_id == t.id,
+                        JournalEntry.is_reversed == False,                   # noqa: E712
+                        JournalEntry.description.like("%[writeoff-residual]"),
+                    )
+                ).all()
+                for e in writeoff_entries:
+                    cr_to_purchaser = next(
+                        (Decimal(ln.credit) for ln in e.lines if ln.account_id == purchaser_acct_id),
+                        ZERO,
+                    )
+                    unallocated_credit += cr_to_purchaser
+
             # ── 5. Build event records sorted by due date (FIFO target) ──
             events = []
             for evt_date, gross in event_by_date.items():

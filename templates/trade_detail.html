@@ -591,7 +591,7 @@
           </td>
           <td class="num" class=\"{{ 'wt-pos' if c.by_customer else 'wt-neg' }}\">{{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
           <td class="text-right">
-            <form hx-post="/trade/trades/{{ trade.id }}/costs/{{ c.entry_id }}/delete" hx-disabled-elt="find button" hx-confirm="Reverse this cost entry?">
+            <form hx-post="/trade/trades/{{ trade.id }}/costs/{{ c.entry_id }}/delete" hx-disabled-elt="find button" hx-confirm="Permanently delete this cost entry?">
               <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
             </form>
           </td>
@@ -650,7 +650,7 @@
           </td>
           <td class="wt-body text-sm">{{ c.description }}</td>
           <td class="num wt-pos">+ {{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
-          <td class="text-right"><form hx-post="/trade/trades/{{ trade.id }}/costs/{{ c.entry_id }}/delete" hx-disabled-elt="find button" hx-confirm="Reverse this customer-paid cost?"><button class="wt-neg text-xs hover:underline">Del</button></form></td>
+          <td class="text-right"><form hx-post="/trade/trades/{{ trade.id }}/costs/{{ c.entry_id }}/delete" hx-disabled-elt="find button" hx-confirm="Permanently delete this customer-paid cost?"><button class="wt-neg text-xs hover:underline">Del</button></form></td>
         </tr>
         {% endfor %}
       </tbody>

@@ -1600,33 +1600,41 @@ async def trade_invoice_pdf(trade_id: int, session: Session = Depends(get_sessio
 
 @router.post("/trades/{trade_id}/costs/{entry_id}/delete")
 async def trade_cost_delete(trade_id: int, entry_id: int, session: Session = Depends(get_session)):
-    """Reverse a previously-posted trade cost journal entry (and, for a self-paid
-    cost routed through the P&L, its matching close-to-Capital entry)."""
+    """Hard-delete a trade cost journal entry (and, for a self-paid cost routed
+    through the P&L, its matching close-to-Capital entry) — plus any reversal
+    entry pointing at either. Same hard-delete pattern as voucher_delete: a
+    mis-entered cost should disappear, not leave a reversal pair cluttering
+    every report it touched."""
     from models import JournalEntry
-    from services.posting import PostingEngine, PostingError
     user_id = DEFAULT_USER_ID
     entry = session.get(JournalEntry, entry_id)
     if not entry or entry.user_id != user_id or entry.trade_id != trade_id:
         raise HTTPException(404, "Cost entry not found")
-    try:
-        PostingEngine.reverse(session, user_id, entry_id, reason="Trade cost deleted")
-        # Self-paid costs post a paired "... cost close: ..." JV — reverse it too
-        # so the P&L clearing account and Capital stay balanced.
-        desc = entry.description or ""
-        close_desc = desc.replace(" cost: ", " cost close: ", 1)
-        if close_desc != desc:
-            close = session.exec(
-                select(JournalEntry).where(
-                    JournalEntry.user_id == user_id,
-                    JournalEntry.trade_id == trade_id,
-                    JournalEntry.description == close_desc,
-                    JournalEntry.is_reversed == False,  # noqa: E712
-                )
-            ).first()
-            if close:
-                PostingEngine.reverse(session, user_id, close.id, reason="Trade cost deleted")
-    except PostingError as e:
-        raise HTTPException(400, str(e))
+
+    to_delete = [entry]
+    # Self-paid costs post a paired "... cost close: ..." JV — delete it too
+    # so the P&L clearing account and Capital stay balanced.
+    desc = entry.description or ""
+    close_desc = desc.replace(" cost: ", " cost close: ", 1)
+    if close_desc != desc:
+        close = session.exec(
+            select(JournalEntry).where(
+                JournalEntry.user_id == user_id,
+                JournalEntry.trade_id == trade_id,
+                JournalEntry.description == close_desc,
+            )
+        ).first()
+        if close:
+            to_delete.append(close)
+
+    for e in to_delete:
+        reversals = list(session.exec(
+            select(JournalEntry).where(JournalEntry.reversal_of_id == e.id)
+        ).all())
+        for rev in reversals:
+            session.delete(rev)
+        session.delete(e)
+    session.commit()
     return Response(status_code=204, headers={"HX-Refresh": "true"})
 
 

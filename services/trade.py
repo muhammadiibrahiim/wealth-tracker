@@ -2983,6 +2983,7 @@ class TradeReportService:
                 rows.append({
                     "trade_id":      t.id,
                     "trade_ref":     t.reference,
+                    "customer_id":   t.purchaser_id,
                     "customer":      customer_name,
                     "customer_city": customer_city,
                     "event_date":    e["event_date"],
@@ -2999,8 +3000,29 @@ class TradeReportService:
         rows.sort(key=lambda r: r["due_date"])
 
         total_outstanding = sum((r["outstanding"] for r in rows), ZERO).quantize(Decimal("0.01"))
+
+        # ── 8. Roll up by customer — same buckets, one row per account ─────
+        by_customer: dict[int, dict] = {}
+        for r in rows:
+            acc = by_customer.setdefault(r["customer_id"], {
+                "customer_id":   r["customer_id"],
+                "customer":      r["customer"],
+                "customer_city": r["customer_city"],
+                "buckets":       {k: ZERO for k in BUCKET_NAMES},
+                "total":         ZERO,
+                "count":         0,
+            })
+            acc["buckets"][r["bucket"]] += r["outstanding"]
+            acc["total"] += r["outstanding"]
+            acc["count"] += 1
+        by_account = sorted(by_customer.values(), key=lambda a: -a["total"])
+        for a in by_account:
+            a["buckets"] = {k: v.quantize(Decimal("0.01")) for k, v in a["buckets"].items()}
+            a["total"] = a["total"].quantize(Decimal("0.01"))
+
         return {
             "rows": rows,
+            "by_account": by_account,
             "buckets": {k: v.quantize(Decimal("0.01")) for k, v in buckets.items()},
             "bucket_count": bucket_count,
             "total_outstanding": total_outstanding,
@@ -3134,7 +3156,7 @@ class TradeReportService:
                     t = session.get(Trade, inv["trade_id"])
                     tref = t.reference if t else None
                 rows.append({
-                    "vendor": v.name, "vendor_city": v.city,
+                    "vendor_id": v.id, "vendor": v.name, "vendor_city": v.city,
                     "trade_id": inv["trade_id"], "trade_ref": tref,
                     "invoice_date": inv["date"], "due_date": due, "days_over": days_over,
                     "outstanding": inv["amt"].quantize(Decimal("0.01")),
@@ -3142,8 +3164,29 @@ class TradeReportService:
                 })
         rows.sort(key=lambda r: r["due_date"])
         total_outstanding = sum((r["outstanding"] for r in rows), ZERO).quantize(Decimal("0.01"))
+
+        # Roll up by vendor — same buckets, one row per account.
+        by_vendor: dict[int, dict] = {}
+        for r in rows:
+            acc = by_vendor.setdefault(r["vendor_id"], {
+                "vendor_id":   r["vendor_id"],
+                "vendor":      r["vendor"],
+                "vendor_city": r["vendor_city"],
+                "buckets":     {k: ZERO for k in BUCKET_NAMES},
+                "total":       ZERO,
+                "count":       0,
+            })
+            acc["buckets"][r["bucket"]] += r["outstanding"]
+            acc["total"] += r["outstanding"]
+            acc["count"] += 1
+        by_account = sorted(by_vendor.values(), key=lambda a: -a["total"])
+        for a in by_account:
+            a["buckets"] = {k: v.quantize(Decimal("0.01")) for k, v in a["buckets"].items()}
+            a["total"] = a["total"].quantize(Decimal("0.01"))
+
         return {
             "rows": rows,
+            "by_account": by_account,
             "buckets": {k: v.quantize(Decimal("0.01")) for k, v in buckets.items()},
             "bucket_count": bucket_count,
             "total_outstanding": total_outstanding,

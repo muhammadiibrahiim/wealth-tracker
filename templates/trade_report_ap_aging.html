@@ -17,19 +17,6 @@
       if (window.WTReport) window.WTReport.applyFilter('tbl-ap-aging');
     });
   });
-
-  var viewBtns = document.querySelectorAll('[data-aging-view]');
-  viewBtns.forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var v = btn.dataset.agingView;
-      viewBtns.forEach(function (b) {
-        b.classList.toggle('btn-primary', b.dataset.agingView === v);
-        b.classList.toggle('btn-secondary', b.dataset.agingView !== v);
-      });
-      document.getElementById('view-events').style.display = (v === 'events') ? '' : 'none';
-      document.getElementById('view-accounts').style.display = (v === 'accounts') ? '' : 'none';
-    });
-  });
 })();
 </script>
 {% endblock %}
@@ -83,56 +70,7 @@
     </div>
   </div>
 
-  <div class="flex items-center gap-2">
-    <button type="button" class="btn-primary" data-aging-view="events">By Invoice / Charge</button>
-    <button type="button" class="btn-secondary" data-aging-view="accounts">By Vendor</button>
-  </div>
-
-  <div id="view-accounts" class="wt-panel overflow-x-auto" style="display:none;">
-    {% if report.by_account %}
-    {{ table_open(dense=True) }}
-      <thead>
-        <tr>
-          <th>Vendor</th>
-          <th>City</th>
-          <th class="num">Not Due</th>
-          <th class="num">1–30</th>
-          <th class="num">31–60</th>
-          <th class="num">61–90</th>
-          <th class="num">90+</th>
-          <th class="num">Total Owed</th>
-          <th class="num">Items</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for a in report.by_account %}
-        <tr>
-          <td class="font-medium wt-ink">{{ a.vendor }}</td>
-          <td class="wt-body text-sm">{{ a.vendor_city or '—' }}</td>
-          <td class="num {{ 'wt-mute' if a.buckets.not_due == 0 }}">{{ currency }} {{ '{:,.2f}'.format(a.buckets.not_due) }}</td>
-          <td class="num {{ 'wt-warn' if a.buckets['1_30'] > 0 else 'wt-mute' }}">{{ currency }} {{ '{:,.2f}'.format(a.buckets['1_30']) }}</td>
-          <td class="num {{ 'wt-warn' if a.buckets['31_60'] > 0 else 'wt-mute' }}">{{ currency }} {{ '{:,.2f}'.format(a.buckets['31_60']) }}</td>
-          <td class="num {{ 'wt-neg' if a.buckets['61_90'] > 0 else 'wt-mute' }}">{{ currency }} {{ '{:,.2f}'.format(a.buckets['61_90']) }}</td>
-          <td class="num {{ 'wt-neg' if a.buckets['90_plus'] > 0 else 'wt-mute' }}">{{ currency }} {{ '{:,.2f}'.format(a.buckets['90_plus']) }}</td>
-          <td class="num font-bold wt-neg">{{ currency }} {{ '{:,.2f}'.format(a.total) }}</td>
-          <td class="num wt-mute">{{ a.count }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colspan="7" class="text-right text-xs uppercase tracking-widest font-bold wt-body">Total Owed</td>
-          <td class="num">{{ currency }} {{ '{:,.2f}'.format(report.total_outstanding) }}</td>
-          <td></td>
-        </tr>
-      </tfoot>
-    {{ table_close() }}
-    {% else %}
-    <div class="text-center text-sm wt-mute">Nothing owed to vendors — every invoice is paid. 🎉</div>
-    {% endif %}
-  </div>
-
-  <div id="view-events" class="wt-panel overflow-x-auto">
+  <div class="wt-panel overflow-x-auto">
     {% if report.rows %}
     {{ report_toolbar('tbl-ap-aging', print_btn=True) }}
     {{ sortable_table_open('tbl-ap-aging', dense=True) }}

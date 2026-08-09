@@ -3428,6 +3428,212 @@ async def reports_ap_aging(request: Request, session: Session = Depends(get_sess
     )
 
 
+_AGING_BUCKET_NAMES = ("not_due", "1_30", "31_60", "61_90", "90_plus")
+
+
+@router.get("/reports/aging-by-customer", response_class=HTMLResponse)
+async def reports_aging_by_customer(
+    request: Request, customer_id: Optional[int] = Query(None),
+    session: Session = Depends(get_session),
+):
+    """Receivables aging for a single customer — pick a customer (same selector
+    pattern as Vendor Pending Goods), see just their outstanding buckets and events."""
+    user_id = DEFAULT_USER_ID
+    customers = PartyService.list_customers(session, user_id)
+    report = TradeReportService.aging_report(session, user_id)
+    selected = None
+    rows = []
+    if customer_id:
+        selected = next((a for a in report["by_account"] if a["customer_id"] == customer_id), None)
+        if selected is None:
+            c = PartyService.get(session, user_id, customer_id)
+            selected = {
+                "customer_id": customer_id, "customer": c.name if c else "—",
+                "customer_city": c.city if c else None,
+                "buckets": {k: Decimal("0") for k in _AGING_BUCKET_NAMES},
+                "total": Decimal("0"), "count": 0,
+            }
+        rows = [r for r in report["rows"] if r["customer_id"] == customer_id]
+    return templates.TemplateResponse(
+        "trade_report_aging_by_customer.html",
+        _ctx(request, customers=customers, selected=selected, rows=rows,
+             selected_id=customer_id, today=report["today"]),
+    )
+
+
+@router.get("/reports/aging-by-customer/{customer_id}.pdf")
+async def reports_aging_by_customer_pdf(customer_id: int, session: Session = Depends(get_session)):
+    from io import BytesIO
+    from services.pdf_helper import (
+        render_report_pdf, ReportSpec, KpiSpec, TableSpec, SectionTitle, ParagraphBlock, CalloutCard,
+    )
+    user_id = DEFAULT_USER_ID
+    customer = PartyService.get(session, user_id, customer_id)
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    report = TradeReportService.aging_report(session, user_id)
+    selected = next((a for a in report["by_account"] if a["customer_id"] == customer_id), None)
+    rows = sorted((r for r in report["rows"] if r["customer_id"] == customer_id),
+                  key=lambda r: r["due_date"])
+
+    def pkr(x):
+        try: return f"Rs. {Decimal(str(x)):,.2f}"
+        except Exception: return f"Rs. {x}"
+
+    blabel = {"not_due": "Not yet due", "1_30": "1–30", "31_60": "31–60",
+              "61_90": "61–90", "90_plus": "90+"}
+    table_rows = [[
+        r["trade_ref"] or "—",
+        r["event_date"].strftime("%d-%b-%Y"),
+        r["due_date"].strftime("%d-%b-%Y"),
+        f"+{r['days_over']}" if r["days_over"] > 0 else "—",
+        blabel[r["bucket"]],
+        pkr(r["outstanding"]),
+    ] for r in rows]
+    total = selected["total"] if selected else Decimal("0")
+
+    sections = [
+        SectionTitle("Statement To"),
+        ParagraphBlock("<br/>".join(filter(None, [
+            f"<b>{customer.name}</b>",
+            customer.contact_person or "",
+            (f"Phone: {customer.phone}" if customer.phone else ""),
+            (customer.city or ""),
+        ]))),
+        SectionTitle("Outstanding Deliveries", keep_with_next=True),
+    ]
+    if not table_rows:
+        sections.append(ParagraphBlock("<i>Nothing outstanding — every invoice is paid.</i>"))
+    else:
+        sections.append(TableSpec(
+            headers=["Trade", "Delivery", "Due", "Days Over", "Bucket", "Outstanding"],
+            rows=table_rows,
+            col_widths=[70, 75, 75, 60, 65, 90],
+            num_cols={5},
+            totals_row=["", "", "", "", "Total", pkr(total)],
+        ))
+    sections.append(CalloutCard(label="Total Outstanding", value=pkr(total)))
+
+    buf = BytesIO()
+    render_report_pdf(buf, ReportSpec(
+        title="Receivables Statement",
+        subtitle_parts=[f"Customer: {customer.name}", f"As of {date.today().strftime('%B %d, %Y')}"],
+        kpis=[
+            KpiSpec("Total Outstanding", pkr(total)),
+            KpiSpec("Open Events", str(selected["count"] if selected else 0)),
+        ],
+        sections=sections,
+        footer_subtitle="Ibrahim Traders · receivables aging",
+        generated_label="As of",
+        brand="IBRAHIM TRADERS",
+    ))
+    fname = f"Receivables-{customer.name.replace(' ','_')}.pdf"
+    return Response(content=buf.getvalue(), media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{fname}"'})
+
+
+@router.get("/reports/ap-aging-by-vendor", response_class=HTMLResponse)
+async def reports_ap_aging_by_vendor(
+    request: Request, vendor_id: Optional[int] = Query(None),
+    session: Session = Depends(get_session),
+):
+    """Payables aging for a single vendor — same selector pattern as Vendor
+    Pending Goods, see just what's owed to them and its bucket/due dates."""
+    user_id = DEFAULT_USER_ID
+    vendors = PartyService.list_vendors(session, user_id)
+    report = TradeReportService.ap_aging_report(session, user_id)
+    selected = None
+    rows = []
+    if vendor_id:
+        selected = next((a for a in report["by_account"] if a["vendor_id"] == vendor_id), None)
+        if selected is None:
+            v = PartyService.get(session, user_id, vendor_id)
+            selected = {
+                "vendor_id": vendor_id, "vendor": v.name if v else "—",
+                "vendor_city": v.city if v else None,
+                "buckets": {k: Decimal("0") for k in _AGING_BUCKET_NAMES},
+                "total": Decimal("0"), "count": 0,
+            }
+        rows = [r for r in report["rows"] if r["vendor_id"] == vendor_id]
+    return templates.TemplateResponse(
+        "trade_report_ap_aging_by_vendor.html",
+        _ctx(request, vendors=vendors, selected=selected, rows=rows,
+             selected_id=vendor_id, today=report["today"]),
+    )
+
+
+@router.get("/reports/ap-aging-by-vendor/{vendor_id}.pdf")
+async def reports_ap_aging_by_vendor_pdf(vendor_id: int, session: Session = Depends(get_session)):
+    from io import BytesIO
+    from services.pdf_helper import (
+        render_report_pdf, ReportSpec, KpiSpec, TableSpec, SectionTitle, ParagraphBlock, CalloutCard,
+    )
+    user_id = DEFAULT_USER_ID
+    vendor = PartyService.get(session, user_id, vendor_id)
+    if not vendor:
+        raise HTTPException(404, "Vendor not found")
+    report = TradeReportService.ap_aging_report(session, user_id)
+    selected = next((a for a in report["by_account"] if a["vendor_id"] == vendor_id), None)
+    rows = sorted((r for r in report["rows"] if r["vendor_id"] == vendor_id),
+                  key=lambda r: r["due_date"])
+
+    def pkr(x):
+        try: return f"Rs. {Decimal(str(x)):,.2f}"
+        except Exception: return f"Rs. {x}"
+
+    blabel = {"not_due": "Not yet due", "1_30": "1–30", "31_60": "31–60",
+              "61_90": "61–90", "90_plus": "90+"}
+    table_rows = [[
+        r["trade_ref"] or "—",
+        r["desc"] or "—",
+        r["invoice_date"].strftime("%d-%b-%Y"),
+        r["due_date"].strftime("%d-%b-%Y"),
+        f"+{r['days_over']}" if r["days_over"] > 0 else "—",
+        blabel[r["bucket"]],
+        pkr(r["outstanding"]),
+    ] for r in rows]
+    total = selected["total"] if selected else Decimal("0")
+
+    sections = [
+        SectionTitle("Statement From"),
+        ParagraphBlock("<br/>".join(filter(None, [
+            f"<b>{vendor.name}</b>",
+            vendor.contact_person or "",
+            (f"Phone: {vendor.phone}" if vendor.phone else ""),
+            (vendor.city or ""),
+        ]))),
+        SectionTitle("Outstanding Invoices / Charges", keep_with_next=True),
+    ]
+    if not table_rows:
+        sections.append(ParagraphBlock("<i>Nothing owed — every invoice is paid.</i>"))
+    else:
+        sections.append(TableSpec(
+            headers=["Trade", "Description", "Dated", "Due", "Days Over", "Bucket", "Owed"],
+            rows=table_rows,
+            col_widths=[55, 110, 65, 65, 55, 55, 78],
+            num_cols={6},
+            totals_row=["", "", "", "", "", "Total", pkr(total)],
+        ))
+    sections.append(CalloutCard(label="Total Owed", value=pkr(total)))
+
+    buf = BytesIO()
+    render_report_pdf(buf, ReportSpec(
+        title="Payables Statement",
+        subtitle_parts=[f"Vendor: {vendor.name}", f"As of {date.today().strftime('%B %d, %Y')}"],
+        kpis=[
+            KpiSpec("Total Owed", pkr(total)),
+            KpiSpec("Open Items", str(selected["count"] if selected else 0)),
+        ],
+        sections=sections,
+        footer_subtitle="Ibrahim Traders · payables aging",
+        generated_label="As of",
+        brand="IBRAHIM TRADERS",
+    ))
+    fname = f"Payables-{vendor.name.replace(' ','_')}.pdf"
+    return Response(content=buf.getvalue(), media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{fname}"'})
+
+
 @router.get("/reports/pending-receivables", response_class=HTMLResponse)
 async def reports_pending_receivables(request: Request, session: Session = Depends(get_session)):
     user_id = DEFAULT_USER_ID

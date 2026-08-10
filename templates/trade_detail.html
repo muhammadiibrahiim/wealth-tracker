@@ -140,6 +140,8 @@
       <h2 id="sec-lines">Line Items</h2>
       <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/lines/new" hx-target="#modal-container">+ Add Line Item</button>
     </div>
+    {% set total_lines_qty = trade.lines | sum(attribute='quantity') %}
+    {% set cost_per_pc_addon = (trade_costs_total / total_lines_qty) if total_lines_qty > 0 else 0 %}
     {{ table_open(dense=True) }}
       <thead>
         <tr>
@@ -147,6 +149,7 @@
           <th>Specs</th>
           <th class="num">Qty</th>
           <th class="num">Unit Cost</th>
+          <th class="num" title="Unit Cost + this trade's shared costs (bilty, loading, etc.) spread evenly per piece across every line — {{ currency }} {{ '{:,.2f}'.format(trade_costs_total) }} ÷ {{ '{:g}'.format(total_lines_qty) }} pcs">Cost/pc (+ Trade Costs)</th>
           <th class="num">Unit Price</th>
           <th class="num">Line Cost</th>
           <th class="num">Line Sale</th>
@@ -178,6 +181,7 @@
             {% endif %}
           </td>
           <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.unit_cost) }}</td>
+          <td class="num wt-mute">{{ currency }} {{ '{:,.2f}'.format(ln.unit_cost + cost_per_pc_addon) }}</td>
           <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.unit_price) }}</td>
           <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.quantity * ln.unit_cost) }}</td>
           <td class="num">{{ currency }} {{ '{:,.2f}'.format(ln.quantity * ln.unit_price) }}</td>

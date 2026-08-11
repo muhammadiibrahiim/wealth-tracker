@@ -382,6 +382,27 @@ class ItemSpecField(SQLModel, table=True):
     )
 
 
+class ItemVendorQuote(SQLModel, table=True):
+    """A vendor's quoted buy rate for an item — reference only, so the owner
+    can compare vendors before deciding who to purchase from. Not linked to
+    any trade or purchase; purely a price-history note."""
+    __tablename__ = "trade_item_vendor_quotes"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    item_id: int = Field(sa_column=Column(ForeignKey("trade_items.id", ondelete="CASCADE")))
+    vendor_id: int = Field(sa_column=Column(ForeignKey("trade_parties.id", ondelete="CASCADE")))
+    quoted_rate: Decimal = Field(sa_column=Column(DECIMAL(15, 4)))
+    quoted_date: date = Field(default_factory=date.today, sa_column=Column(Date))
+    notes: Optional[str] = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_item_vendor_quote_item", "item_id"),
+        Index("idx_item_vendor_quote_vendor", "vendor_id"),
+    )
+
+
 class TradeStatus(str, Enum):
     OPEN = "open"
     DELIVERED = "delivered"

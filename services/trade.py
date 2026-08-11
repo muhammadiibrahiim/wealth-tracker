@@ -15,6 +15,7 @@ from models import (
     CashAccount,
     Item,
     ItemSpecField,
+    ItemVendorQuote,
     JournalEntry,
     JournalEntryType,
     JournalLine,
@@ -253,6 +254,58 @@ class ItemService:
         i.is_active = False
         i.updated_at = datetime.utcnow()
         session.add(i)
+        session.commit()
+        return True
+
+
+class ItemQuoteService:
+    """A vendor's quoted buy rate for an item — reference only, so the owner
+    can compare vendors before deciding who to purchase from. Not linked to
+    any trade or purchase."""
+
+    @staticmethod
+    def list_for_item(session: Session, user_id: int, item_id: int) -> list[ItemVendorQuote]:
+        q = (
+            select(ItemVendorQuote)
+            .where(ItemVendorQuote.user_id == user_id, ItemVendorQuote.item_id == item_id)
+            .order_by(ItemVendorQuote.quoted_date.desc(), ItemVendorQuote.id.desc())
+        )
+        return list(session.exec(q).all())
+
+    @staticmethod
+    def latest_by_vendor(session: Session, user_id: int, item_id: int) -> list[ItemVendorQuote]:
+        """Most recent quote per vendor (rows already sorted newest-first)."""
+        seen: set[int] = set()
+        out = []
+        for r in ItemQuoteService.list_for_item(session, user_id, item_id):
+            if r.vendor_id in seen:
+                continue
+            seen.add(r.vendor_id)
+            out.append(r)
+        return out
+
+    @staticmethod
+    def create(
+        session: Session, user_id: int, item_id: int, vendor_id: int,
+        quoted_rate: Decimal, quoted_date: Optional[date] = None,
+        notes: Optional[str] = None,
+    ) -> ItemVendorQuote:
+        q = ItemVendorQuote(
+            user_id=user_id, item_id=item_id, vendor_id=vendor_id,
+            quoted_rate=quoted_rate, quoted_date=quoted_date or date.today(),
+            notes=notes,
+        )
+        session.add(q)
+        session.commit()
+        session.refresh(q)
+        return q
+
+    @staticmethod
+    def delete(session: Session, user_id: int, quote_id: int) -> bool:
+        q = session.get(ItemVendorQuote, quote_id)
+        if not q or q.user_id != user_id:
+            return False
+        session.delete(q)
         session.commit()
         return True
 

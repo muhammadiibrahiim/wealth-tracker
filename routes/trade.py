@@ -16,6 +16,7 @@ from database import get_session
 from models import Party, PaymentDirection, QuotationStatus, TradeStatus
 from services.trade import (
     CashAccountService,
+    ItemQuoteService,
     ItemService,
     MasterReceiptService,
     PartyService,
@@ -2343,6 +2344,46 @@ async def item_update(item_id: int, request: Request, session: Session = Depends
 @router.post("/items/{item_id}/delete")
 async def item_delete(item_id: int, session: Session = Depends(get_session)):
     ItemService.delete(session, DEFAULT_USER_ID, item_id)
+    return _close_modal()
+
+
+@router.get("/items/{item_id}/quotes", response_class=HTMLResponse)
+async def item_quotes_modal(request: Request, item_id: int, session: Session = Depends(get_session)):
+    user_id = DEFAULT_USER_ID
+    item = ItemService.get(session, user_id, item_id)
+    if not item:
+        raise HTTPException(404, "Item not found")
+    vendors = PartyService.list_vendors(session, user_id)
+    quotes = ItemQuoteService.list_for_item(session, user_id, item_id)
+    vendor_map = {v.id: v.name for v in vendors}
+    return templates.TemplateResponse(
+        "trade_item_quote_modal.html",
+        _ctx(request, item=item, vendors=vendors, quotes=quotes, vendor_map=vendor_map, today=date.today()),
+    )
+
+
+@router.post("/items/{item_id}/quotes")
+async def item_quote_create(item_id: int, request: Request, session: Session = Depends(get_session)):
+    user_id = DEFAULT_USER_ID
+    item = ItemService.get(session, user_id, item_id)
+    if not item:
+        raise HTTPException(404, "Item not found")
+    form = await request.form()
+    vendor_raw = form.get("vendor_id")
+    if not vendor_raw or not str(vendor_raw).isdigit():
+        raise HTTPException(400, "Pick a vendor")
+    ItemQuoteService.create(
+        session, user_id, item_id, int(vendor_raw),
+        quoted_rate=_parse_decimal(form.get("quoted_rate"), "0"),
+        quoted_date=_parse_date(form.get("quoted_date")) or date.today(),
+        notes=(form.get("notes") or "").strip() or None,
+    )
+    return _close_modal()
+
+
+@router.post("/items/quotes/{quote_id}/delete")
+async def item_quote_delete(quote_id: int, session: Session = Depends(get_session)):
+    ItemQuoteService.delete(session, DEFAULT_USER_ID, quote_id)
     return _close_modal()
 
 

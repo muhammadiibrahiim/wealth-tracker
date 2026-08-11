@@ -1,0 +1,74 @@
+<div class="modal-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8">
+  <div class="bg-white p-7 w-full max-w-2xl mx-4">
+    <div class="flex items-start justify-between mb-5">
+      <div>
+        <h2 class="modal-title">Purchase Quotes</h2>
+        <p class="modal-subtitle">{{ item.name }} · reference only — doesn't post anywhere.</p>
+      </div>
+      <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
+    </div>
+
+    {% if quotes %}
+    <div class="mb-5">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left wt-mute text-xs uppercase tracking-wide border-b border-gray-200">
+            <th class="py-1.5 font-medium">Vendor</th>
+            <th class="py-1.5 font-medium text-right">Rate</th>
+            <th class="py-1.5 font-medium">Date</th>
+            <th class="py-1.5 font-medium">Notes</th>
+            <th class="py-1.5"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for q in quotes %}
+          <tr class="border-b border-gray-100">
+            <td class="py-1.5 font-medium wt-ink">{{ vendor_map.get(q.vendor_id, '—') }}</td>
+            <td class="py-1.5 text-right tabular-nums">{{ currency }} {{ '{:,.2f}'.format(q.quoted_rate) }}</td>
+            <td class="py-1.5 wt-body">{{ q.quoted_date }}</td>
+            <td class="py-1.5 wt-mute text-xs">{{ q.notes or '—' }}</td>
+            <td class="py-1.5 text-right">
+              <form hx-post="/trade/items/quotes/{{ q.id }}/delete" hx-disabled-elt="find button" hx-confirm="Delete this quote?">
+                <button class="wt-neg text-xs hover:underline font-medium">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-sm wt-mute p-6 border border-dashed border-gray-200 rounded mb-5">No quotes recorded yet for this item.</div>
+    {% endif %}
+
+    <form hx-post="/trade/items/{{ item.id }}/quotes" hx-disabled-elt="find button[type=submit]" class="space-y-4 pt-4 border-t border-gray-200">
+      <div class="text-sm font-semibold wt-ink">Add a quote</div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="md:col-span-1">
+          <label class="field-label field-label-required">Vendor</label>
+          <select name="vendor_id" required class="w-full">
+            <option value="">— Select vendor —</option>
+            {% for v in vendors %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="field-label field-label-required">Quoted Rate ({{ currency }})</label>
+          <input type="number" step="0.0001" min="0" name="quoted_rate" required class="w-full">
+        </div>
+        <div>
+          <label class="field-label">Date</label>
+          <input type="date" name="quoted_date" value="{{ today }}" class="w-full">
+        </div>
+      </div>
+      <div>
+        <label class="field-label">Notes</label>
+        <input name="notes" placeholder="e.g. min order 5000 pcs" class="w-full">
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-container').innerHTML = ''">Close</button>
+        <button type="submit" class="btn-primary">Save Quote</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -3,7 +3,7 @@
     <div class="flex items-start justify-between mb-5">
       <div>
         <h2 class="modal-title">Customer Credit</h2>
-        <p class="modal-subtitle">{{ party.name }} · a reserved balance not tied to any trade yet — applied automatically to their next trade, or manually to an existing one.</p>
+        <p class="modal-subtitle">{{ party.name }} · earmarks part of their existing account balance for a future trade — applied automatically to their next trade, or manually to an existing one. One ledger — nothing new to reconcile.</p>
       </div>
       <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
     </div>
@@ -24,7 +24,7 @@
           {% for c in existing %}
           <tr class="border-b border-gray-100">
             <td class="py-1.5 wt-body">{{ c.entry_date }}</td>
-            <td class="py-1.5 wt-body">{{ c.source_account.name if c.source_account else '—' }}</td>
+            <td class="py-1.5 wt-body">{{ c.source_account.name if c.source_account else party.name ~ '’s own account' }}</td>
             <td class="py-1.5 wt-mute text-xs">{{ c.notes or '—' }}</td>
             <td class="py-1.5 text-right tabular-nums wt-mute">{{ currency }} {{ '{:,.2f}'.format(c.amount) }}</td>
             <td class="py-1.5 text-right tabular-nums font-semibold {{ 'wt-pos' if c.remaining_amount > 0 else 'wt-ash' }}">{{ currency }} {{ '{:,.2f}'.format(c.remaining_amount) }}</td>
@@ -37,23 +37,10 @@
     <div class="text-center text-sm wt-mute p-6 border border-dashed border-gray-200 rounded mb-5">No credit reserved for this customer yet.</div>
     {% endif %}
 
-    {% if not gl_groups %}
-    <div class="accent-card wt-card-warn wt-warn-bg">
-      <p class="text-sm text-yellow-900">No accounts available to reserve from. <a href="/trade/coa" class="underline font-medium">Chart of Accounts →</a></p>
-    </div>
-    {% else %}
     <form hx-post="/trade/parties/{{ party.id }}/credit" hx-disabled-elt="find button[type=submit]" class="space-y-4 pt-4 border-t border-gray-200">
       <div class="text-sm font-semibold wt-ink">Reserve a new credit</div>
-      <div>
-        <label class="field-label field-label-required">Source account <span class="wt-ash font-normal">(where this value is owed from — e.g. a personal loan payable)</span></label>
-        <select name="source_account_id" required class="w-full">
-          <option value="">— Select account —</option>
-          {% for g in gl_groups %}
-          <optgroup label="{{ g.label }}">
-            {% for a in g.accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
-          </optgroup>
-          {% endfor %}
-        </select>
+      <div class="accent-card wt-card-info wt-info-bg">
+        <p class="text-sm wt-ink">Usually this is money <strong>{{ party.name }}</strong> already has sitting with you — e.g. they personally lent the business cash, recorded as a plain Receipt/Payment voucher against their own account. Leave Source account blank below; this just earmarks part of that existing balance for a future invoice. Only pick a source account if the value genuinely comes from somewhere else (a different lender, an owner-funded discount).</p>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
@@ -65,9 +52,22 @@
           <input type="date" name="entry_date" value="{{ today }}" class="w-full">
         </div>
       </div>
+      {% if gl_groups %}
+      <div>
+        <label class="field-label">Source account <span class="wt-ash font-normal">(leave blank — see above)</span></label>
+        <select name="source_account_id" class="w-full">
+          <option value="">— {{ party.name }}'s own account (default) —</option>
+          {% for g in gl_groups %}
+          <optgroup label="{{ g.label }}">
+            {% for a in g.accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
       <div>
         <label class="field-label">Notes</label>
-        <input name="notes" placeholder="e.g. leftover from Mustafa Bhai loan offset" class="w-full">
+        <input name="notes" placeholder="e.g. leftover after netting against invoice #191,326" class="w-full">
       </div>
 
       <div class="flex justify-end gap-2 pt-2">
@@ -75,6 +75,5 @@
         <button type="submit" class="btn-primary">Reserve Credit</button>
       </div>
     </form>
-    {% endif %}
   </div>
 </div>

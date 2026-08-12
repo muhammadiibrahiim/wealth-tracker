@@ -879,19 +879,28 @@ class TradePayment(SQLModel, table=True):
 class CustomerCredit(SQLModel, table=True):
     """An unapplied credit balance reserved for a customer — value owed to
     them (or earmarked for them) that isn't attributed to any specific trade
-    yet, e.g. the leftover of a personal-loan offset once the part that fit
-    the current invoice has been applied. Draws down as it's applied against
+    yet, e.g. the leftover of a loan offset once the part that fit the
+    current invoice has been applied. Draws down as it's applied against
     trades — oldest credit first — either automatically the moment a new
     trade is created for that customer, or manually against an existing one.
-    Each application posts a real PaymentService.record() entry (DR
-    source_account / CR the customer's A/R, tagged to that trade) at the
-    time it's applied — nothing moves in the ledger until then."""
+
+    source_account_id is OPTIONAL and almost always left blank: most of the
+    time this credit is just an amount already sitting on the CUSTOMER'S OWN
+    account (recorded there via a plain Receipt/Payment voucher against that
+    same party — e.g. money the customer personally lent the business). This
+    row is then just a bookkeeping note earmarking part of that balance for
+    a future invoice; applying it moves the earmark from "general" to
+    "tagged to this trade" on the customer's own account (net zero effect on
+    their overall balance — one ledger, not two). Only set source_account_id
+    when the credit genuinely originates from a DIFFERENT account than the
+    customer's own (a distinct third-party lender, an owner-funded discount,
+    etc.) — that case still posts a real cross-account entry when applied."""
     __tablename__ = "trade_customer_credits"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     customer_id: int = Field(sa_column=Column(ForeignKey("trade_parties.id", ondelete="CASCADE")))
-    source_account_id: int = Field(sa_column=Column(ForeignKey("accounts.id")))
+    source_account_id: Optional[int] = Field(default=None, sa_column=Column(ForeignKey("accounts.id"), nullable=True))
     amount: Decimal = Field(sa_column=Column(DECIMAL(15, 2)))
     remaining_amount: Decimal = Field(sa_column=Column(DECIMAL(15, 2)))
     entry_date: date = Field(default_factory=date.today, sa_column=Column(Date))

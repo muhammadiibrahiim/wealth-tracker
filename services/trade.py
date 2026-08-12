@@ -2177,11 +2177,24 @@ class PaymentService:
 
 class CustomerCreditService:
     """An unapplied credit balance reserved for a customer — see
-    CustomerCredit's docstring in models.py. Nothing moves in the ledger
-    until a credit is actually applied to a trade; `create()` just reserves
-    it. `apply_to_trade` (called manually, or automatically the moment a new
-    trade is created for that customer — see TradeService.create) posts the
-    real journal entry via PaymentService.record and draws the balance down."""
+    CustomerCredit's docstring in models.py. `create()` just reserves an
+    amount as a bookkeeping note; nothing moves in the ledger until
+    `apply_to_trade` actually attributes some of it to a trade (called
+    manually, or automatically the moment a new trade is created for that
+    customer — see TradeService.create).
+
+    Two shapes, both handled by apply_to_trade:
+      • No source_account_id (the normal case) — the credit is an amount
+        already sitting on the CUSTOMER'S OWN account (e.g. from a plain
+        Receipt/Payment voucher recorded against them directly when they
+        personally lent the business money). Applying it posts a same-
+        account entry: CR their account (tagged to the trade, settling it)
+        / DR their account (untagged, "spending" the general credit) — net
+        zero on their overall balance, one ledger, no second party needed.
+      • source_account_id set — the credit genuinely originates from a
+        DIFFERENT account (a distinct lender, an owner-funded discount).
+        Applying it posts a normal cross-account entry via
+        PaymentService.record, same as any other payment source."""
 
     @staticmethod
     def list_for_customer(session: Session, user_id: int, customer_id: int,
@@ -2201,8 +2214,9 @@ class CustomerCreditService:
 
     @staticmethod
     def create(
-        session: Session, user_id: int, customer_id: int, source_account_id: int,
-        amount: Decimal, entry_date: Optional[date] = None, notes: Optional[str] = None,
+        session: Session, user_id: int, customer_id: int,
+        amount: Decimal, source_account_id: Optional[int] = None,
+        entry_date: Optional[date] = None, notes: Optional[str] = None,
     ) -> CustomerCredit:
         c = CustomerCredit(
             user_id=user_id, customer_id=customer_id, source_account_id=source_account_id,
@@ -2213,6 +2227,40 @@ class CustomerCreditService:
         session.commit()
         session.refresh(c)
         return c
+
+    @staticmethod
+    def _apply_same_account(session: Session, user_id: int, trade, customer: Party,
+                            take: Decimal, note: str) -> bool:
+        """Reallocate `take` from the customer's own general balance to this
+        trade specifically — a same-account CR (settles the trade) / DR
+        (draws down the general credit) entry, net zero overall."""
+        from services import account_setup
+        from services.posting import PostingEngine
+        acct = account_setup.sync_party_account(session, user_id, customer)
+        p = TradePayment(
+            user_id=user_id, trade_id=trade.id, account_id=acct.id,
+            direction=PaymentDirection.INBOUND, amount=take, paid_on=date.today(),
+            notes=note,
+        )
+        session.add(p)
+        session.flush()
+        PostingEngine.post(
+            session, user_id, entry_date=date.today(),
+            entry_type=JournalEntryType.CUSTOMER_RECEIPT,
+            description=f"{customer.name} — {note} — {trade.reference}",
+            lines=[
+                {"account_id": acct.id, "debit": take, "credit": 0, "party_id": customer.id,
+                 "description": "Draw down of general account credit"},
+                {"account_id": acct.id, "debit": 0, "credit": take, "party_id": customer.id,
+                 "description": f"Settles {trade.reference}"},
+            ],
+            trade_id=trade.id, payment_id=p.id,
+        )
+        session.refresh(trade)
+        TradeService._refresh_status(trade, session)
+        trade.updated_at = datetime.utcnow()
+        session.add(trade)
+        return True
 
     @staticmethod
     def apply_to_trade(session: Session, user_id: int, trade_id: int,
@@ -2230,6 +2278,9 @@ class CustomerCreditService:
         cap = min(outstanding, Decimal(str(amount))) if amount is not None else outstanding
         if cap <= 0:
             return ZERO
+        customer = session.get(Party, trade.purchaser_id)
+        if not customer:
+            return ZERO
         applied_total = ZERO
         for c in CustomerCreditService.list_for_customer(session, user_id, trade.purchaser_id):
             if cap <= 0:
@@ -2237,14 +2288,18 @@ class CustomerCreditService:
             take = min(Decimal(c.remaining_amount), cap)
             if take <= 0:
                 continue
-            posted = PaymentService.record(
-                session, user_id, trade_id=trade.id,
-                gl_account_id=c.source_account_id,
-                direction=PaymentDirection.INBOUND,
-                amount=take, paid_on=date.today(),
-                notes=f"Applied from customer credit #{c.id}" + (f" — {c.notes}" if c.notes else ""),
-            )
-            if not posted:
+            note = f"Applied from customer credit #{c.id}" + (f" — {c.notes}" if c.notes else "")
+            if c.source_account_id:
+                posted = PaymentService.record(
+                    session, user_id, trade_id=trade.id,
+                    gl_account_id=c.source_account_id,
+                    direction=PaymentDirection.INBOUND,
+                    amount=take, paid_on=date.today(), notes=note,
+                )
+                ok = posted is not None
+            else:
+                ok = CustomerCreditService._apply_same_account(session, user_id, trade, customer, take, note)
+            if not ok:
                 continue
             c.remaining_amount = (Decimal(c.remaining_amount) - take).quantize(Decimal("0.01"))
             session.add(c)

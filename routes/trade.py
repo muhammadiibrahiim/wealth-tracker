@@ -2096,13 +2096,12 @@ async def customer_credit_create(party_id: int, request: Request, session: Sessi
         raise HTTPException(404, "Customer not found")
     form = await request.form()
     src_raw = (form.get("source_account_id") or "").strip()
-    if not src_raw.isdigit():
-        raise HTTPException(400, "Pick a source account")
+    source_account_id = int(src_raw) if src_raw.isdigit() else None
     amount = _parse_decimal(form.get("amount"), "0")
     if amount <= 0:
         raise HTTPException(400, "Amount must be positive")
     CustomerCreditService.create(
-        session, user_id, party_id, int(src_raw), amount,
+        session, user_id, party_id, amount, source_account_id=source_account_id,
         entry_date=_parse_date(form.get("entry_date")) or date.today(),
         notes=(form.get("notes") or "").strip() or None,
     )

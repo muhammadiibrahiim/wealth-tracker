@@ -16,6 +16,7 @@ from database import get_session
 from models import Party, PaymentDirection, QuotationStatus, TradeStatus
 from services.trade import (
     CashAccountService,
+    CustomerCreditService,
     ItemQuoteService,
     ItemService,
     MasterReceiptService,
@@ -696,6 +697,7 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
             vend_terms_label=TradeService.terms_label(trade, "vendor"),
             today=date.today(),
             customer_outstanding=customer_outstanding,
+            available_customer_credit=CustomerCreditService.total_available(session, user_id, trade.purchaser_id),
             due_status=due_status,
             trade_costs_total=trade_costs_total,
             net_profit=net_profit,
@@ -1909,6 +1911,26 @@ async def payment_delete(payment_id: int, session: Session = Depends(get_session
     return _close_modal()
 
 
+@router.post("/trades/{trade_id}/apply-credit")
+async def trade_apply_credit(trade_id: int, session: Session = Depends(get_session)):
+    """Manually draw down the customer's available unapplied credit (see
+    CustomerCreditService) against this trade's outstanding — the same
+    thing that happens automatically when a new trade is created, but for
+    an existing trade the credit didn't reach yet."""
+    user_id = DEFAULT_USER_ID
+    trade = TradeService.get(session, user_id, trade_id)
+    if not trade:
+        raise HTTPException(404, "Trade not found")
+    applied = CustomerCreditService.apply_to_trade(session, user_id, trade_id)
+    if applied <= 0:
+        raise HTTPException(
+            400,
+            "Nothing to apply — either this customer has no available credit, "
+            "or this trade has nothing outstanding."
+        )
+    return _close_modal()
+
+
 def _gl_groups_for_receipt(session, user_id):
     """Cash/bank + every GL account (grouped) a customer receipt can land in."""
     from services import account_setup
@@ -2029,7 +2051,62 @@ async def trade_writeoff_residual(trade_id: int, session: Session = Depends(get_
 async def parties_list(request: Request, session: Session = Depends(get_session)):
     user_id = DEFAULT_USER_ID
     parties = PartyService.list(session, user_id)
-    return templates.TemplateResponse("trade_parties.html", _ctx(request, parties=parties))
+    credit_by_customer = {
+        p.id: CustomerCreditService.total_available(session, user_id, p.id)
+        for p in parties if p.is_customer
+    }
+    return templates.TemplateResponse(
+        "trade_parties.html", _ctx(request, parties=parties, credit_by_customer=credit_by_customer)
+    )
+
+
+@router.get("/parties/{party_id}/credit/new", response_class=HTMLResponse)
+async def customer_credit_modal(request: Request, party_id: int, session: Session = Depends(get_session)):
+    """Reserve a credit balance for a customer — value owed to them (or
+    earmarked for them) not tied to any trade yet. Applied later, oldest
+    first, either automatically when their next trade is created or
+    manually against an existing one."""
+    user_id = DEFAULT_USER_ID
+    party = PartyService.get(session, user_id, party_id)
+    if not party or not party.is_customer:
+        raise HTTPException(404, "Customer not found")
+    excluded_ids = {party.account_id} if party.account_id else set()
+    gl_groups = []
+    for cls_block in account_setup.list_accounts_grouped(session, user_id):
+        for sub_block in cls_block["subclasses"]:
+            sub = sub_block["subclass"]
+            accts = [a for a in sub_block["accounts"] if a.is_active and a.id not in excluded_ids]
+            if accts:
+                gl_groups.append({"label": f"{sub.code} · {sub.name}", "accounts": accts})
+        loose = [a for a in cls_block["accounts_without_subclass"] if a.is_active and a.id not in excluded_ids]
+        if loose:
+            gl_groups.append({"label": cls_block["class"].name, "accounts": loose})
+    existing = CustomerCreditService.list_for_customer(session, user_id, party_id)
+    return templates.TemplateResponse(
+        "trade_customer_credit_modal.html",
+        _ctx(request, party=party, gl_groups=gl_groups, existing=existing, today=date.today()),
+    )
+
+
+@router.post("/parties/{party_id}/credit")
+async def customer_credit_create(party_id: int, request: Request, session: Session = Depends(get_session)):
+    user_id = DEFAULT_USER_ID
+    party = PartyService.get(session, user_id, party_id)
+    if not party or not party.is_customer:
+        raise HTTPException(404, "Customer not found")
+    form = await request.form()
+    src_raw = (form.get("source_account_id") or "").strip()
+    if not src_raw.isdigit():
+        raise HTTPException(400, "Pick a source account")
+    amount = _parse_decimal(form.get("amount"), "0")
+    if amount <= 0:
+        raise HTTPException(400, "Amount must be positive")
+    CustomerCreditService.create(
+        session, user_id, party_id, int(src_raw), amount,
+        entry_date=_parse_date(form.get("entry_date")) or date.today(),
+        notes=(form.get("notes") or "").strip() or None,
+    )
+    return _close_modal()
 
 
 # ── Partners (equity) ────────────────────────────────────────────────────

@@ -52,9 +52,15 @@
           </td>
           <td>
             {% if p.is_active %}<span class="pill-dr">Active</span>{% else %}<span class="pill-cr">Disabled</span>{% endif %}
+            {% if p.is_customer and credit_by_customer.get(p.id) %}
+            <div class="text-xs wt-pos mt-0.5">{{ currency }} {{ '{:,.2f}'.format(credit_by_customer[p.id]) }} credit available</div>
+            {% endif %}
           </td>
           <td class="text-right whitespace-nowrap">
             <button class="wt-info text-xs hover:underline font-medium" hx-get="/trade/parties/{{ p.id }}/edit" hx-target="#modal-container">Edit</button>
+            {% if p.is_customer %}
+            <button class="wt-body text-xs hover:underline font-medium ml-3" hx-get="/trade/parties/{{ p.id }}/credit/new" hx-target="#modal-container">+ Credit</button>
+            {% endif %}
             <form class="inline" hx-post="/trade/parties/{{ p.id }}/delete" hx-disabled-elt="find button" hx-confirm="Disable this party?">
               <button class="wt-neg text-xs hover:underline ml-3 font-medium">Disable</button>
             </form>

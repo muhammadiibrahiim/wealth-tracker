@@ -13,6 +13,7 @@ from sqlmodel import Session, select, func, or_
 from models import (
     Account,
     CashAccount,
+    CustomerCredit,
     Item,
     ItemSpecField,
     ItemVendorQuote,
@@ -424,6 +425,11 @@ class TradeService:
         # Recognise the vendor advance we owe from the moment the trade opens
         # (cost-pending lines accrue nothing until their buy rate is filled in).
         TradeService._post_advance_accrual(session, trade)
+        # If this customer has any unapplied credit sitting from a prior
+        # arrangement (see CustomerCreditService), draw it down against this
+        # new trade automatically — this is literally "the advance on their
+        # next invoice" the credit was reserved for.
+        CustomerCreditService.apply_to_trade(session, user_id, trade.id)
         session.commit()
         session.refresh(trade)
         return trade
@@ -2167,6 +2173,86 @@ class PaymentService:
             session.add(trade)
         session.commit()
         return True
+
+
+class CustomerCreditService:
+    """An unapplied credit balance reserved for a customer — see
+    CustomerCredit's docstring in models.py. Nothing moves in the ledger
+    until a credit is actually applied to a trade; `create()` just reserves
+    it. `apply_to_trade` (called manually, or automatically the moment a new
+    trade is created for that customer — see TradeService.create) posts the
+    real journal entry via PaymentService.record and draws the balance down."""
+
+    @staticmethod
+    def list_for_customer(session: Session, user_id: int, customer_id: int,
+                          only_open: bool = True) -> list[CustomerCredit]:
+        q = select(CustomerCredit).where(
+            CustomerCredit.user_id == user_id, CustomerCredit.customer_id == customer_id,
+        )
+        if only_open:
+            q = q.where(CustomerCredit.remaining_amount > 0)
+        q = q.order_by(CustomerCredit.entry_date, CustomerCredit.id)
+        return list(session.exec(q).all())
+
+    @staticmethod
+    def total_available(session: Session, user_id: int, customer_id: int) -> Decimal:
+        rows = CustomerCreditService.list_for_customer(session, user_id, customer_id)
+        return sum((Decimal(r.remaining_amount) for r in rows), ZERO)
+
+    @staticmethod
+    def create(
+        session: Session, user_id: int, customer_id: int, source_account_id: int,
+        amount: Decimal, entry_date: Optional[date] = None, notes: Optional[str] = None,
+    ) -> CustomerCredit:
+        c = CustomerCredit(
+            user_id=user_id, customer_id=customer_id, source_account_id=source_account_id,
+            amount=Decimal(str(amount)), remaining_amount=Decimal(str(amount)),
+            entry_date=entry_date or date.today(), notes=notes,
+        )
+        session.add(c)
+        session.commit()
+        session.refresh(c)
+        return c
+
+    @staticmethod
+    def apply_to_trade(session: Session, user_id: int, trade_id: int,
+                       amount: Optional[Decimal] = None) -> Decimal:
+        """Apply available credit (oldest reservation first) against a
+        trade's outstanding, up to `amount` — or as much as fits if `amount`
+        is None. Returns the total actually applied (may be less than asked
+        if the trade's outstanding or the available credit runs out first)."""
+        trade = TradeService.get(session, user_id, trade_id)
+        if not trade:
+            return ZERO
+        outstanding = TradeService.customer_outstanding(session, trade)
+        if outstanding <= 0:
+            return ZERO
+        cap = min(outstanding, Decimal(str(amount))) if amount is not None else outstanding
+        if cap <= 0:
+            return ZERO
+        applied_total = ZERO
+        for c in CustomerCreditService.list_for_customer(session, user_id, trade.purchaser_id):
+            if cap <= 0:
+                break
+            take = min(Decimal(c.remaining_amount), cap)
+            if take <= 0:
+                continue
+            posted = PaymentService.record(
+                session, user_id, trade_id=trade.id,
+                gl_account_id=c.source_account_id,
+                direction=PaymentDirection.INBOUND,
+                amount=take, paid_on=date.today(),
+                notes=f"Applied from customer credit #{c.id}" + (f" — {c.notes}" if c.notes else ""),
+            )
+            if not posted:
+                continue
+            c.remaining_amount = (Decimal(c.remaining_amount) - take).quantize(Decimal("0.01"))
+            session.add(c)
+            applied_total += take
+            cap -= take
+        if applied_total > 0:
+            session.commit()
+        return applied_total
 
 
 class MasterReceiptService:

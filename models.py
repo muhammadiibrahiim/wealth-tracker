@@ -876,6 +876,35 @@ class TradePayment(SQLModel, table=True):
     )
 
 
+class CustomerCredit(SQLModel, table=True):
+    """An unapplied credit balance reserved for a customer — value owed to
+    them (or earmarked for them) that isn't attributed to any specific trade
+    yet, e.g. the leftover of a personal-loan offset once the part that fit
+    the current invoice has been applied. Draws down as it's applied against
+    trades — oldest credit first — either automatically the moment a new
+    trade is created for that customer, or manually against an existing one.
+    Each application posts a real PaymentService.record() entry (DR
+    source_account / CR the customer's A/R, tagged to that trade) at the
+    time it's applied — nothing moves in the ledger until then."""
+    __tablename__ = "trade_customer_credits"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    customer_id: int = Field(sa_column=Column(ForeignKey("trade_parties.id", ondelete="CASCADE")))
+    source_account_id: int = Field(sa_column=Column(ForeignKey("accounts.id")))
+    amount: Decimal = Field(sa_column=Column(DECIMAL(15, 2)))
+    remaining_amount: Decimal = Field(sa_column=Column(DECIMAL(15, 2)))
+    entry_date: date = Field(default_factory=date.today, sa_column=Column(Date))
+    notes: Optional[str] = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    source_account: Optional["Account"] = Relationship()
+
+    __table_args__ = (
+        Index("idx_customer_credit_customer", "customer_id"),
+    )
+
+
 # ════════════════════════════════════════════════════════════════════════
 # Chart of Accounts & Double-Entry Bookkeeping
 # ════════════════════════════════════════════════════════════════════════

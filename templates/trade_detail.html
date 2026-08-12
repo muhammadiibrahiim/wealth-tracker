@@ -40,6 +40,11 @@
         {% if customer_outstanding > 0 %}
         <button class="btn-secondary" hx-get="/trade/trades/{{ trade.id }}/payments/new?direction=inbound" hx-target="#modal-container">Record Customer Payment</button>
         {% endif %}
+        {% if customer_outstanding > 0 and available_customer_credit > 0 %}
+        <form hx-post="/trade/trades/{{ trade.id }}/apply-credit" hx-disabled-elt="find button" hx-confirm="Apply up to {{ currency }} {{ '{:,.2f}'.format(available_customer_credit) }} of {{ purchaser.name }}'s available credit to this trade's outstanding?">
+          <button class="btn-secondary wt-pos">Apply Credit ({{ currency }} {{ '{:,.2f}'.format(available_customer_credit) }} available)</button>
+        </form>
+        {% endif %}
         {% if 0 < customer_outstanding <= 100 %}
         <form hx-post="/trade/trades/{{ trade.id }}/writeoff-residual" hx-disabled-elt="find button" hx-confirm="Write off the remaining {{ currency }} {{ '{:,.2f}'.format(customer_outstanding) }} to expenses and mark this trade fully paid?">
           <button class="btn-secondary wt-warn">Complete &amp; Adjust ({{ currency }} {{ '{:,.2f}'.format(customer_outstanding) }})</button>

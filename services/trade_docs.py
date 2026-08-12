@@ -56,15 +56,6 @@ def _terms_label(trade: Trade, side: str) -> str:
     return " · ".join(parts) if parts else f"Net {days} days"
 
 
-def _terms_short(trade: Trade, side: str) -> str:
-    """Compact terms for the KPI cell so it never overflows, e.g. 'Net 25 days'
-    or '50/50/0%'."""
-    adv, dely, cred, days, cred2, _days2 = _split_pcts(trade, side)
-    if adv == 0 and dely == 0 and cred2 == 0:
-        return f"Net {days} days" if days else "On delivery"
-    if cred2 > 0:
-        return f"{float(adv):g}/{float(dely):g}/{float(cred):g}/{float(cred2):g}%"
-    return f"{float(adv):g}/{float(dely):g}/{float(cred):g}%"
 from services.pdf_helper import (
     render_report_pdf, ReportSpec, KpiSpec, TableSpec,
     SectionTitle, ParagraphBlock, CalloutCard,
@@ -311,10 +302,10 @@ def _default_kpis(ctx: DocContext) -> list:
     ]
     if kind == "vendor_po":
         kpis.append(KpiSpec("Order Value", _pkr(t.total_cost)))
-        kpis.append(KpiSpec("Pay Terms",   _terms_short(t, 'vendor')))
+        kpis.append(KpiSpec("Pay Terms",   _terms_label(t, 'vendor')))
     elif kind == "order_confirm":
         kpis.append(KpiSpec("Total",     _pkr(t.total_sale)))
-        kpis.append(KpiSpec("Pay Terms", _terms_short(t, 'customer')))
+        kpis.append(KpiSpec("Pay Terms", _terms_label(t, 'customer')))
     elif kind == "delivery_note":
         kpis.append(KpiSpec("Total",     _pkr(t.total_sale)))
         kpis.append(KpiSpec("Delivered",

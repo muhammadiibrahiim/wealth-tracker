@@ -358,6 +358,34 @@ class TradeService:
         return None
 
     @staticmethod
+    def has_ledger_activity(session: Session, trade: Trade) -> bool:
+        """True once anything real has happened on this trade — a delivery
+        was received, a purchase batch was recorded, a payment moved, or any
+        journal entry was posted. Vendor/purchaser are baked into every
+        journal line at post time (not re-derived live), so once this is
+        true, reassigning either party would silently orphan history against
+        the old party — block the edit rather than risk that."""
+        line_ids = [ln.id for ln in trade.lines]
+        if line_ids:
+            if session.exec(
+                select(TradeLineReceipt.id).where(TradeLineReceipt.line_id.in_(line_ids))
+            ).first():
+                return True
+            if session.exec(
+                select(TradePurchase.id).where(TradePurchase.line_id.in_(line_ids))
+            ).first():
+                return True
+        if session.exec(
+            select(TradePayment.id).where(TradePayment.trade_id == trade.id)
+        ).first():
+            return True
+        if session.exec(
+            select(JournalEntry.id).where(JournalEntry.trade_id == trade.id)
+        ).first():
+            return True
+        return False
+
+    @staticmethod
     def create(
         session: Session,
         user_id: int,

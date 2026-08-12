@@ -765,23 +765,49 @@ async def trade_deliver_modal(request: Request, trade_id: int, session: Session 
 @router.get("/trades/{trade_id}/edit", response_class=HTMLResponse)
 async def trade_edit_modal(trade_id: int, request: Request,
                            session: Session = Depends(get_session)):
-    trade = TradeService.get(session, DEFAULT_USER_ID, trade_id)
+    user_id = DEFAULT_USER_ID
+    trade = TradeService.get(session, user_id, trade_id)
     if not trade:
         raise HTTPException(404, "Trade not found")
+    locked = TradeService.has_ledger_activity(session, trade)
+    vendors = PartyService.list_vendors(session, user_id)
+    customers = PartyService.list_customers(session, user_id)
     return templates.TemplateResponse(
-        "trade_edit_modal.html", _ctx(request, trade=trade),
+        "trade_edit_modal.html",
+        _ctx(request, trade=trade, locked=locked, vendors=vendors, customers=customers),
     )
 
 
 @router.post("/trades/{trade_id}/edit")
 async def trade_edit_save(trade_id: int, request: Request,
                           session: Session = Depends(get_session)):
-    """Edit trade header: dates, terms days and the payment splits. These don't
-    touch the ledger (they affect due dates, forecast and docs only)."""
+    """Edit trade header: dates, terms days, payment splits, and — only while
+    nothing has been delivered/purchased/paid yet — the vendor/purchaser
+    themselves. None of this touches the ledger (see has_ledger_activity)."""
     trade = TradeService.get(session, DEFAULT_USER_ID, trade_id)
     if not trade:
         raise HTTPException(404, "Trade not found")
     form = await request.form()
+
+    vendor_raw = form.get("vendor_id")
+    purchaser_raw = form.get("purchaser_id")
+    wants_party_change = (
+        (vendor_raw and str(vendor_raw).isdigit() and int(vendor_raw) != trade.vendor_id)
+        or (purchaser_raw and str(purchaser_raw).isdigit() and int(purchaser_raw) != trade.purchaser_id)
+    )
+    if wants_party_change:
+        if TradeService.has_ledger_activity(session, trade):
+            raise HTTPException(
+                400,
+                "Can't change the vendor or purchaser — this trade already has a "
+                "delivery, purchase, payment, or journal entry posted against the "
+                "current parties. Cancel this trade and create a new one instead."
+            )
+        if vendor_raw and str(vendor_raw).isdigit():
+            trade.vendor_id = int(vendor_raw)
+        if purchaser_raw and str(purchaser_raw).isdigit():
+            trade.purchaser_id = int(purchaser_raw)
+
     td = _parse_date(form.get("trade_date"))
     if td:
         trade.trade_date = td

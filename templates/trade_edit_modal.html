@@ -3,12 +3,38 @@
     <div class="flex items-start justify-between mb-5">
       <div>
         <h2 class="modal-title">Edit Trade Details</h2>
-        <p class="modal-subtitle">{{ trade.reference }} · dates, terms and payment splits. Doesn't change items or the ledger.</p>
+        <p class="modal-subtitle">{{ trade.reference }} · dates, terms, payment splits{{ ', vendor/purchaser (until anything is delivered, purchased or paid)' if not locked else '' }}. Doesn't change items or the ledger.</p>
       </div>
       <button type="button" class="modal-close" onclick="document.getElementById('modal-container').innerHTML = ''">✕</button>
     </div>
 
     <form hx-post="/trade/trades/{{ trade.id }}/edit" hx-disabled-elt="find button[type=submit]" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="field-label">Vendor (we buy)</label>
+          {% if locked %}
+          <input value="{{ trade.vendor_id and vendors|selectattr('id','equalto',trade.vendor_id)|map(attribute='name')|first or '—' }}" disabled class="w-full">
+          {% else %}
+          <select name="vendor_id" class="w-full">
+            {% for v in vendors %}<option value="{{ v.id }}" {% if v.id == trade.vendor_id %}selected{% endif %}>{{ v.name }}</option>{% endfor %}
+          </select>
+          {% endif %}
+        </div>
+        <div>
+          <label class="field-label">Purchaser (we sell)</label>
+          {% if locked %}
+          <input value="{{ trade.purchaser_id and customers|selectattr('id','equalto',trade.purchaser_id)|map(attribute='name')|first or '—' }}" disabled class="w-full">
+          {% else %}
+          <select name="purchaser_id" class="w-full">
+            {% for c in customers %}<option value="{{ c.id }}" {% if c.id == trade.purchaser_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+          </select>
+          {% endif %}
+        </div>
+      </div>
+      {% if locked %}
+      <p class="text-xs wt-mute -mt-2">Vendor/purchaser are locked — this trade already has a delivery, purchase, payment, or journal entry posted. Cancel this trade and create a new one to change either party.</p>
+      {% endif %}
+
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
           <label class="field-label">Trade Date</label>

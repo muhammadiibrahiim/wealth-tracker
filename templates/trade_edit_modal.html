@@ -51,12 +51,22 @@
       </div>
 
       <div class="border border-gray-200 rounded-lg p-3 wt-info-bg">
-        <div class="text-xs wt-mute mb-2">Payment split — <b>Advance</b> on the trade date, <b>On delivery</b> when goods move, <b>Credit</b> the"credit days" above after delivery. Each row should total 100%.</div>
+        <div class="text-xs wt-mute mb-2">Payment split — <b>Advance</b> on the trade date, <b>On delivery</b> when goods move, <b>Credit 1</b> the"credit days" above after delivery. Each row should total 100%. Optionally split the customer's credit into a second tranche due on a different day-count (e.g. "50% at 30 days, 50% at 40 days").</div>
         <div class="grid grid-cols-12 gap-2 items-end mb-1.5">
           <div class="col-span-3 text-xs font-semibold wt-body pb-1.5">Customer pays you</div>
           <div class="col-span-3"><label class="field-label text-xs">Advance %</label><input type="number" min="0" step="1" name="cust_advance_pct" value="{{ '{:g}'.format(trade.cust_advance_pct) }}" class="w-full text-sm split-pct" data-side="cust"></div>
           <div class="col-span-3"><label class="field-label text-xs">On delivery %</label><input type="number" min="0" step="1" name="cust_delivery_pct" value="{{ '{:g}'.format(trade.cust_delivery_pct) }}" class="w-full text-sm split-pct" data-side="cust"></div>
-          <div class="col-span-3"><label class="field-label text-xs">Credit %</label><input type="number" min="0" step="1" name="cust_credit_pct" value="{{ '{:g}'.format(trade.cust_credit_pct) }}" class="w-full text-sm split-pct" data-side="cust"></div>
+          <div class="col-span-3"><label class="field-label text-xs">Credit 1 %</label><input type="number" min="0" step="1" name="cust_credit_pct" value="{{ '{:g}'.format(trade.cust_credit_pct) }}" class="w-full text-sm split-pct" data-side="cust"></div>
+        </div>
+        <div class="grid grid-cols-12 gap-2 items-end mb-1.5">
+          <div class="col-span-9"></div>
+          <div class="col-span-3">
+            <label class="field-label text-xs">+ Credit 2 % <span class="wt-ash">(optional)</span></label>
+            <div class="flex gap-1">
+              <input type="number" min="0" step="1" name="cust_credit2_pct" value="{{ '{:g}'.format(trade.cust_credit2_pct) }}" class="w-1/2 text-sm split-pct" data-side="cust" placeholder="%" title="Credit 2 %">
+              <input type="number" min="0" name="customer_terms2_days" value="{{ trade.customer_terms2_days }}" class="w-1/2 text-sm" placeholder="days" title="Days after delivery (tranche 2)">
+            </div>
+          </div>
         </div>
         <div class="grid grid-cols-12 gap-2 items-end">
           <div class="col-span-3 text-xs font-semibold wt-body pb-1.5">You pay vendor</div>
@@ -79,11 +89,13 @@
 (function(){
   function checkSplits(){
     const warn = document.getElementById('split-warn'); if(!warn) return;
-    const sum = side => ['advance','delivery','credit'].reduce((a,f)=>{
-      const el = document.querySelector(`[name=${side}_${f}_pct]`);
-      return a + (parseFloat(el && el.value) || 0);
-    }, 0);
-    const cs = sum('cust'), vs = sum('vend'); const msgs = [];
+    const val = name => {
+      const el = document.querySelector(`[name=${name}]`);
+      return parseFloat(el && el.value) || 0;
+    };
+    const cs = val('cust_advance_pct') + val('cust_delivery_pct') + val('cust_credit_pct') + val('cust_credit2_pct');
+    const vs = val('vend_advance_pct') + val('vend_delivery_pct') + val('vend_credit_pct');
+    const msgs = [];
     if (Math.abs(cs-100) > 0.01) msgs.push(`Customer = ${cs}%`);
     if (Math.abs(vs-100) > 0.01) msgs.push(`Vendor = ${vs}%`);
     if (msgs.length){ warn.textContent = '⚠ Split ' + msgs.join(' · ') + ' (should be 100% — will be normalised).'; warn.classList.remove('hidden'); }

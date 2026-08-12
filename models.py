@@ -438,6 +438,16 @@ class Trade(SQLModel, table=True):
     vend_advance_pct: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(6, 2)))
     vend_delivery_pct: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(6, 2)))
     vend_credit_pct: Decimal = Field(default=Decimal("100"), sa_column=Column(DECIMAL(6, 2)))
+    # Optional SECOND customer credit tranche — some customers pay their credit
+    # portion in two chunks at two different day-counts after delivery (e.g.
+    # "50% at 30 days, 50% at 40 days") instead of all of cust_credit_pct on
+    # one date. When cust_credit2_pct is 0 (the default), customer_billing_events
+    # behaves exactly as before — the whole credit portion is due on ONE date
+    # (customer_terms_days). When it's non-zero, cust_credit_pct is split
+    # proportionally between the two day-counts: customer_terms_days (tranche 1)
+    # and customer_terms2_days (tranche 2).
+    cust_credit2_pct: Decimal = Field(default=Decimal("0"), sa_column=Column(DECIMAL(6, 2)))
+    customer_terms2_days: int = Field(default=0)
 
     status: TradeStatus = Field(default=TradeStatus.OPEN, sa_column=Column(String(30)))
     delivered_at: Optional[date] = Field(default=None, sa_column=Column(Date))

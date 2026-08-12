@@ -818,19 +818,24 @@ class TradeService:
 
     @staticmethod
     def terms_label(trade: Trade, side: str) -> str:
-        """Human-readable terms, e.g. '30% advance · 50% on delivery · 20% in 25 days'."""
+        """Human-readable terms, e.g. '30% advance · 50% on delivery · 20% in 25 days'.
+        On the customer side, a non-zero cust_credit2_pct splits the credit
+        portion across two day-counts, e.g. '50% in 30 days · 50% in 40 days'."""
         if side == "customer":
             adv, dely, cred, terms = (trade.cust_advance_pct, trade.cust_delivery_pct,
                                       trade.cust_credit_pct, trade.customer_terms_days)
+            cred2, terms2 = trade.cust_credit2_pct, trade.customer_terms2_days
         else:
             adv, dely, cred, terms = (trade.vend_advance_pct, trade.vend_delivery_pct,
                                       trade.vend_credit_pct, trade.vendor_terms_days)
-        adv, dely, cred = Decimal(adv or 0), Decimal(dely or 0), Decimal(cred or 0)
-        tot = adv + dely + cred
+            cred2, terms2 = ZERO, 0
+        adv, dely, cred, cred2 = (Decimal(adv or 0), Decimal(dely or 0),
+                                  Decimal(cred or 0), Decimal(cred2 or 0))
+        tot = adv + dely + cred + cred2
         if tot <= 0:
-            adv, dely, cred, tot = ZERO, ZERO, Decimal("100"), Decimal("100")
-        adv, dely, cred = adv / tot * 100, dely / tot * 100, cred / tot * 100
-        d = int(terms or 0)
+            adv, dely, cred, cred2, tot = ZERO, ZERO, Decimal("100"), ZERO, Decimal("100")
+        adv, dely, cred, cred2 = adv / tot * 100, dely / tot * 100, cred / tot * 100, cred2 / tot * 100
+        d, d2 = int(terms or 0), int(terms2 or 0)
         parts = []
         if adv > 0:
             parts.append(f"{float(adv):g}% advance")
@@ -838,6 +843,8 @@ class TradeService:
             parts.append(f"{float(dely):g}% on delivery")
         if cred > 0:
             parts.append(f"{float(cred):g}% " + (f"in {d} days" if d else "on delivery"))
+        if cred2 > 0:
+            parts.append(f"{float(cred2):g}% " + (f"in {d2} days" if d2 else "on delivery"))
         return " · ".join(parts) if parts else f"Net {d} days"
 
     @staticmethod
@@ -1461,6 +1468,12 @@ class TradeService:
         date — exactly what services/trade_docs.py's per-date invoices
         actually bill and the due date they actually print on the invoice.
 
+        A non-zero cust_credit2_pct splits a date's amount into two tranches
+        (proportionally by cust_credit_pct : cust_credit2_pct), each with its
+        own due date — customer_terms_days and customer_terms2_days. When
+        cust_credit2_pct is 0 (the default), this is exactly one event per
+        date as before.
+
         This is the real per-invoice truth. `trade.customer_due_date` is
         only ever set by the manual "Mark Trade Complete" step and must
         NOT be read directly to ask "is this due / overdue" — a trade can
@@ -1475,11 +1488,21 @@ class TradeService:
                     Decimal(r.received_qty) * Decimal(ln.unit_price)
                 )
         terms = int(trade.customer_terms_days or 0)
-        return [
-            {"event_date": d, "amount": amt.quantize(Decimal("0.01")),
-             "due_date": d + timedelta(days=terms)}
-            for d, amt in sorted(by_date.items())
-        ]
+        terms2 = int(trade.customer_terms2_days or 0)
+        pct1 = Decimal(trade.cust_credit_pct or 0)
+        pct2 = Decimal(trade.cust_credit2_pct or 0)
+        events = []
+        for d, amt in sorted(by_date.items()):
+            if pct2 > 0 and (pct1 + pct2) > 0:
+                amt1 = (amt * pct1 / (pct1 + pct2)).quantize(Decimal("0.01"))
+                events.append({"event_date": d, "amount": amt1, "due_date": d + timedelta(days=terms)})
+                events.append({"event_date": d, "amount": (amt - amt1).quantize(Decimal("0.01")),
+                               "due_date": d + timedelta(days=terms2)})
+            else:
+                events.append({"event_date": d, "amount": amt.quantize(Decimal("0.01")),
+                               "due_date": d + timedelta(days=terms)})
+        events.sort(key=lambda e: e["due_date"])
+        return events
 
     @staticmethod
     def customer_due_status(session: Session, trade: Trade) -> dict:
@@ -3032,17 +3055,38 @@ class TradeReportService:
                     unallocated_credit += cr_to_purchaser
 
             # ── 5. Build event records sorted by due date (FIFO target) ──
+            # A non-zero cust_credit2_pct splits each date's invoice into two
+            # tranches — proportionally by cust_credit_pct : cust_credit2_pct —
+            # each with its own due date (customer_terms_days / _terms2_days).
+            # When cust_credit2_pct is 0 (the default), this is exactly the
+            # old single-event-per-date behaviour.
+            pct1 = Decimal(t.cust_credit_pct or 0)
+            pct2 = Decimal(t.cust_credit2_pct or 0)
+            terms2 = int(t.customer_terms2_days or 0)
             events = []
             for evt_date, gross in event_by_date.items():
-                due_date = evt_date + timedelta(days=terms)
                 bilty_credit = bilty_by_date.get(evt_date, ZERO)
-                events.append({
-                    "event_date": evt_date,
-                    "due_date":   due_date,
-                    "gross":      gross.quantize(Decimal("0.01")),
-                    "bilty_credit": bilty_credit.quantize(Decimal("0.01")),
-                    "net":        (gross - bilty_credit).quantize(Decimal("0.01")),
-                })
+                if pct2 > 0 and (pct1 + pct2) > 0:
+                    frac1 = pct1 / (pct1 + pct2)
+                    gross1 = (gross * frac1).quantize(Decimal("0.01"))
+                    bilty1 = (bilty_credit * frac1).quantize(Decimal("0.01"))
+                    for g, b, d in ((gross1, bilty1, terms),
+                                    (gross - gross1, bilty_credit - bilty1, terms2)):
+                        events.append({
+                            "event_date": evt_date,
+                            "due_date":   evt_date + timedelta(days=d),
+                            "gross":      g.quantize(Decimal("0.01")),
+                            "bilty_credit": b.quantize(Decimal("0.01")),
+                            "net":        (g - b).quantize(Decimal("0.01")),
+                        })
+                else:
+                    events.append({
+                        "event_date": evt_date,
+                        "due_date":   evt_date + timedelta(days=terms),
+                        "gross":      gross.quantize(Decimal("0.01")),
+                        "bilty_credit": bilty_credit.quantize(Decimal("0.01")),
+                        "net":        (gross - bilty_credit).quantize(Decimal("0.01")),
+                    })
             events.sort(key=lambda x: x["due_date"])
 
             # FIFO-apply the unallocated credit to events by due date.

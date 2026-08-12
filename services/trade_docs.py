@@ -20,24 +20,30 @@ from models import Party, Trade, TradeLine, TradePayment
 
 
 def _split_pcts(trade: Trade, side: str):
-    """Normalised (adv, dely, cred, days) so percentages always total 100."""
+    """Normalised (adv, dely, cred, days, cred2, days2) so percentages always
+    total 100. cred2/days2 are 0 on the vendor side (no second tranche there)."""
     if side == "customer":
         adv, dely, cred, days = (trade.cust_advance_pct, trade.cust_delivery_pct,
                                  trade.cust_credit_pct, trade.customer_terms_days)
+        cred2, days2 = trade.cust_credit2_pct, trade.customer_terms2_days
     else:
         adv, dely, cred, days = (trade.vend_advance_pct, trade.vend_delivery_pct,
                                  trade.vend_credit_pct, trade.vendor_terms_days)
-    adv, dely, cred = Decimal(adv or 0), Decimal(dely or 0), Decimal(cred or 0)
-    tot = adv + dely + cred
+        cred2, days2 = Decimal(0), 0
+    adv, dely, cred, cred2 = (Decimal(adv or 0), Decimal(dely or 0),
+                              Decimal(cred or 0), Decimal(cred2 or 0))
+    tot = adv + dely + cred + cred2
     if tot <= 0:
-        adv, dely, cred, tot = Decimal(0), Decimal(0), Decimal(100), Decimal(100)
-    return (adv / tot * 100, dely / tot * 100, cred / tot * 100, int(days or 0))
+        adv, dely, cred, cred2, tot = Decimal(0), Decimal(0), Decimal(100), Decimal(0), Decimal(100)
+    return (adv / tot * 100, dely / tot * 100, cred / tot * 100, int(days or 0),
+            cred2 / tot * 100, int(days2 or 0))
 
 
 def _terms_label(trade: Trade, side: str) -> str:
     """Readable split terms for docs, e.g. '30% advance · 50% on delivery ·
-    20% in 25 days'. Normalised to 100%."""
-    adv, dely, cred, days = _split_pcts(trade, side)
+    20% in 25 days'. Normalised to 100%. On the customer side, a non-zero
+    cust_credit2_pct appends a second '% in N days' segment."""
+    adv, dely, cred, days, cred2, days2 = _split_pcts(trade, side)
     parts = []
     if adv > 0:
         parts.append(f"{float(adv):g}% advance")
@@ -45,15 +51,19 @@ def _terms_label(trade: Trade, side: str) -> str:
         parts.append(f"{float(dely):g}% on delivery")
     if cred > 0:
         parts.append(f"{float(cred):g}% " + (f"in {days} days" if days else "on delivery"))
+    if cred2 > 0:
+        parts.append(f"{float(cred2):g}% " + (f"in {days2} days" if days2 else "on delivery"))
     return " · ".join(parts) if parts else f"Net {days} days"
 
 
 def _terms_short(trade: Trade, side: str) -> str:
     """Compact terms for the KPI cell so it never overflows, e.g. 'Net 25 days'
     or '50/50/0%'."""
-    adv, dely, cred, days = _split_pcts(trade, side)
-    if adv == 0 and dely == 0:
+    adv, dely, cred, days, cred2, _days2 = _split_pcts(trade, side)
+    if adv == 0 and dely == 0 and cred2 == 0:
         return f"Net {days} days" if days else "On delivery"
+    if cred2 > 0:
+        return f"{float(adv):g}/{float(dely):g}/{float(cred):g}/{float(cred2):g}%"
     return f"{float(adv):g}/{float(dely):g}/{float(cred):g}%"
 from services.pdf_helper import (
     render_report_pdf, ReportSpec, KpiSpec, TableSpec,
@@ -119,17 +129,41 @@ def _ref_for(kind: str, trade: Trade, suffix: str = "") -> str:
     return f"{base}-{suffix}" if suffix else base
 
 
-def _due_date_for(ctx) -> Optional[date]:
-    """Per-receipt invoice due date = delivery event date + customer_terms_days.
+def _due_dates_for(ctx) -> list:
+    """[(pct, due_date), ...] for each customer credit tranche billed on this
+    invoice's delivery event — due_date = event date + customer_terms_days.
 
+    A non-zero cust_credit2_pct splits the credit portion into two tranches,
+    each with its own day-count (customer_terms_days / customer_terms2_days);
+    otherwise a single (100, due_date) entry, matching the old behaviour.
     Falls back to the trade-level `customer_due_date` if no event_date is set
-    (e.g. a full-trade-level use of the helper). Returns None when neither side
-    has enough info to compute one.
+    (e.g. a full-trade-level use of the helper).
     """
-    if ctx.event_date and ctx.trade.customer_terms_days is not None:
-        from datetime import timedelta
-        return ctx.event_date + timedelta(days=int(ctx.trade.customer_terms_days))
-    return getattr(ctx.trade, "customer_due_date", None)
+    from datetime import timedelta
+    t = ctx.trade
+    if not ctx.event_date:
+        return [(Decimal(100), getattr(t, "customer_due_date", None))]
+    pct1 = Decimal(t.cust_credit_pct or 0)
+    pct2 = Decimal(t.cust_credit2_pct or 0)
+    if pct2 > 0 and (pct1 + pct2) > 0:
+        return [
+            (pct1, ctx.event_date + timedelta(days=int(t.customer_terms_days or 0))),
+            (pct2, ctx.event_date + timedelta(days=int(t.customer_terms2_days or 0))),
+        ]
+    return [(Decimal(100), ctx.event_date + timedelta(days=int(t.customer_terms_days or 0)))]
+
+
+def _due_phrase_for(ctx, fmt: str = "%b %d, %Y", with_by: bool = True, bold: bool = False) -> str:
+    """Human-readable due-date phrase, e.g. 'by Sep 06, 2026', or
+    '50% by Sep 06, 2026 · 50% by Sep 16, 2026' when split into two tranches."""
+    dues = [d for d in _due_dates_for(ctx) if d[1]]
+    if not dues:
+        return ""
+    wrap = (lambda s: f"<b>{s}</b>") if bold else (lambda s: s)
+    prefix = "by " if with_by else ""
+    if len(dues) == 1:
+        return f"{prefix}{wrap(dues[0][1].strftime(fmt))}"
+    return " · ".join(f"{float(p):g}% {prefix}{wrap(d.strftime(fmt))}" for p, d in dues)
 
 
 @dataclass
@@ -226,12 +260,12 @@ def build_doc_pdf(ctx: DocContext) -> bytes:
                      if ctx.trade.delivered_at else "Delivery in progress")),
         ))
     elif kind == "delivery_invoice":
-        _due = _due_date_for(ctx)
         suffix_parts = []
         if ctx.event_label:
             suffix_parts.append(f"For delivery on {ctx.event_label}")
-        if _due:
-            suffix_parts.append(f"Due by {_due.strftime('%b %d, %Y')}")
+        _phrase = _due_phrase_for(ctx)
+        if _phrase:
+            suffix_parts.append(f"Due {_phrase}")
         if ctx.trade.customer_terms_days:
             suffix_parts.append(_terms_label(ctx.trade, 'customer'))
         sections.append(CalloutCard(
@@ -301,10 +335,10 @@ def _default_kpis(ctx: DocContext) -> list:
         kpis.append(KpiSpec("Delivered",
             ctx.event_label or
             (t.delivered_at.strftime("%b %d, %Y") if t.delivered_at else "Pending")))
-        _due = _due_date_for(ctx)
+        _phrase = _due_phrase_for(ctx, with_by=False)
         kpis.append(KpiSpec(
             "Due Date",
-            _due.strftime("%b %d, %Y") if _due else "—",
+            _phrase if _phrase else "—",
             sub=_terms_label(t, 'customer'),
         ))
     return kpis
@@ -470,10 +504,8 @@ def _closing_for(kind: str, ctx: DocContext) -> list:
         ]
     if kind == "delivery_invoice":
         suffix = f" on {ctx.event_label}" if ctx.event_label else ""
-        _due = _due_date_for(ctx)
-        due_phrase = (f"by <b>{_due.strftime('%B %d, %Y')}</b>"
-                      if _due else
-                      f"within <b>{ctx.trade.customer_terms_days} days</b> of this invoice")
+        _phrase = _due_phrase_for(ctx, fmt="%B %d, %Y", bold=True)
+        due_phrase = _phrase if _phrase else f"within <b>{ctx.trade.customer_terms_days} days</b> of this invoice"
         return [
             SectionTitle("Payment Instructions"),
             ParagraphBlock(

@@ -812,8 +812,9 @@ async def trade_edit_save(trade_id: int, request: Request,
     if td:
         trade.trade_date = td
     trade.customer_terms_days = int(_parse_decimal(form.get("customer_terms_days"), str(trade.customer_terms_days)))
+    trade.customer_terms2_days = int(_parse_decimal(form.get("customer_terms2_days"), str(trade.customer_terms2_days)))
     trade.vendor_terms_days = int(_parse_decimal(form.get("vendor_terms_days"), str(trade.vendor_terms_days)))
-    for f in ("cust_advance_pct", "cust_delivery_pct", "cust_credit_pct",
+    for f in ("cust_advance_pct", "cust_delivery_pct", "cust_credit_pct", "cust_credit2_pct",
               "vend_advance_pct", "vend_delivery_pct", "vend_credit_pct"):
         setattr(trade, f, _parse_decimal(form.get(f), str(getattr(trade, f))))
     # refresh due dates from the (possibly new) terms if delivered

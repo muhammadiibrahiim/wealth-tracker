@@ -230,9 +230,11 @@ def build_doc_pdf(ctx: DocContext) -> bytes:
             suffix=f"Payment terms: {_terms_label(ctx.trade, 'vendor')}",
         ))
     elif kind == "order_confirm":
+        # Same ordered-quantity basis as the KPI above and the item table —
+        # see the comment in _default_kpis.
         sections.append(CalloutCard(
             label="Total",
-            value=_pkr(ctx.trade.total_sale),
+            value=_pkr(_subtotal_for(ctx)),
             suffix=f"Payment terms: {_terms_label(ctx.trade, 'customer')}",
         ))
     elif kind == "delivery_note":
@@ -272,12 +274,24 @@ def build_doc_pdf(ctx: DocContext) -> bytes:
 
     sections += _closing_for(kind, ctx)
 
+    # The subtitle's date is this document's real-world business date — NOT
+    # today (the top-right corner stamp already covers "when this PDF file
+    # was rendered", via generated_label + datetime.now() in render_report_pdf).
+    # A Purchase Order issued in June shouldn't read "Issued today" just
+    # because someone reopened it in August.
+    if kind == "payment_receipt" and ctx.payment:
+        issued_date = ctx.payment.paid_on
+    elif ctx.event_date:
+        issued_date = ctx.event_date
+    else:
+        issued_date = ctx.trade.trade_date
+
     buf = BytesIO()
     render_report_pdf(buf, ReportSpec(
         title=title,
         subtitle_parts=[
             f"{title} {ref}",
-            f"Issued {date.today().strftime('%B %d, %Y')}",
+            f"{generated_label} {issued_date.strftime('%B %d, %Y')}" if issued_date else "",
         ],
         kpis=kpis,
         sections=sections,
@@ -304,7 +318,11 @@ def _default_kpis(ctx: DocContext) -> list:
         kpis.append(KpiSpec("Order Value", _pkr(t.total_cost)))
         kpis.append(KpiSpec("Pay Terms",   _terms_label(t, 'vendor')))
     elif kind == "order_confirm":
-        kpis.append(KpiSpec("Total",     _pkr(t.total_sale)))
+        # Order Confirmation's line items are qty'd off ordered_quantity (see
+        # _qty_for), which can diverge from trade.total_sale (quantity-based)
+        # once a line is edited/split after receipts exist — use the same
+        # ordered-quantity basis here so this KPI always matches the table below.
+        kpis.append(KpiSpec("Total",     _pkr(_subtotal_for(ctx))))
         kpis.append(KpiSpec("Pay Terms", _terms_label(t, 'customer')))
     elif kind == "delivery_note":
         kpis.append(KpiSpec("Total",     _pkr(t.total_sale)))
@@ -313,7 +331,9 @@ def _default_kpis(ctx: DocContext) -> list:
     elif kind == "packing_slip":
         kpis.append(KpiSpec("Total Qty",
             f"{float(sum(Decimal(l.quantity) for l in t.lines)):g}"))
-        kpis.append(KpiSpec("Packed On", date.today().strftime("%b %d, %Y")))
+        kpis.append(KpiSpec("Packed On",
+            ctx.event_label or
+            (t.delivered_at.strftime("%b %d, %Y") if t.delivered_at else "Pending")))
     elif kind == "delivery_pack":
         # When line_qty_override is set (per-receipt event), totals reflect the event;
         # otherwise reflect the trade's full delivered qty.

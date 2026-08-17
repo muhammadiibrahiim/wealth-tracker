@@ -980,7 +980,7 @@ async def trade_receive_modal(request: Request, trade_id: int, session: Session 
         line_info.append({
             "line": ln,
             "received_total": received,
-            "remaining": (Decimal(ln.ordered_quantity or ln.quantity) - received).quantize(Decimal("0.001")),
+            "remaining": (Decimal(ln.quantity) - received).quantize(Decimal("0.001")),
             "receipts": ReceiptService.list_for_line(session, ln.id),
         })
     return templates.TemplateResponse(

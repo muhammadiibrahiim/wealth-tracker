@@ -1785,6 +1785,50 @@ async def trade_line_update(trade_id: int, line_id: int, request: Request,
     return _close_modal()
 
 
+@router.get("/trades/{trade_id}/lines/{line_id}/substitute", response_class=HTMLResponse)
+async def trade_line_substitute_modal(trade_id: int, line_id: int, request: Request,
+                                      session: Session = Depends(get_session)):
+    from models import TradeLine
+    line = session.get(TradeLine, line_id)
+    if not line or line.trade_id != trade_id:
+        raise HTTPException(404, "Line not found")
+    trade = TradeService.get(session, DEFAULT_USER_ID, trade_id)
+    pending = TradeService.pending_qty(line)
+    if pending <= 0:
+        raise HTTPException(400, "Nothing pending on this line to substitute")
+    return templates.TemplateResponse(
+        "trade_line_substitute_modal.html",
+        _ctx(request, trade=trade, line=line, pending=pending),
+    )
+
+
+@router.post("/trades/{trade_id}/lines/{line_id}/substitute")
+async def trade_line_substitute(trade_id: int, line_id: int, request: Request,
+                                session: Session = Depends(get_session)):
+    form = await request.form()
+    new_cost = _parse_decimal(form.get("new_cost"), "0")
+    labels = form.getlist("spec_label")
+    values = form.getlist("spec_value")
+    overrides = {}
+    for lab, val in zip(labels, values):
+        lab = (lab or "").strip()
+        if lab:
+            overrides[lab] = (val or "").strip()
+    try:
+        new_line = TradeService.substitute_pending_line(
+            session, DEFAULT_USER_ID, trade_id, line_id,
+            new_cost=new_cost,
+            new_item_name=form.get("item_name"),
+            spec_overrides=overrides,
+            notes=(form.get("line_notes") or "").strip() or None,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if new_line is None:
+        raise HTTPException(404, "Line not found")
+    return _close_modal()
+
+
 # ───────── payments ─────────────────────────────────────────────
 
 

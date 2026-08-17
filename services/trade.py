@@ -508,6 +508,104 @@ class TradeService:
         return trade
 
     @staticmethod
+    def pending_qty(line: TradeLine) -> Decimal:
+        """Ordered-but-not-yet-received remainder of a line."""
+        received = sum((Decimal(r.received_qty) for r in (line.receipts or [])), ZERO)
+        return Decimal(line.quantity) - received
+
+    @staticmethod
+    def substitute_pending_line(
+        session: Session,
+        user_id: int,
+        trade_id: int,
+        line_id: int,
+        new_cost: Decimal,
+        new_item_name: Optional[str] = None,
+        spec_overrides: Optional[dict[str, str]] = None,
+        notes: Optional[str] = None,
+    ) -> Optional[TradeLine]:
+        """A customer swaps the still-undelivered remainder of a line for a
+        different spec/size at a new vendor cost — e.g. "give the pending
+        12x12x2 as 10x12x2 instead". The already-delivered quantity stays on
+        the original line untouched (receipts, invoices and delivery notes
+        already reference it as real history). The pending remainder becomes
+        a brand-new line at the new spec/cost, with:
+          - the same gross margin % the original line carried (new sale price
+            derived from new_cost so (price-cost)/price is unchanged), and
+          - a bumped-up quantity so the pending remainder's total sale value
+            stays what the customer originally agreed to pay (a cheaper
+            cost/pc buys more pieces for the same money).
+        """
+        trade = TradeService.get(session, user_id, trade_id)
+        if not trade:
+            return None
+        line = session.get(TradeLine, line_id)
+        if not line or line.trade_id != trade.id:
+            return None
+        received = sum((Decimal(r.received_qty) for r in (line.receipts or [])), ZERO)
+        pending = Decimal(line.quantity) - received
+        if pending <= 0:
+            raise ValueError("Nothing pending on this line to substitute")
+        old_cost = Decimal(line.unit_cost)
+        old_price = Decimal(line.unit_price)
+        if old_cost <= 0:
+            raise ValueError("Original line has no cost to derive a margin from")
+        new_cost = Decimal(str(new_cost))
+        if new_cost <= 0:
+            raise ValueError("New cost must be positive")
+        # (price-cost)/price held constant  <=>  new_price = new_cost * old_price/old_cost
+        new_price = (new_cost * old_price / old_cost).quantize(Decimal("0.01"))
+        if new_price <= 0:
+            raise ValueError("Computed sale price must be positive")
+        new_qty = (pending * old_price / new_price).quantize(Decimal("0.001"))
+        specs_src = list(line.specs)
+
+        # Freeze the original line at exactly what's already been delivered.
+        # ordered_quantity (the historical original order) is left untouched;
+        # quantity (the current/final target) now matches receipts, so this
+        # line no longer shows anything pending. Read specs_src above, before
+        # any delete — the specs relationship cascades on flush.
+        if received > 0:
+            line.quantity = received
+            session.add(line)
+        else:
+            session.delete(line)
+
+        overrides = spec_overrides or {}
+        new_line = TradeLine(
+            trade_id=trade.id,
+            item_id=line.item_id,
+            item_name=(new_item_name or "").strip() or line.item_name,
+            ordered_quantity=new_qty,
+            quantity=new_qty,
+            unit=line.unit,
+            unit_cost=new_cost,
+            unit_price=new_price,
+            cost_pending=False,
+            line_notes=notes,
+        )
+        session.add(new_line)
+        session.flush()
+        for idx, s in enumerate(specs_src):
+            session.add(TradeLineSpec(
+                line_id=new_line.id,
+                label=s.label,
+                value=overrides.get(s.label, s.value),
+                sort_order=idx,
+            ))
+        session.flush()
+
+        session.refresh(trade)
+        TradeService._recompute_totals(trade)
+        TradeService._refresh_status(trade, session)
+        session.add(trade)
+        session.commit()
+        session.refresh(trade)
+        TradeService._repost_cost(session, trade)
+        session.refresh(new_line)
+        return new_line
+
+    @staticmethod
     def _post_trade_journals(session: Session, trade: Trade) -> None:
         """Post SALE + PURCHASE entries for a trade, routed through the
         Profit / Loss A/C clearing account, plus a closing entry that

@@ -163,6 +163,8 @@
       </thead>
       <tbody>
         {% for ln in trade.lines %}
+        {% set ln_received = ln.receipts | sum(attribute='received_qty') %}
+        {% set ln_pending = ln.quantity - ln_received %}
         <tr class="align-top">
           <td>
             <div class="font-medium wt-ink">{{ ln.item_name }}</div>
@@ -194,6 +196,11 @@
             {% if _status in ('open', 'delivered', 'partially_paid') %}
             <button type="button" class="wt-info text-xs hover:underline font-medium mr-3"
                     hx-get="/trade/trades/{{ trade.id }}/lines/{{ ln.id }}/edit" hx-target="#modal-container">Edit</button>
+            {% if ln_pending > 0 %}
+            <button type="button" class="wt-warn text-xs hover:underline font-medium mr-3"
+                    title="Swap the still-pending {{ '{:g}'.format(ln_pending) }} {{ ln.unit }} for a different spec at a new cost"
+                    hx-get="/trade/trades/{{ trade.id }}/lines/{{ ln.id }}/substitute" hx-target="#modal-container">Substitute Pending</button>
+            {% endif %}
             <button type="button" class="wt-neg text-xs hover:underline font-medium"
                     hx-post="/trade/trades/{{ trade.id }}/lines/{{ ln.id }}/delete" hx-confirm="Delete this line?">Remove</button>
             {% endif %}

@@ -46,6 +46,7 @@
               {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
             </select>
             <p class="text-xs mt-1 wt-mute">This account will be <strong>credited</strong> (balance reduces / liability increases).</p>
+            <p class="text-xs mt-0.5 wt-mute" id="bal-line_0_account_id"></p>
           </div>
 
           <div>
@@ -55,6 +56,7 @@
               {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
             </select>
             <p class="text-xs mt-1 wt-mute">This account will be <strong>debited</strong> (balance increases / liability reduces).</p>
+            <p class="text-xs mt-0.5 wt-mute" id="bal-line_1_account_id"></p>
           </div>
         </div>
 
@@ -157,9 +159,30 @@
           var txt = el.selectedOptions[0] ? el.selectedOptions[0].textContent : '';
           prev.textContent = txt && el.value ? txt : prev.textContent;
         }
+
+        // Account balances: positive = they owe us (receivable, green),
+        // negative = we owe them (payable, red). Shown live under each picker.
+        var ACCOUNT_BALANCES = {{ account_balances|tojson }};
+        function syncBalance(el){
+          var out = document.getElementById('bal-' + el.name);
+          if (!out) return;
+          if (!el.value || !(el.value in ACCOUNT_BALANCES)) { out.textContent = ''; return; }
+          var bal = ACCOUNT_BALANCES[el.value];
+          if (Math.abs(bal) < 0.005) {
+            out.innerHTML = '<span class="wt-mute">Balance: {{ currency }} 0.00</span>';
+            return;
+          }
+          var amt = '{{ currency }} ' + Math.abs(bal).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+          if (bal > 0) {
+            out.innerHTML = '<span class="wt-pos font-medium">' + amt + ' receivable</span>';
+          } else {
+            out.innerHTML = '<span class="wt-neg font-medium">' + amt + ' payable</span>';
+          }
+        }
         amount.addEventListener('input', sync);
-        fromSel.addEventListener('change', function(){ syncSel(fromSel, prevFrom); });
-        toSel.addEventListener('change',   function(){ syncSel(toSel,   prevTo); });
+        fromSel.addEventListener('change', function(){ syncSel(fromSel, prevFrom); syncBalance(fromSel); });
+        toSel.addEventListener('change',   function(){ syncSel(toSel,   prevTo);   syncBalance(toSel); });
+        syncBalance(fromSel); syncBalance(toSel);
       })();
       </script>
 

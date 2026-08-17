@@ -2664,6 +2664,13 @@ async def voucher_new_modal(
     user_id = DEFAULT_USER_ID
     account_setup.seed_chart_of_accounts(session, user_id)
     accounts = _all_accounts_for_picker(session, user_id)
+    from services.ledger import balances_for_accounts
+    # raw = sum(debit) - sum(credit): positive = they owe us (receivable),
+    # negative = we owe them (payable) — shown live under the account picker.
+    account_balances = {
+        aid: float(bal) for aid, bal in
+        balances_for_accounts(session, [a.id for a in accounts]).items()
+    }
     presets = {
         "receipt":   {"type": "journal", "label": "Receipt Voucher",  "hint": "Cash in. DR the cash account, CR the source."},
         "payment":   {"type": "journal", "label": "Payment Voucher",  "hint": "Cash out. CR the cash account, DR the expense / payable."},
@@ -2678,7 +2685,8 @@ async def voucher_new_modal(
         "trade_voucher_modal.html",
         _ctx(request, accounts=accounts, today=date.today(),
              preset=preset or "journal", preset_label=chosen["label"],
-             preset_type=chosen["type"], preset_hint=chosen["hint"]),
+             preset_type=chosen["type"], preset_hint=chosen["hint"],
+             account_balances=account_balances),
     )
 
 

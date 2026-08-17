@@ -61,8 +61,8 @@
     const row = document.createElement('div');
     row.className = 'grid grid-cols-12 gap-2 items-center';
     row.innerHTML = `
-      <input class="col-span-5 text-sm col-span-6" name="spec_label" placeholder="Label (e.g. Brand)" value="${(lab||'').replace(/"/g,'&quot;')}">
-      <input name="spec_value" placeholder="Value (e.g. Fleuré)" value="${(val||'').replace(/"/g,'&quot;')}">
+      <input class="col-span-5 text-sm" name="spec_label" placeholder="Label (e.g. Brand)" value="${(lab||'').replace(/"/g,'&quot;')}">
+      <input class="col-span-6 text-sm" name="spec_value" placeholder="Value (e.g. Fleuré)" value="${(val||'').replace(/"/g,'&quot;')}">
       <button type="button" class="col-span-1 wt-ash hover:wt-neg text-sm" onclick="this.closest('div').remove()">✕</button>`;
     wrap.appendChild(row);
   };

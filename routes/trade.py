@@ -2958,10 +2958,20 @@ async def voucher_reverse(
 
 
 @router.post("/vouchers/{entry_id}/delete")
-async def voucher_delete(entry_id: int, session: Session = Depends(get_session)):
+async def voucher_delete(
+    entry_id: int,
+    redirect_list: bool = Query(False),
+    session: Session = Depends(get_session),
+):
     """Hard-delete a voucher: removes the journal entry and its lines, plus
     any reversal entry that pointed at it. Refuses if the entry is linked to
-    a trade — those must be managed from the trade page (cancel / delete trade)."""
+    a trade — those must be managed from the trade page (cancel / delete trade).
+
+    redirect_list=1 (used by the voucher DETAIL page, whose own URL stops
+    existing once this runs) sends the browser to the vouchers list instead
+    of refreshing the now-404 detail page. The list page's own Delete button
+    doesn't pass it, so it keeps refreshing in place (preserving its
+    type/date filters) exactly as before."""
     from models import JournalEntry
     user_id = DEFAULT_USER_ID
     entry = session.get(JournalEntry, entry_id)
@@ -2980,6 +2990,8 @@ async def voucher_delete(entry_id: int, session: Session = Depends(get_session))
         session.delete(rev)
     session.delete(entry)
     session.commit()
+    if redirect_list:
+        return Response(status_code=204, headers={"HX-Redirect": "/trade/vouchers"})
     return Response(status_code=204, headers={"HX-Refresh": "true"})
 
 

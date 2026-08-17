@@ -28,6 +28,12 @@
         <button class="btn-secondary wt-neg">Reverse</button>
       </form>
       {% endif %}
+      {% if entry.trade_id is none %}
+      <form hx-post="/trade/vouchers/{{ entry.id }}/delete?redirect_list=1" hx-disabled-elt="find button"
+            hx-confirm="Permanently delete voucher {{ entry.reference }}? Its journal lines (and any reversal entry) will be removed — this can't be undone.">
+        <button class="btn-secondary wt-neg">Delete</button>
+      </form>
+      {% endif %}
       <a href="/trade/vouchers" class="btn-secondary">← Back</a>
     </div>
   </div>

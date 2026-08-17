@@ -330,7 +330,7 @@ def _default_kpis(ctx: DocContext) -> list:
             t.delivered_at.strftime("%b %d, %Y") if t.delivered_at else "Pending"))
     elif kind == "packing_slip":
         kpis.append(KpiSpec("Total Qty",
-            f"{float(sum(Decimal(l.quantity) for l in t.lines)):g}"))
+            f"{float(sum(Decimal(l.quantity) for l in t.lines)):,g}"))
         kpis.append(KpiSpec("Packed On",
             ctx.event_label or
             (t.delivered_at.strftime("%b %d, %Y") if t.delivered_at else "Pending")))
@@ -377,7 +377,7 @@ def _qty_for(ctx: DocContext, line) -> Decimal:
 
 def _qty_str(line: "TradeLine", qty: Optional[Decimal] = None) -> str:
     use = qty if qty is not None else Decimal(line.quantity)
-    return f"{float(use):g} {line.unit}"
+    return f"{float(use):,g} {line.unit}"
 
 
 def _subtotal_for(ctx: DocContext) -> Decimal:

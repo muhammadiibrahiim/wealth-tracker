@@ -1887,10 +1887,37 @@ class ReceiptService:
                     TradeService._post_event_journals(
                         session, trade, trade.delivered_at, residual,
                     )
+                # If this receipt made the trade exactly fully-received,
+                # residual is empty — the purge above has nothing to repost
+                # after it (no PostingEngine.post() call to commit it for
+                # free), so it must be committed explicitly or it silently
+                # rolls back on session close. Same class of bug as
+                # ReceiptService.delete() (see its docstring).
+                session.commit()
         return trade
 
     @staticmethod
     def delete(session: Session, user_id: int, receipt_id: int) -> bool:
+        """Delete a receipt, purge that date's event journals, and re-post
+        for any receipts still remaining on the same date.
+
+        NOTE on why this can't just call _repost_cost: that helper only
+        purges/reposts dates it finds by scanning CURRENT receipts — a date
+        that had its last receipt just deleted has zero receipts left, so
+        _repost_cost never even looks at it and its stale journals survive
+        untouched. This purges `event_date` explicitly and unconditionally
+        first, which _repost_cost structurally cannot do.
+
+        Also explicitly commits at the end — PostingEngine.post() commits
+        internally, so as long as this ends up reposting something the
+        purge rides along committed for free, but if the deleted receipt was
+        the LAST one for its date, remaining/residual both come back empty,
+        nothing posts, nothing commits, and the purge (flush-only) was
+        silently rolled back on session close while the receipt row itself
+        (deleted via its own earlier commit) stayed gone. That's exactly
+        what happened deleting TRD-0016's only 2026-08-06 receipt — the
+        Sale/Purchase/Profit-closing entries for that date lived on with
+        the full pre-delete amount."""
         r = session.get(TradeLineReceipt, receipt_id)
         if not r:
             return False
@@ -1931,6 +1958,8 @@ class ReceiptService:
                 TradeService._post_event_journals(
                     session, trade, trade.delivered_at, residual,
                 )
+        # Unconditional — purge alone (no repost) would otherwise never commit.
+        session.commit()
         return True
 
     @staticmethod

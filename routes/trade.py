@@ -599,23 +599,13 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
             "by_customer": by_customer,
         })
 
-    # Bilty entries paid by customer also reduce their receivable. They use a
-    # different description shape ({ref} <desc> [bilty-for:{date}] [paid-by-customer])
-    # than the "Record Cost" flow, so add their amounts in here.
-    if purchaser_acct_id is not None:
-        bilty_by_cust = session.exec(
-            select(JournalEntry).where(
-                JournalEntry.user_id == user_id,
-                JournalEntry.trade_id == trade.id,
-                JournalEntry.entry_type == JournalEntryType.EXPENSE,
-                JournalEntry.is_reversed == False,  # noqa: E712
-                JournalEntry.description.like("%[paid-by-customer]"),
-            )
-        ).all()
-        for e in bilty_by_cust:
-            for ln in e.lines:
-                if ln.account_id == purchaser_acct_id and Decimal(ln.credit or 0) > 0:
-                    customer_paid_costs += Decimal(ln.credit)
+    # Note: bilty entries paid by customer ({ref} <desc> [bilty-for:{date}]
+    # [paid-by-customer]) are already inside `cost_entries` above — its query
+    # matches "{ref} cost:%" OR "%[bilty-for:%", and the by_customer branch in
+    # that loop already added their amounts to customer_paid_costs. Do not
+    # re-scan and re-add them here — every EXPENSE entry ending in
+    # "[paid-by-customer]" is either a Record Cost entry (cost_prefix) or a
+    # bilty entry ([bilty-for:]), and both are already covered above.
 
     # Use the shared helper so the button, the status badge and this number
     # always agree — it nets cash received, customer-paid costs AND write-offs.
@@ -679,9 +669,12 @@ async def trade_detail(request: Request, trade_id: int, session: Session = Depen
             }
 
     # Net profit = line-item margin minus the direct costs of executing the
-    # trade: bilty (delivery freight) and Record Cost entries.
-    bilty_total = sum((b["amount"] for b in bilties_by_date.values()), Decimal("0"))
-    trade_costs_total = (total_cost_absorbed + bilty_total).quantize(Decimal("0.01"))
+    # trade: bilty (delivery freight) and Record Cost entries. total_cost_absorbed
+    # already covers both — its cost_entries query matches "{ref} cost:%" (Record
+    # Cost) OR "%[bilty-for:%" (bilty) — so it IS trade_costs_total; do not also
+    # add bilties_by_date's total on top (bilties_by_date is kept only for its
+    # per-receipt-date amount/button in the Receipts table below).
+    trade_costs_total = total_cost_absorbed.quantize(Decimal("0.01"))
     net_profit = (
         Decimal(trade.total_sale) - Decimal(trade.total_cost) - trade_costs_total
     ).quantize(Decimal("0.01"))

@@ -1635,9 +1635,14 @@ async def trade_cost_delete(trade_id: int, entry_id: int, session: Session = Dep
         raise HTTPException(404, "Cost entry not found")
 
     to_delete = [entry]
-    # Self-paid costs post a paired "... cost close: ..." JV — delete it too
-    # so the P&L clearing account and Capital stay balanced.
+    # Bilty and "Record Cost" entries both post a paired "... cost close: ..."
+    # JV that moves the hit from P&L (3903) to Capital — delete it too so
+    # those two accounts stay balanced. The two flows use different
+    # description shapes, so both have to be checked:
+    #   Record Cost: "{ref} cost: {desc}"        → "{ref} cost close: {desc}"
+    #   Bilty:       "... [bilty-for:{date}] ..." → "... [bilty-close-for:{date}] ..."
     desc = entry.description or ""
+    close = None
     close_desc = desc.replace(" cost: ", " cost close: ", 1)
     if close_desc != desc:
         close = session.exec(
@@ -1647,8 +1652,19 @@ async def trade_cost_delete(trade_id: int, entry_id: int, session: Session = Dep
                 JournalEntry.description == close_desc,
             )
         ).first()
-        if close:
-            to_delete.append(close)
+    else:
+        m = re.search(r"\[bilty-for:(\d{4}-\d{2}-\d{2})\]", desc)
+        if m:
+            close_tag = f"[bilty-close-for:{m.group(1)}]"
+            close = session.exec(
+                select(JournalEntry).where(
+                    JournalEntry.user_id == user_id,
+                    JournalEntry.trade_id == trade_id,
+                    JournalEntry.description.contains(close_tag),
+                )
+            ).first()
+    if close:
+        to_delete.append(close)
 
     for e in to_delete:
         reversals = list(session.exec(

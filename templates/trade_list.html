@@ -41,6 +41,10 @@
        class="px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition {% if current_tab == 'by_party' %}border-indigo-600 wt-info{% else %}border-transparent wt-mute hover:wt-body{% endif %}">
       By Party <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full {% if current_tab == 'by_party' %}bg-indigo-100 wt-info{% else %}bg-gray-100 wt-mute{% endif %}">{{ pending_count }}</span>
     </a>
+    <a href="/trade/trades?tab=pending_qty{{ qs }}" title="Trades where goods are still owed — ordered minus received, not just an open status"
+       class="px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition {% if current_tab == 'pending_qty' %}border-indigo-600 wt-info{% else %}border-transparent wt-mute hover:wt-body{% endif %}">
+      Pending Qty <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full {% if current_tab == 'pending_qty' %}bg-indigo-100 wt-info{% else %}bg-gray-100 wt-mute{% endif %}">{{ pending_qty_count }}</span>
+    </a>
   </div>
 
   <!-- Filter -->
@@ -68,7 +72,7 @@
 
   {%- set dot_palette = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'] %}
 
-  {% if current_tab == 'by_party' %}
+  {% if current_tab in ('by_party', 'pending_qty') %}
   <div class="space-y-4">
     {% if grouped_trades %}
     {% for g in grouped_trades %}
@@ -110,7 +114,9 @@
     </details>
     {% endfor %}
     {% else %}
-    <div class="wt-panel text-center text-sm wt-mute py-10">No pending trades right now.</div>
+    <div class="wt-panel text-center text-sm wt-mute py-10">
+      {% if current_tab == 'pending_qty' %}No trades with goods still pending right now.{% else %}No pending trades right now.{% endif %}
+    </div>
     {% endif %}
   </div>
 

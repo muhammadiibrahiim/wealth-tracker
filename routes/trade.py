@@ -275,9 +275,25 @@ async def trades_list(
     all_count = len(trades)
     pending_trades = [t for t in trades if t.status not in _DONE]
     pending_count = len(pending_trades)
+    # "Pending Qty" = goods actually still owed (ordered − received per line),
+    # NOT just an open status — a trade can be Delivered/Partially Paid with
+    # every line fully received, and that shouldn't show here. Same basis as
+    # TradeReportService.pending_delivery_lines() (the dashboard KPI).
+    pending_qty_trades = [
+        t for t in trades
+        if t.status not in (TradeStatus.CANCELLED, TradeStatus.CLOSED)
+        and t.delivered_at is None
+        and any(
+            (Decimal(ln.quantity) - sum((Decimal(r.received_qty) for r in (ln.receipts or [])), Decimal("0"))) > 0
+            for ln in t.lines
+        )
+    ]
+    pending_qty_count = len(pending_qty_trades)
     tab = (tab or "all").lower()
     if tab in ("pending", "by_party"):
         trades = pending_trades
+    elif tab == "pending_qty":
+        trades = pending_qty_trades
     parties = PartyService.list(session, user_id)
     party_map = {p.id: p for p in parties}
     # Net profit (after bilty + trade costs) and ROI per trade — same basis as
@@ -296,7 +312,9 @@ async def trades_list(
     # basis as the per-date invoices), not the manually-set trade.customer_due_date.
     due_status = {t.id: TradeService.customer_due_status(session, t) for t in trades}
     # Line-item summaries per trade — item + Size spec + qty, so a trade is
-    # recognizable in the list without opening it.
+    # recognizable in the list without opening it. On the Pending Qty tab this
+    # shows the still-owed remainder (ordered − received) per line instead of
+    # the full ordered qty — that's the whole point of that view.
     from models import TradeLine, TradeLineSpec
     trade_items: dict[int, list[str]] = {}
     trade_ids = [t.id for t in trades]
@@ -304,13 +322,22 @@ async def trades_list(
         for ln in session.exec(select(TradeLine).where(TradeLine.trade_id.in_(trade_ids))).all():
             size = next((s.value for s in ln.specs if (s.label or "").strip().lower() == "size"), None)
             label = ln.item_name + (f" {size}" if size else "")
-            qty = f"{ln.quantity:,.0f}" if ln.quantity == ln.quantity.to_integral_value() else f"{ln.quantity:,.3f}"
-            trade_items.setdefault(ln.trade_id, []).append(f"{label} · {qty} {ln.unit}")
-    # By Party: pending trades grouped under their purchasing customer, so
-    # everything owed by/to one party is visible together instead of
+            if tab == "pending_qty":
+                received = sum((Decimal(r.received_qty) for r in (ln.receipts or [])), Decimal("0"))
+                qty_val = Decimal(ln.quantity) - received
+                if qty_val <= 0:
+                    continue
+                suffix = " pending"
+            else:
+                qty_val = Decimal(ln.quantity)
+                suffix = ""
+            qty = f"{qty_val:,.0f}" if qty_val == qty_val.to_integral_value() else f"{qty_val:,.3f}"
+            trade_items.setdefault(ln.trade_id, []).append(f"{label} · {qty} {ln.unit}{suffix}")
+    # By Party / Pending Qty: trades grouped under their purchasing customer,
+    # so everything owed by/to one party is visible together instead of
     # interleaved by date.
     grouped_trades = []
-    if tab == "by_party":
+    if tab in ("by_party", "pending_qty"):
         by_purchaser: dict[Optional[int], list] = {}
         for t in trades:
             by_purchaser.setdefault(t.purchaser_id, []).append(t)
@@ -342,6 +369,7 @@ async def trades_list(
             current_tab=tab,
             all_count=all_count,
             pending_count=pending_count,
+            pending_qty_count=pending_qty_count,
             statuses=[s.value for s in TradeStatus],
             today=date.today(),
         ),

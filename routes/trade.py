@@ -4,11 +4,12 @@ Routes for the Trade module.
 import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from pydantic import BeforeValidator
 from sqlmodel import Session, select
 
 from config import DEFAULT_USER_ID, CURRENCY_SYMBOL
@@ -40,6 +41,21 @@ def _ctx(request: Request, **extra) -> dict:
     base = {"request": request, "currency": CURRENCY_SYMBOL}
     base.update(extra)
     return base
+
+
+# An "All" option in a filter <select> submits its name with an empty value
+# (e.g. party_id=) rather than omitting it — plain `Optional[int] = Query(None)`
+# 422s on that (Pydantic won't parse "" as an int), even though an *absent*
+# param is accepted fine. This coerces "" to None before int parsing, so every
+# int-typed filter query param tolerates the same "All" submission shape.
+# NOTE: Query() must live inside Annotated with no default of its own — the
+# actual default is supplied at each call site via `= None`, e.g.:
+#   party_id: OptionalIntQuery = None
+def _empty_str_to_none(v):
+    return None if v == "" else v
+
+
+OptionalIntQuery = Annotated[Optional[int], BeforeValidator(_empty_str_to_none), Query()]
 
 
 def _parse_decimal(s: Optional[str], default: str = "0") -> Decimal:
@@ -241,7 +257,7 @@ async def dashboard_pending_detail(
 async def trades_list(
     request: Request,
     status: Optional[str] = Query(None),
-    party_id: Optional[int] = Query(None),
+    party_id: OptionalIntQuery = None,
     tab: Optional[str] = Query("all"),
     session: Session = Depends(get_session),
 ):
@@ -2017,7 +2033,7 @@ async def master_receive_payment_modal(request: Request, session: Session = Depe
 
 @router.get("/payments/receive/preview", response_class=HTMLResponse)
 async def master_receive_payment_preview(
-    request: Request, customer_id: Optional[int] = Query(None),
+    request: Request, customer_id: OptionalIntQuery = None,
     amount: Optional[str] = Query(None), session: Session = Depends(get_session),
 ):
     user_id = DEFAULT_USER_ID
@@ -3119,7 +3135,7 @@ async def reports_sales(
 @router.get("/reports/ledger", response_class=HTMLResponse)
 async def reports_ledger(
     request: Request,
-    party_id: Optional[int] = Query(None),
+    party_id: OptionalIntQuery = None,
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     session: Session = Depends(get_session),
@@ -3179,7 +3195,7 @@ async def reports_trial_balance(
 @router.get("/reports/general-ledger", response_class=HTMLResponse)
 async def reports_general_ledger(
     request: Request,
-    account_id: Optional[int] = Query(None),
+    account_id: OptionalIntQuery = None,
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     session: Session = Depends(get_session),
@@ -3311,7 +3327,7 @@ async def reports_balance_sheet(
 @router.get("/reports/cashbook", response_class=HTMLResponse)
 async def reports_cashbook(
     request: Request,
-    account_id: Optional[int] = Query(None),
+    account_id: OptionalIntQuery = None,
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     session: Session = Depends(get_session),
@@ -3650,7 +3666,7 @@ _AGING_BUCKET_NAMES = ("not_due", "1_30", "31_60", "61_90", "90_plus")
 
 @router.get("/reports/aging-by-customer", response_class=HTMLResponse)
 async def reports_aging_by_customer(
-    request: Request, customer_id: Optional[int] = Query(None),
+    request: Request, customer_id: OptionalIntQuery = None,
     session: Session = Depends(get_session),
 ):
     """Receivables aging for a single customer — pick a customer (same selector
@@ -3751,7 +3767,7 @@ async def reports_aging_by_customer_pdf(customer_id: int, session: Session = Dep
 
 @router.get("/reports/ap-aging-by-vendor", response_class=HTMLResponse)
 async def reports_ap_aging_by_vendor(
-    request: Request, vendor_id: Optional[int] = Query(None),
+    request: Request, vendor_id: OptionalIntQuery = None,
     session: Session = Depends(get_session),
 ):
     """Payables aging for a single vendor — same selector pattern as Vendor
@@ -3863,7 +3879,7 @@ async def reports_pending_receivables(request: Request, session: Session = Depen
 
 @router.get("/reports/vendor-pending", response_class=HTMLResponse)
 async def reports_vendor_pending(
-    request: Request, vendor_id: Optional[int] = Query(None),
+    request: Request, vendor_id: OptionalIntQuery = None,
     session: Session = Depends(get_session),
 ):
     """Goods still owed by a single vendor — pick a vendor, then export a PDF
@@ -3985,7 +4001,7 @@ async def reports_vendor_pending_pdf(vendor_id: int, session: Session = Depends(
 
 @router.get("/reports/customer-pending", response_class=HTMLResponse)
 async def reports_customer_pending(
-    request: Request, customer_id: Optional[int] = Query(None),
+    request: Request, customer_id: OptionalIntQuery = None,
     item_id: Optional[str] = Query(None),
     session: Session = Depends(get_session),
 ):
@@ -4150,7 +4166,7 @@ async def reports_customer_pending_pdf(
 
 @router.get("/reports/goods-sent", response_class=HTMLResponse)
 async def reports_goods_sent(
-    request: Request, customer_id: Optional[int] = Query(None),
+    request: Request, customer_id: OptionalIntQuery = None,
     date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
     session: Session = Depends(get_session),
 ):

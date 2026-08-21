@@ -1421,11 +1421,22 @@ class TradeService:
 
     @staticmethod
     def _recompute_totals(trade: Trade) -> None:
+        """A line's `quantity` is the current AGREED target — but if the
+        vendor actually sent more than that (over-delivery) and it was
+        received and kept, _post_event_journals already posted SALE/PURCHASE
+        for the real received qty, not the smaller nominal quantity (see
+        TradeService._post_event_journals). Flooring each line's effective
+        qty at its received total keeps total_cost/total_sale — and every
+        display, KPI and "Invoiced" figure derived from them — from
+        understating what's already been recognised in the ledger. Only
+        matters when received > quantity; otherwise this is a no-op."""
         cost = ZERO
         sale = ZERO
         for ln in trade.lines:
-            cost += Decimal(ln.quantity) * Decimal(ln.unit_cost)
-            sale += Decimal(ln.quantity) * Decimal(ln.unit_price)
+            received = sum((Decimal(r.received_qty) for r in (ln.receipts or [])), ZERO)
+            effective_qty = max(Decimal(ln.quantity), received)
+            cost += effective_qty * Decimal(ln.unit_cost)
+            sale += effective_qty * Decimal(ln.unit_price)
         trade.total_cost = cost.quantize(Decimal("0.01"))
         trade.total_sale = sale.quantize(Decimal("0.01"))
 

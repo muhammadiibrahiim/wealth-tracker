@@ -3423,6 +3423,276 @@ class TradeReportService:
         }
 
     @staticmethod
+    def items_ordered_by_customer(session: Session, user_id: int, customer_id: int) -> list:
+        """Distinct (item_id, item_name) pairs this customer has actually
+        ordered — used to scope an item filter dropdown to what's relevant
+        instead of the whole catalog. Lines with no catalog item (item_id
+        is None — free-text only) are excluded; they can't be filtered on."""
+        from models import TradeLine
+        rows = session.exec(
+            select(TradeLine.item_id, TradeLine.item_name)
+            .join(Trade, Trade.id == TradeLine.trade_id)
+            .where(
+                Trade.user_id == user_id,
+                Trade.purchaser_id == customer_id,
+                TradeLine.item_id.is_not(None),
+            )
+            .distinct()
+        ).all()
+        seen = {}
+        for iid, name in rows:
+            seen.setdefault(iid, name)
+        return sorted(({"id": iid, "name": name} for iid, name in seen.items()),
+                      key=lambda x: x["name"].lower())
+
+    @staticmethod
+    def aging_detail_by_customer(session: Session, user_id: int, customer_id: int,
+                                  item_id: Optional[int] = None) -> dict:
+        """Item-level AR aging for ONE customer — same event/FIFO-cash-
+        allocation model as aging_report(), but broken down per line (item,
+        qty, unit price) instead of aggregated per delivery date, so "how
+        much of THIS item's delivered quantity has actually been paid for"
+        is visible directly. Bilty credit and cash applied aren't tagged to
+        a specific item at posting time — they're posted against the whole
+        day's invoice — so each line's share is that line's proportion of
+        the event's (or tranche's) total gross value. That's the fairest
+        allocation available without changing how payments are recorded.
+
+        Pass item_id to see just that item's exposure; omit it to see every
+        item, still broken out per line rather than collapsed per date.
+        """
+        from datetime import timedelta
+        from models import TradeLine, JournalEntry, JournalEntryType
+        from services import account_setup
+        today = date.today()
+        BUCKET_NAMES = ("not_due", "1_30", "31_60", "61_90", "90_plus")
+        buckets = {k: ZERO for k in BUCKET_NAMES}
+
+        def _bucket_for(days_over: int) -> str:
+            if days_over <= 0:    return "not_due"
+            if days_over <= 30:   return "1_30"
+            if days_over <= 60:   return "31_60"
+            if days_over <= 90:   return "61_90"
+            return "90_plus"
+
+        customer = session.get(Party, customer_id)
+        rows: list[dict] = []
+        if not customer:
+            return {"rows": [], "buckets": buckets, "total_outstanding": ZERO,
+                     "today": today, "customer": None}
+
+        trades = list(session.exec(
+            select(Trade).where(
+                Trade.user_id == user_id,
+                Trade.purchaser_id == customer_id,
+                Trade.status != TradeStatus.CANCELLED,
+                Trade.status != TradeStatus.CLOSED,
+            )
+        ).all())
+
+        for t in trades:
+            terms = int(t.customer_terms_days or 0)
+
+            # ── 1. Per-event gross, broken down per contributing line ────
+            event_by_date: dict[date, Decimal] = {}
+            # NOTE: built from EVERY line, never just the item_id-matching
+            # ones — bilty credit and cash are trade/date-level pools, not
+            # scoped to one item, so the FIFO allocation below must run
+            # against the true full-event gross or a filtered view would
+            # allocate cash/bilty out of proportion to its actual share.
+            # item_id only decides which lines get EMITTED as rows, at the
+            # very end (step 6) — never which lines feed the math.
+            event_lines: dict[date, list[dict]] = {}
+            for ln in t.lines:
+                price = Decimal(ln.unit_price)
+                for r in (ln.receipts or []):
+                    qty = Decimal(r.received_qty)
+                    if qty <= 0:
+                        continue
+                    val = (qty * price).quantize(Decimal("0.01"))
+                    event_by_date[r.received_on] = event_by_date.get(r.received_on, ZERO) + val
+                    event_lines.setdefault(r.received_on, []).append({
+                        "item_id": ln.item_id, "item_name": ln.item_name,
+                        "unit": ln.unit or "pcs", "qty": qty, "unit_price": price, "gross": val,
+                    })
+
+            # ── 2. Mark-Complete residual on delivered_at — same full-line
+            #       basis as above, for the same reason.
+            if t.delivered_at and Decimal(t.total_sale) > 0:
+                residual_lines = []
+                residual_total = ZERO
+                for ln in t.lines:
+                    received = sum((Decimal(r.received_qty) for r in (ln.receipts or [])), ZERO)
+                    rem = Decimal(ln.quantity) - received
+                    if rem > Decimal("0.0005"):
+                        val = (rem * Decimal(ln.unit_price)).quantize(Decimal("0.01"))
+                        residual_lines.append({
+                            "item_id": ln.item_id, "item_name": ln.item_name,
+                            "unit": ln.unit or "pcs", "qty": rem,
+                            "unit_price": Decimal(ln.unit_price), "gross": val,
+                        })
+                        residual_total += val
+                if residual_lines:
+                    event_by_date[t.delivered_at] = event_by_date.get(t.delivered_at, ZERO) + residual_total
+                    event_lines.setdefault(t.delivered_at, []).extend(residual_lines)
+
+            if not event_by_date:
+                continue  # this trade has never actually invoiced the customer
+
+            # ── 3. Bilty paid by customer, tagged to a specific date ─────
+            bilty_by_date: dict[date, Decimal] = {}
+            bilty_entries = session.exec(
+                select(JournalEntry).where(
+                    JournalEntry.user_id == user_id,
+                    JournalEntry.trade_id == t.id,
+                    JournalEntry.entry_type == JournalEntryType.EXPENSE,
+                    JournalEntry.is_reversed == False,                       # noqa: E712
+                    JournalEntry.description.like("%[paid-by-customer]"),
+                )
+            ).all()
+            for e in bilty_entries:
+                desc = e.description or ""
+                tag_start = desc.find("[bilty-for:")
+                if tag_start < 0:
+                    continue
+                tag_end = desc.find("]", tag_start)
+                if tag_end < 0:
+                    continue
+                date_str = desc[tag_start + len("[bilty-for:"):tag_end]
+                try:
+                    bd = date.fromisoformat(date_str)
+                except ValueError:
+                    continue
+                amt = next((Decimal(ln.debit) for ln in e.lines if Decimal(ln.debit) > 0), ZERO)
+                bilty_by_date[bd] = bilty_by_date.get(bd, ZERO) + amt
+
+            # ── 4. Unallocated credit pool (cash + non-bilty customer-paid
+            #       costs + write-offs) — same as aging_report(). NOT scoped
+            #       to the item filter: a real cash payment settles the whole
+            #       invoice, regardless of which item we're looking at here.
+            unallocated_credit = Decimal(t.paid_by_customer or 0)
+            cost_entries = session.exec(
+                select(JournalEntry).where(
+                    JournalEntry.user_id == user_id,
+                    JournalEntry.trade_id == t.id,
+                    JournalEntry.entry_type == JournalEntryType.JOURNAL,
+                    JournalEntry.is_reversed == False,                       # noqa: E712
+                    JournalEntry.description.like(f"{t.reference} cost:%"),
+                )
+            ).all()
+            customer_party = session.get(Party, t.purchaser_id)
+            purchaser_acct = account_setup.sync_party_account(session, user_id, customer_party) if customer_party else None
+            purchaser_acct_id = purchaser_acct.id if purchaser_acct else None
+            for e in cost_entries:
+                if not (e.description or "").endswith("[paid-by-customer]"):
+                    continue
+                if not purchaser_acct_id:
+                    continue
+                cr_to_purchaser = next(
+                    (Decimal(ln.credit) for ln in e.lines if ln.account_id == purchaser_acct_id), ZERO,
+                )
+                unallocated_credit += cr_to_purchaser
+            if purchaser_acct_id is not None:
+                writeoff_entries = session.exec(
+                    select(JournalEntry).where(
+                        JournalEntry.user_id == user_id,
+                        JournalEntry.trade_id == t.id,
+                        JournalEntry.is_reversed == False,                   # noqa: E712
+                        JournalEntry.description.like("%[writeoff-residual]"),
+                    )
+                ).all()
+                for e in writeoff_entries:
+                    cr_to_purchaser = next(
+                        (Decimal(ln.credit) for ln in e.lines if ln.account_id == purchaser_acct_id), ZERO,
+                    )
+                    unallocated_credit += cr_to_purchaser
+
+            # ── 5. Build event records (possibly split into two tranches),
+            #       carrying each event's contributing lines forward so their
+            #       share of cash/bilty coverage can be worked out below.
+            pct1 = Decimal(t.cust_credit_pct or 0)
+            pct2 = Decimal(t.cust_credit2_pct or 0)
+            terms2 = int(t.customer_terms2_days or 0)
+            events = []
+            for evt_date, gross in event_by_date.items():
+                bilty_credit = bilty_by_date.get(evt_date, ZERO)
+                lines_for_date = event_lines.get(evt_date, [])
+                if pct2 > 0 and (pct1 + pct2) > 0:
+                    frac1 = pct1 / (pct1 + pct2)
+                    gross1 = (gross * frac1).quantize(Decimal("0.01"))
+                    bilty1 = (bilty_credit * frac1).quantize(Decimal("0.01"))
+                    for g, b, d, frac in ((gross1, bilty1, terms, frac1),
+                                          (gross - gross1, bilty_credit - bilty1, terms2, 1 - frac1)):
+                        events.append({
+                            "event_date": evt_date, "due_date": evt_date + timedelta(days=d),
+                            "gross": g.quantize(Decimal("0.01")), "bilty_credit": b.quantize(Decimal("0.01")),
+                            "net": (g - b).quantize(Decimal("0.01")), "tranche_gross": g,
+                            "lines": [{**ln, "gross_share": (ln["gross"] * frac).quantize(Decimal("0.01"))}
+                                      for ln in lines_for_date],
+                        })
+                else:
+                    events.append({
+                        "event_date": evt_date, "due_date": evt_date + timedelta(days=terms),
+                        "gross": gross.quantize(Decimal("0.01")), "bilty_credit": bilty_credit.quantize(Decimal("0.01")),
+                        "net": (gross - bilty_credit).quantize(Decimal("0.01")), "tranche_gross": gross,
+                        "lines": [{**ln, "gross_share": ln["gross"]} for ln in lines_for_date],
+                    })
+            events.sort(key=lambda x: x["due_date"])
+
+            # FIFO-apply the unallocated credit to events by due date — same
+            # ordering aging_report() uses, so totals stay consistent with it.
+            for e in events:
+                take = min(e["net"], unallocated_credit) if e["net"] > 0 else ZERO
+                take = max(take, ZERO)
+                e["cash_applied"] = take.quantize(Decimal("0.01"))
+                e["outstanding"] = (e["net"] - take).quantize(Decimal("0.01"))
+                unallocated_credit -= take
+
+            # ── 6. Split each event's outstanding across its lines, in
+            #       proportion to each line's share of that event's gross.
+            for e in events:
+                if e["outstanding"] <= Decimal("0.005"):
+                    continue
+                tranche_gross = e["tranche_gross"]
+                if tranche_gross <= 0:
+                    continue
+                days_over = max(0, (today - e["due_date"]).days)
+                bucket = _bucket_for(days_over)
+                for ln in e["lines"]:
+                    if item_id and ln["item_id"] != item_id:
+                        continue
+                    share = ln["gross_share"]
+                    if share <= 0:
+                        continue
+                    ln_bilty = (share * e["bilty_credit"] / tranche_gross).quantize(Decimal("0.01"))
+                    ln_cash = (share * e["cash_applied"] / tranche_gross).quantize(Decimal("0.01"))
+                    ln_outstanding = (share - ln_bilty - ln_cash).quantize(Decimal("0.01"))
+                    if ln_outstanding <= Decimal("0.005"):
+                        continue
+                    buckets[bucket] += ln_outstanding
+                    rows.append({
+                        "trade_id": t.id, "trade_ref": t.reference,
+                        "event_date": e["event_date"], "due_date": e["due_date"],
+                        "days_over": days_over, "bucket": bucket,
+                        "item_id": ln["item_id"], "item_name": ln["item_name"], "unit": ln["unit"],
+                        "qty": ln["qty"].quantize(Decimal("0.001")),
+                        "unit_price": ln["unit_price"].quantize(Decimal("0.01")),
+                        "gross": share, "bilty_credit": ln_bilty, "cash_applied": ln_cash,
+                        "outstanding": ln_outstanding,
+                    })
+
+        rows.sort(key=lambda r: r["due_date"])
+        total_outstanding = sum((r["outstanding"] for r in rows), ZERO).quantize(Decimal("0.01"))
+        return {
+            "rows": rows,
+            "buckets": {k: v.quantize(Decimal("0.01")) for k, v in buckets.items()},
+            "total_outstanding": total_outstanding,
+            "count": len(rows),
+            "today": today,
+            "customer": customer,
+        }
+
+    @staticmethod
     def ap_aging_report(session: Session, user_id: int) -> dict:
         """Accounts-Payable aging — the mirror of AR aging, for what WE owe vendors.
 
@@ -3862,7 +4132,7 @@ class TradeReportService:
 
     @staticmethod
     def goods_sent_report(session: Session, user_id: int, customer_id: int,
-                          from_date=None, to_date=None) -> dict:
+                          from_date=None, to_date=None, item_id: Optional[int] = None) -> dict:
         """Order-vs-delivery reconciliation statement for ONE customer.
 
         Grouped by PO (a trade — shown to the customer as a sequential "PO #N +
@@ -3874,6 +4144,11 @@ class TradeReportService:
         the numbers are truthful; only deliveries inside [from_date, to_date] are
         listed (a note flags any dispatched earlier). A PO with no delivery in the
         window is omitted. "Ordered" is the line's current agreed quantity.
+
+        item_id is an optional extra filter — pass a catalog Item id to see
+        just that item's order/delivery history; omit it for every item.
+        Unlike aging_detail_by_customer(), there's no shared payment pool to
+        split here, so filtering lines out before computing totals is safe.
         """
         Q3 = Decimal("0.001")
         today = date.today()
@@ -3897,6 +4172,8 @@ class TradeReportService:
                 items = []
                 po_ordered = po_sent = po_pending = po_overflow = ZERO
                 for ln in t.lines:
+                    if item_id and ln.item_id != item_id:
+                        continue
                     ordered = Decimal(ln.quantity)
                     specs = " · ".join(
                         f"{(sp.label or '').strip()}: {(sp.value or '').strip()}"

@@ -10,7 +10,6 @@
 
   {{ filter_bar_open(method='get') }}
     <div class="w-full">{{ date_presets('date_from', 'date_to') }}</div>
-class="flex items-end gap-4 flex-wrap">
       <div>
         <label class="field-label field-label-required">Customer</label>
         <select name="customer_id" class="min-w-[220px]"
@@ -27,11 +26,22 @@ class="flex items-end gap-4 flex-wrap">
         <label class="field-label">To</label>
         <input type="date" name="date_to" value="{{ date_to }}">
       </div>
-      
+
+      {% if selected_id %}
+      <div>
+        <label class="field-label">Item <span class="wt-ash font-normal">(optional)</span></label>
+        <select name="item_id" class="min-w-[200px]">
+          <option value="">— All items —</option>
+          {% for i in items %}<option value="{{ i.id }}" {% if selected_item_id == i.id %}selected{% endif %}>{{ i.name }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+
       {% if report and report.customer_id %}
       {% set qs = [] %}
       {% if date_from %}{% set _ = qs.append('date_from=' ~ date_from) %}{% endif %}
       {% if date_to %}{% set _ = qs.append('date_to=' ~ date_to) %}{% endif %}
+      {% if selected_item_id %}{% set _ = qs.append('item_id=' ~ selected_item_id) %}{% endif %}
       {% set qstr = ('?' ~ qs|join('&')) if qs else '' %}
       <a href="/trade/reports/goods-sent/{{ report.customer_id }}.pdf?img=1{% if qs %}&{{ qs|join('&') }}{% endif %}" target="_blank" class="btn-secondary">Open as Image</a>
       <a href="/trade/reports/goods-sent/{{ report.customer_id }}.pdf{{ qstr }}" target="_blank" class="btn-secondary">Export PDF</a>
@@ -66,7 +76,7 @@ class="flex items-end gap-4 flex-wrap">
 
   {% for po in report.pos %}
   <div class="wt-panel">
-    <div class=" border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
       <div>
         <a href="/trade/trades/{{ po.trade_id }}" class="text-sm font-bold wt-info hover:text-indigo-900">PO #{{ po.po_no }}</a>
         <span class="text-sm wt-mute ml-2">ordered {{ po.trade_date.strftime('%d %b %Y') if po.trade_date else '—' }}</span>
@@ -75,12 +85,12 @@ class="flex items-end gap-4 flex-wrap">
     </div>
 
     {% for it in po['items'] %}
-    <div class=" {% if not loop.first %}border-t border-gray-100{% endif %}">
+    <div class="{% if not loop.first %}border-t border-gray-100{% endif %}">
       <div class="flex items-baseline justify-between flex-wrap gap-1 mb-2">
         <div><span class="font-semibold wt-ink">{{ it.item_name }}</span>{% if it.specs %}<span class="text-xs wt-mute ml-2">{{ it.specs }}</span>{% endif %}</div>
         <div class="text-sm wt-mute">Ordered <b class="wt-ink">{{ '{:,.0f}'.format(it.ordered) }} {{ it.unit }}</b></div>
       </div>
-      <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
+      <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
         <thead>
           <tr class="wt-group">
             <th class="text-left py-1">Sent On</th>

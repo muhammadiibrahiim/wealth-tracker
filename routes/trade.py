@@ -3695,35 +3695,45 @@ _AGING_BUCKET_NAMES = ("not_due", "1_30", "31_60", "61_90", "90_plus")
 @router.get("/reports/aging-by-customer", response_class=HTMLResponse)
 async def reports_aging_by_customer(
     request: Request, customer_id: OptionalIntQuery = None,
+    item_id: OptionalIntQuery = None,
     session: Session = Depends(get_session),
 ):
     """Receivables aging for a single customer — pick a customer (same selector
-    pattern as Vendor Pending Goods), see just their outstanding buckets and events."""
+    pattern as Vendor Pending Goods), see just their outstanding buckets and
+    events, broken down per item/line. item_id is an optional extra filter —
+    omit it to see every item this customer owes on."""
     user_id = DEFAULT_USER_ID
     customers = PartyService.list_customers(session, user_id)
-    report = TradeReportService.aging_report(session, user_id)
     selected = None
     rows = []
+    items = []
     if customer_id:
-        selected = next((a for a in report["by_account"] if a["customer_id"] == customer_id), None)
-        if selected is None:
-            c = PartyService.get(session, user_id, customer_id)
-            selected = {
-                "customer_id": customer_id, "customer": c.name if c else "—",
-                "customer_city": c.city if c else None,
-                "buckets": {k: Decimal("0") for k in _AGING_BUCKET_NAMES},
-                "total": Decimal("0"), "count": 0,
-            }
-        rows = [r for r in report["rows"] if r["customer_id"] == customer_id]
+        items = TradeReportService.items_ordered_by_customer(session, user_id, customer_id)
+        detail = TradeReportService.aging_detail_by_customer(session, user_id, customer_id, item_id=item_id)
+        c = detail["customer"] or PartyService.get(session, user_id, customer_id)
+        selected = {
+            "customer_id": customer_id, "customer": c.name if c else "—",
+            "customer_city": c.city if c else None,
+            "buckets": detail["buckets"], "total": detail["total_outstanding"],
+            "count": detail["count"],
+        }
+        rows = detail["rows"]
+        today = detail["today"]
+    else:
+        today = date.today()
     return templates.TemplateResponse(
         "trade_report_aging_by_customer.html",
         _ctx(request, customers=customers, selected=selected, rows=rows,
-             selected_id=customer_id, today=report["today"]),
+             items=items, selected_item_id=item_id,
+             selected_id=customer_id, today=today),
     )
 
 
 @router.get("/reports/aging-by-customer/{customer_id}.pdf")
-async def reports_aging_by_customer_pdf(customer_id: int, session: Session = Depends(get_session)):
+async def reports_aging_by_customer_pdf(
+    customer_id: int, item_id: OptionalIntQuery = None,
+    session: Session = Depends(get_session),
+):
     from io import BytesIO
     from services.pdf_helper import (
         render_report_pdf, ReportSpec, KpiSpec, TableSpec, SectionTitle, ParagraphBlock, CalloutCard,
@@ -3732,26 +3742,37 @@ async def reports_aging_by_customer_pdf(customer_id: int, session: Session = Dep
     customer = PartyService.get(session, user_id, customer_id)
     if not customer:
         raise HTTPException(404, "Customer not found")
-    report = TradeReportService.aging_report(session, user_id)
-    selected = next((a for a in report["by_account"] if a["customer_id"] == customer_id), None)
-    rows = sorted((r for r in report["rows"] if r["customer_id"] == customer_id),
-                  key=lambda r: r["due_date"])
+    detail = TradeReportService.aging_detail_by_customer(session, user_id, customer_id, item_id=item_id)
+    rows = sorted(detail["rows"], key=lambda r: r["due_date"])
+    total = detail["total_outstanding"]
 
     def pkr(x):
         try: return f"Rs. {Decimal(str(x)):,.2f}"
         except Exception: return f"Rs. {x}"
+
+    def qty(x):
+        try: return f"{float(x):,g}"
+        except Exception: return str(x)
 
     blabel = {"not_due": "Not yet due", "1_30": "1–30", "31_60": "31–60",
               "61_90": "61–90", "90_plus": "90+"}
     table_rows = [[
         r["trade_ref"] or "—",
         r["event_date"].strftime("%d-%b-%Y"),
+        f"{r['item_name']} ({qty(r['qty'])} {r['unit']} @ {pkr(r['unit_price'])})",
         r["due_date"].strftime("%d-%b-%Y"),
         f"+{r['days_over']}" if r["days_over"] > 0 else "—",
         blabel[r["bucket"]],
         pkr(r["outstanding"]),
     ] for r in rows]
-    total = selected["total"] if selected else Decimal("0")
+
+    item_note = ""
+    if item_id:
+        item_name = next((r["item_name"] for r in rows), None)
+        if not item_name:
+            items = TradeReportService.items_ordered_by_customer(session, user_id, customer_id)
+            item_name = next((i["name"] for i in items if i["id"] == item_id), None)
+        item_note = f" — {item_name}" if item_name else ""
 
     sections = [
         SectionTitle("Statement To"),
@@ -3761,17 +3782,17 @@ async def reports_aging_by_customer_pdf(customer_id: int, session: Session = Dep
             (f"Phone: {customer.phone}" if customer.phone else ""),
             (customer.city or ""),
         ]))),
-        SectionTitle("Outstanding Deliveries", keep_with_next=True),
+        SectionTitle(f"Outstanding Deliveries{item_note}", keep_with_next=True),
     ]
     if not table_rows:
         sections.append(ParagraphBlock("<i>Nothing outstanding — every invoice is paid.</i>"))
     else:
         sections.append(TableSpec(
-            headers=["Trade", "Delivery", "Due", "Days Over", "Bucket", "Outstanding"],
+            headers=["Trade", "Delivery", "Item", "Due", "Days Over", "Bucket", "Outstanding"],
             rows=table_rows,
-            col_widths=[70, 75, 75, 60, 65, 90],
-            num_cols={5},
-            totals_row=["", "", "", "", "Total", pkr(total)],
+            col_widths=[45, 55, 130, 55, 50, 50, 75],
+            num_cols={6},
+            totals_row=["", "", "", "", "", "Total", pkr(total)],
         ))
     sections.append(CalloutCard(label="Total Outstanding", value=pkr(total)))
 
@@ -3781,7 +3802,7 @@ async def reports_aging_by_customer_pdf(customer_id: int, session: Session = Dep
         subtitle_parts=[f"Customer: {customer.name}", f"As of {date.today().strftime('%B %d, %Y')}"],
         kpis=[
             KpiSpec("Total Outstanding", pkr(total)),
-            KpiSpec("Open Events", str(selected["count"] if selected else 0)),
+            KpiSpec("Open Lines", str(detail["count"])),
         ],
         sections=sections,
         footer_subtitle="Ibrahim Traders · receivables aging",
@@ -4195,20 +4216,25 @@ async def reports_customer_pending_pdf(
 @router.get("/reports/goods-sent", response_class=HTMLResponse)
 async def reports_goods_sent(
     request: Request, customer_id: OptionalIntQuery = None,
+    item_id: OptionalIntQuery = None,
     date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
     session: Session = Depends(get_session),
 ):
-    """Dated goods-sent (dispatch) statement for a customer, grouped by PO (trade)."""
+    """Dated goods-sent (dispatch) statement for a customer, grouped by PO (trade).
+    item_id is an optional extra filter — omit it to see every item."""
     user_id = DEFAULT_USER_ID
     customers = PartyService.list_customers(session, user_id)
     report = None
+    items = []
     if customer_id:
+        items = TradeReportService.items_ordered_by_customer(session, user_id, customer_id)
         report = TradeReportService.goods_sent_report(
             session, user_id, customer_id,
-            from_date=_parse_date(date_from), to_date=_parse_date(date_to))
+            from_date=_parse_date(date_from), to_date=_parse_date(date_to), item_id=item_id)
     return templates.TemplateResponse(
         "trade_report_goods_sent.html",
         _ctx(request, customers=customers, report=report,
+             items=items, selected_item_id=item_id,
              selected_id=customer_id, date_from=date_from or "", date_to=date_to or "",
              today=date.today()),
     )
@@ -4216,7 +4242,8 @@ async def reports_goods_sent(
 
 @router.get("/reports/goods-sent/{customer_id}.pdf")
 async def reports_goods_sent_pdf(
-    customer_id: int, date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+    customer_id: int, item_id: OptionalIntQuery = None,
+    date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
     session: Session = Depends(get_session),
 ):
     from io import BytesIO
@@ -4228,7 +4255,7 @@ async def reports_goods_sent_pdf(
     if not customer:
         raise HTTPException(404, "Customer not found")
     df = _parse_date(date_from); dt = _parse_date(date_to)
-    report = TradeReportService.goods_sent_report(session, user_id, customer_id, from_date=df, to_date=dt)
+    report = TradeReportService.goods_sent_report(session, user_id, customer_id, from_date=df, to_date=dt, item_id=item_id)
 
     def qty(x):
         return f"{float(x):,g}"

@@ -18,8 +18,19 @@
     </div>
 
     {% if selected %}
-    <a href="/trade/reports/aging-by-customer/{{ selected.customer_id }}.pdf?img=1" target="_blank" class="btn-secondary">Open as Image</a>
-    <a href="/trade/reports/aging-by-customer/{{ selected.customer_id }}.pdf" target="_blank" class="btn-secondary">Export PDF</a>
+    <div>
+      <label class="field-label">Item <span class="wt-ash font-normal">(optional)</span></label>
+      <select name="item_id" class="min-w-[200px]">
+        <option value="">— All items —</option>
+        {% for i in items %}<option value="{{ i.id }}" {% if selected_item_id == i.id %}selected{% endif %}>{{ i.name }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    {% if selected %}
+    {% set pdf_qs = ('?item_id=' ~ selected_item_id) if selected_item_id else '' %}
+    <a href="/trade/reports/aging-by-customer/{{ selected.customer_id }}.pdf{{ pdf_qs }}{{ '&img=1' if pdf_qs else '?img=1' }}" target="_blank" class="btn-secondary">Open as Image</a>
+    <a href="/trade/reports/aging-by-customer/{{ selected.customer_id }}.pdf{{ pdf_qs }}" target="_blank" class="btn-secondary">Export PDF</a>
     {% endif %}
   {{ filter_bar_close(submit_label='Generate report', reset_href='/trade/reports/aging-by-customer') }}
 
@@ -53,7 +64,8 @@
       <div class="stat-value wt-info">{{ currency }} {{ '{:,.2f}'.format(selected.total) }}</div>
     </div>
     <div class="text-right text-sm wt-info">
-      {{ selected.count }} delivery event{% if selected.count != 1 %}s{% endif %} outstanding<br>
+      {{ selected.count }} item line{% if selected.count != 1 %}s{% endif %} outstanding
+      {% if selected_item_id %}<span class="wt-mute">(filtered to one item)</span>{% endif %}<br>
       <span class="wt-mute">as of {{ today }}</span>
     </div>
   </div>
@@ -65,9 +77,12 @@
         <tr>
           <th>Trade</th>
           <th>Delivery</th>
+          <th>Item</th>
+          <th class="num">Qty</th>
+          <th class="num">Price</th>
           <th class="num">Invoiced</th>
-          <th class="num">Bilty Credit</th>
-          <th class="num">Cash Applied</th>
+          <th class="num" title="Payments aren't tagged to a specific item at posting time — this is the item's proportional share of that delivery's bilty credit.">Bilty Credit</th>
+          <th class="num" title="Payments aren't tagged to a specific item at posting time — this is the item's proportional share of cash applied to that delivery.">Cash Applied</th>
           <th class="num">Outstanding</th>
           <th>Due</th>
           <th class="num">Days</th>
@@ -91,6 +106,9 @@
             <a class="wt-info hover:underline ml-1.5" href="/trade/trades/{{ r.trade_id }}/invoice/by-date/{{ r.event_date }}.pdf?img=1" target="_blank">Open</a>
             <a class="text-xs hover:underline wt-mute ml-1" href="/trade/trades/{{ r.trade_id }}/invoice/by-date/{{ r.event_date }}.pdf" target="_blank">PDF</a>
           </td>
+          <td class="wt-body text-sm">{{ r.item_name }}</td>
+          <td class="num wt-mute">{{ '{:g}'.format(r.qty) }} {{ r.unit }}</td>
+          <td class="num wt-mute">{{ currency }} {{ '{:,.2f}'.format(r.unit_price) }}</td>
           <td class="num">{{ currency }} {{ '{:,.2f}'.format(r.gross) }}</td>
           <td class="num">
             {% if r.bilty_credit > 0 %}<span class="wt-pos">- {{ currency }} {{ '{:,.2f}'.format(r.bilty_credit) }}</span>
@@ -111,7 +129,7 @@
       </tbody>
       <tfoot>
         <tr>
-          <td colspan="5" class="text-right text-xs uppercase tracking-widest font-bold wt-body">Total Outstanding</td>
+          <td colspan="8" class="text-right text-xs uppercase tracking-widest font-bold wt-body">Total Outstanding</td>
           <td class="num">{{ currency }} {{ '{:,.2f}'.format(selected.total) }}</td>
           <td colspan="3"></td>
         </tr>

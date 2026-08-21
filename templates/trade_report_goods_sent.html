@@ -87,7 +87,10 @@
     {% for it in po['items'] %}
     <div class="{% if not loop.first %}border-t border-gray-100{% endif %}">
       <div class="flex items-baseline justify-between flex-wrap gap-1 mb-2">
-        <div><span class="font-semibold wt-ink">{{ it.item_name }}</span>{% if it.specs %}<span class="text-xs wt-mute ml-2">{{ it.specs }}</span>{% endif %}</div>
+        <div>
+          <span class="font-semibold wt-ink">{{ it.item_name }}</span>{% if it.specs %}<span class="text-xs wt-mute ml-2">{{ it.specs }}</span>{% endif %}
+          {% if it.line_notes %}<div class="text-xs wt-warn italic">{{ it.line_notes }}</div>{% endif %}
+        </div>
         <div class="text-sm wt-mute">Ordered <b class="wt-ink">{{ '{:,.0f}'.format(it.ordered) }} {{ it.unit }}</b></div>
       </div>
       <div class="wt-table-scroll"><table class="wt-table wt-table--dense">
@@ -101,8 +104,9 @@
         <tbody>
           {% if it.prior_count %}
           <tr class="wt-ash">
-            <td class="py-1 italic" colspan="2">{{ it.prior_count }} earlier dispatch{{ 'es' if it.prior_count != 1 }} before this period</td>
-            <td class="py-1 text-right tabular-nums italic">−{{ '{:,.0f}'.format(it.prior_qty) }}</td>
+            <td class="py-1 italic">{{ it.prior_count }} earlier dispatch{{ 'es' if it.prior_count != 1 }} before this period</td>
+            <td class="num py-1 italic tabular-nums">{{ '{:,.0f}'.format(it.prior_qty) }}</td>
+            <td class="num py-1 italic tabular-nums">{% if it.prior_remaining is not none %}{{ '{:,.0f}'.format(it.prior_remaining) }}{% else %}—{% endif %}</td>
           </tr>
           {% endif %}
           {% for dv in it.deliveries %}

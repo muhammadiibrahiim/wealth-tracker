@@ -4194,6 +4194,7 @@ class TradeReportService:
                     delivered_total = ZERO
                     prior_qty = ZERO
                     prior_count = 0
+                    prior_remaining = None
                     deliveries = []
                     for r in recs:
                         q = Decimal(r.received_qty)
@@ -4213,6 +4214,13 @@ class TradeReportService:
                         elif from_date and r.received_on < from_date:
                             prior_count += 1
                             prior_qty += q
+                            # Running balance right after this prior delivery —
+                            # what "Remaining" actually means for this bucket,
+                            # same as every in-range row: ordered − delivered so
+                            # far. NOT −prior_qty (that's just a quantity with a
+                            # minus sign, and reads as if MORE than was ordered
+                            # got taken back, which isn't what happened).
+                            prior_remaining = (ordered - cumulative).quantize(Q3)
                     if not deliveries:
                         continue
                     pending = ordered - delivered_total
@@ -4224,6 +4232,7 @@ class TradeReportService:
                         "item_id": ln.item_id,
                         "item_name": ln.item_name,
                         "specs": specs,
+                        "line_notes": ln.line_notes,
                         "unit": ln.unit or "pcs",
                         "ordered": ordered.quantize(Q3),
                         "delivered": delivered_total.quantize(Q3),
@@ -4232,6 +4241,7 @@ class TradeReportService:
                         "overflow": overflow.quantize(Q3),
                         "prior_count": prior_count,
                         "prior_qty": prior_qty.quantize(Q3),
+                        "prior_remaining": prior_remaining,
                     })
                     po_ordered += ordered
                     po_sent += delivered_total

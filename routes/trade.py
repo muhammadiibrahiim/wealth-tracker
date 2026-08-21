@@ -4297,10 +4297,16 @@ async def reports_goods_sent_pdf(
                    f" &nbsp;<font color='#4338ca' size='8.5'>Ordered {qty(it['ordered'])} {it['unit']}</font>")
             if it["specs"]:
                 hdr += f"<br/><font color='#65675e' size='8'>{it['specs']}</font>"
+            if it.get("line_notes"):
+                hdr += f"<br/><font color='#8a6d1a' size='8'><i>{it['line_notes']}</i></font>"
             sections.append(ParagraphBlock(hdr))
             rows = []
             if it["prior_count"]:
-                rows.append([f"{it['prior_count']} earlier (before period)", "", f"-{qty(it['prior_qty'])}"])
+                rows.append([
+                    f"{it['prior_count']} earlier (before period)",
+                    qty(it["prior_qty"]),
+                    qty(it["prior_remaining"]) if it["prior_remaining"] is not None else "",
+                ])
             for dv in it["deliveries"]:
                 rows.append([dv["date"].strftime("%d-%b-%Y"), qty(dv["qty"]), qty(dv["remaining"])])
             if it["pending"] > 0:

@@ -106,7 +106,10 @@
             <a class="wt-info hover:underline ml-1.5" href="/trade/trades/{{ r.trade_id }}/invoice/by-date/{{ r.event_date }}.pdf?img=1" target="_blank">Open</a>
             <a class="text-xs hover:underline wt-mute ml-1" href="/trade/trades/{{ r.trade_id }}/invoice/by-date/{{ r.event_date }}.pdf" target="_blank">PDF</a>
           </td>
-          <td class="wt-body text-sm">{{ r.item_name }}</td>
+          <td class="wt-body text-sm">
+            {{ r.item_name }}
+            {% if r.specs %}<div class="text-xs wt-mute">{{ r.specs }}</div>{% endif %}
+          </td>
           <td class="num wt-mute">{{ '{:g}'.format(r.qty) }} {{ r.unit }}</td>
           <td class="num wt-mute">{{ currency }} {{ '{:,.2f}'.format(r.unit_price) }}</td>
           <td class="num">{{ currency }} {{ '{:,.2f}'.format(r.gross) }}</td>

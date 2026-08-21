@@ -3504,6 +3504,10 @@ class TradeReportService:
             # very end (step 6) — never which lines feed the math.
             event_lines: dict[date, list[dict]] = {}
             for ln in t.lines:
+                specs = " · ".join(
+                    f"{(sp.label or '').strip()}: {(sp.value or '').strip()}"
+                    for sp in (ln.specs or []) if (sp.label or sp.value)
+                )
                 price = Decimal(ln.unit_price)
                 for r in (ln.receipts or []):
                     qty = Decimal(r.received_qty)
@@ -3512,7 +3516,7 @@ class TradeReportService:
                     val = (qty * price).quantize(Decimal("0.01"))
                     event_by_date[r.received_on] = event_by_date.get(r.received_on, ZERO) + val
                     event_lines.setdefault(r.received_on, []).append({
-                        "item_id": ln.item_id, "item_name": ln.item_name,
+                        "item_id": ln.item_id, "item_name": ln.item_name, "specs": specs,
                         "unit": ln.unit or "pcs", "qty": qty, "unit_price": price, "gross": val,
                     })
 
@@ -3525,9 +3529,13 @@ class TradeReportService:
                     received = sum((Decimal(r.received_qty) for r in (ln.receipts or [])), ZERO)
                     rem = Decimal(ln.quantity) - received
                     if rem > Decimal("0.0005"):
+                        specs = " · ".join(
+                            f"{(sp.label or '').strip()}: {(sp.value or '').strip()}"
+                            for sp in (ln.specs or []) if (sp.label or sp.value)
+                        )
                         val = (rem * Decimal(ln.unit_price)).quantize(Decimal("0.01"))
                         residual_lines.append({
-                            "item_id": ln.item_id, "item_name": ln.item_name,
+                            "item_id": ln.item_id, "item_name": ln.item_name, "specs": specs,
                             "unit": ln.unit or "pcs", "qty": rem,
                             "unit_price": Decimal(ln.unit_price), "gross": val,
                         })
@@ -3674,7 +3682,8 @@ class TradeReportService:
                         "trade_id": t.id, "trade_ref": t.reference,
                         "event_date": e["event_date"], "due_date": e["due_date"],
                         "days_over": days_over, "bucket": bucket,
-                        "item_id": ln["item_id"], "item_name": ln["item_name"], "unit": ln["unit"],
+                        "item_id": ln["item_id"], "item_name": ln["item_name"], "specs": ln["specs"],
+                        "unit": ln["unit"],
                         "qty": ln["qty"].quantize(Decimal("0.001")),
                         "unit_price": ln["unit_price"].quantize(Decimal("0.01")),
                         "gross": share, "bilty_credit": ln_bilty, "cash_applied": ln_cash,

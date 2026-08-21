@@ -3756,10 +3756,16 @@ async def reports_aging_by_customer_pdf(
 
     blabel = {"not_due": "Not yet due", "1_30": "1–30", "31_60": "31–60",
               "61_90": "61–90", "90_plus": "90+"}
+    def item_cell(r):
+        line = f"<b>{r['item_name']}</b> ({qty(r['qty'])} {r['unit']} @ {pkr(r['unit_price'])})"
+        if r.get("specs"):
+            line += f"<br/><font size='7' color='#8a8c82'>{r['specs']}</font>"
+        return line
+
     table_rows = [[
         r["trade_ref"] or "—",
         r["event_date"].strftime("%d-%b-%Y"),
-        f"{r['item_name']} ({qty(r['qty'])} {r['unit']} @ {pkr(r['unit_price'])})",
+        item_cell(r),
         r["due_date"].strftime("%d-%b-%Y"),
         f"+{r['days_over']}" if r["days_over"] > 0 else "—",
         blabel[r["bucket"]],
